@@ -38,6 +38,11 @@ func rootCmd() *cobra.Command {
 		// Usage on every error buries the error itself; cobra still prints
 		// usage for genuine usage mistakes.
 		SilenceUsage: true,
+		// main prints the error, so cobra must not print it too. Without
+		// this every failure appeared twice - once as "Error:" from
+		// cobra and once as "error:" from main - which reads as two
+		// things going wrong.
+		SilenceErrors: true,
 	}
 	root.AddCommand(updateCmd(), versionCmd(), pokemonCmd(), showCmd(), typesCmd())
 	// Battle mode: register once, then open or join, then attack per
@@ -71,6 +76,12 @@ func versionCmd() *cobra.Command {
 
 func main() {
 	if err := rootCmd().Execute(); err != nil {
+		// Here rather than at the one place that loads the token: a
+		// stale token is reported by the SERVER, so it surfaces from
+		// whichever API call a command happened to make. Wrapping the
+		// loader caught only the "never registered" half and left the
+		// half that needs the same advice printing a bare 401.
+		identityHint(err)
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}

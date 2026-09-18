@@ -235,6 +235,11 @@ function renderSpectator(b) {
       join.disabled = true
       const res = await fetch(location.pathname + '/join', { method: 'POST' })
       if (res.ok) { location.reload(); return }
+      // 401 means this trainer no longer exists - the server has already
+      // cleared the cookie, so reloading lands on the name prompt rather
+      // than leaving a dead button. Reachable whenever the server has
+      // restarted since the cookie was set, which is every deploy.
+      if (res.status === 401) { location.reload(); return }
       join.disabled = false
       join.textContent = 'could not join - try the lobby'
     }

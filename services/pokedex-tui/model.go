@@ -54,6 +54,25 @@ type errMsg struct{ err error }
 
 func (e errMsg) Error() string { return e.err.Error() }
 
+// statusFor is what the status line says about an error.
+//
+// An identity failure gets advice instead of the raw message, because
+// "unknown trainer token" names the problem and not the fix. Every
+// deploy invalidates every stored token - trainers live in the server's
+// memory - so this is the error a returning player is most likely to
+// meet, and the least guessable.
+//
+// It names the CLI because the TUI has no register screen: the two
+// share a token file, so registering there fixes it here. The same
+// wording as the "no trainer" case a few lines into keys.go, so one
+// situation does not get two different instructions.
+func statusFor(err error) string {
+	if battleclient.IdentityAdvice(err) != "" {
+		return "this trainer is no longer registered — run `pokedex-cli register <name>` again"
+	}
+	return err.Error()
+}
+
 type model struct {
 	list   list.Model
 	client *api.Client
@@ -219,7 +238,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Back to the lobby with the reason, rather than a battle
 			// screen with nothing in it.
 			m.screen = screenLobby
-			m.status = msg.err.Error()
+			m.status = statusFor(msg.err)
 			return m, fetchLobby(m.bc)
 		}
 		bs := &battleState{client: m.bc, id: msg.battle.ID, shown: map[slot]int{}}
@@ -231,7 +250,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case lobbyMsg:
 		if msg.err != nil {
-			m.status = msg.err.Error()
+			m.status = statusFor(msg.err)
 			return m, nil
 		}
 		m.lobby = msg.list

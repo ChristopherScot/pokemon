@@ -35,6 +35,16 @@ const PollInterval = time.Second
 
 var ErrNoIdentity = errors.New("no trainer registered; run register first")
 
+// ErrStaleIdentity is a token the server does not recognise: it was
+// issued by a process that has since restarted.
+//
+// Distinct from ErrNoIdentity because the fix is the same command for a
+// different reason, and because the stored token is now junk - a client
+// that keeps it will fail identically on every command until someone
+// works out to re-register. Battles and trainers live in the server's
+// memory, so this happens on every deploy, not only on a crash.
+var ErrStaleIdentity = errors.New("this trainer is no longer registered; run register again")
+
 // Identity is a trainer name and the token that authorises its moves.
 //
 // Persisted so a CLI - which exits between commands - can take a second
@@ -98,6 +108,25 @@ func SaveIdentity(id Identity) error {
 		return err
 	}
 	return os.WriteFile(path, b, 0o600)
+}
+
+// ClearIdentity removes the stored trainer.
+//
+// Called when the server rejects the token, because the file is now
+// junk: every later command fails the same way, and the CLI cannot tell
+// "I have never registered" from "the token I have is dead" without it.
+// Removing it makes the next run take the ordinary unregistered path.
+//
+// A missing file is success - the caller wants it gone, and it is.
+func ClearIdentity() error {
+	path, err := identityPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // Client wraps the generated client with the trainer's token, so callers
@@ -166,7 +195,7 @@ func (c *Client) Create(ctx context.Context, team []string) (*api.Battle, error)
 	case *api.CreateBattleBadRequest:
 		return nil, errors.New(v.Message)
 	case *api.CreateBattleUnauthorized:
-		return nil, errors.New(v.Message)
+		return nil, fmt.Errorf("%w (%s)", ErrStaleIdentity, v.Message)
 	default:
 		return nil, fmt.Errorf("unexpected response %T", res)
 	}
@@ -192,7 +221,7 @@ func (c *Client) Join(ctx context.Context, id string, team []string) (*api.Battl
 	case *api.JoinBattleNotFound:
 		return nil, errors.New(v.Message)
 	case *api.JoinBattleUnauthorized:
-		return nil, errors.New(v.Message)
+		return nil, fmt.Errorf("%w (%s)", ErrStaleIdentity, v.Message)
 	default:
 		return nil, fmt.Errorf("unexpected response %T", res)
 	}
@@ -213,7 +242,7 @@ func (c *Client) Attack(ctx context.Context, id string, attacker, move, target i
 	case *api.TakeTurnNotFound:
 		return nil, errors.New(v.Message)
 	case *api.TakeTurnUnauthorized:
-		return nil, errors.New(v.Message)
+		return nil, fmt.Errorf("%w (%s)", ErrStaleIdentity, v.Message)
 	default:
 		return nil, fmt.Errorf("unexpected response %T", res)
 	}
@@ -373,6 +402,27 @@ func EventIcon(ev api.BattleEvent) string {
 	// still did something, which is the whole point of them existing.
 	if _, ok := ev.Move.Get(); ok {
 		return "✨"
+	}
+	return ""
+}
+
+// IdentityAdvice turns an identity failure into what the player should
+// do about it, or "" for any other error.
+//
+// Shared because all three clients hit the same wall: trainers live in
+// the server's memory, so every deploy invalidates every stored token,
+// and the raw message ("unknown trainer token") names the problem
+// without naming the fix.
+//
+// This only explains. Clearing the stored token is the caller's, since
+// a CLI that exits wants the file gone while a running TUI wants to
+// re-register in place - the same advice, different mechanics.
+func IdentityAdvice(err error) string {
+	switch {
+	case errors.Is(err, ErrNoIdentity):
+		return "no trainer registered yet — register to start battling"
+	case errors.Is(err, ErrStaleIdentity):
+		return "the server no longer knows this trainer (it restarted) — register again"
 	}
 	return ""
 }

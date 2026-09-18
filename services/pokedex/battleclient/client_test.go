@@ -2,6 +2,7 @@ package battleclient
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -166,5 +167,46 @@ func TestEventIconsAreOneCodePointWide(t *testing.T) {
 func TestEventIconIsEmptyForNarration(t *testing.T) {
 	if icon := EventIcon(api.BattleEvent{TurnNumber: 3, Text: "Turn 3"}); icon != "" {
 		t.Errorf("narration got glyph %q", icon)
+	}
+}
+
+// A 401 from the server has to arrive as ErrStaleIdentity, not as a
+// bare message.
+//
+// Each Unauthorized case used to become errors.New(v.Message), which
+// threw away the one fact a caller needs: that this is an identity
+// problem with a known fix. Clients then printed "unknown trainer
+// token; register first" and cleared nothing, so every later command
+// failed the same way.
+func TestUnauthorizedIsAStaleIdentity(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		io.WriteString(w, `{"message":"unknown trainer token; register first"}`)
+	}))
+	defer srv.Close()
+
+	c, err := New(Identity{Name: "t", Token: "dead", API: srv.URL})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{"create", func() error { _, err := c.Create(context.Background(), nil); return err }},
+		{"join", func() error { _, err := c.Join(context.Background(), "x", nil); return err }},
+		{"attack", func() error { _, err := c.Attack(context.Background(), "x", 0, 0, 0); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.call()
+			if !errors.Is(err, ErrStaleIdentity) {
+				t.Errorf("got %v, which is not ErrStaleIdentity - callers cannot detect it", err)
+			}
+			if IdentityAdvice(err) == "" {
+				t.Error("no advice for an identity failure")
+			}
+		})
 	}
 }

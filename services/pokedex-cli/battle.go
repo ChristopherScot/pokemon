@@ -29,7 +29,7 @@ func battleClient() (*battleclient.Client, error) {
 	if err != nil {
 		// Every battle command goes through here, so the "register
 		// first" hint is attached once rather than at seven call sites.
-		return nil, identityHint(err)
+		return nil, err
 	}
 	// The env var wins over whatever was stored, so a port-forward works
 	// without re-registering.
@@ -410,11 +410,25 @@ func teamLine(s api.Side) string {
 	return strings.Join(names, ", ")
 }
 
-// identityHint turns the "no trainer" error into the command that fixes
-// it, rather than making someone read help to find out.
+// identityHint turns an identity error into the command that fixes it,
+// rather than making someone read help to find out.
+//
+// A stale token also gets DELETED, not just explained. Trainers live in
+// the server's memory, so every deploy invalidates every stored token;
+// keeping one means the same failure on every command with nothing
+// saying the file is the problem. Removing it makes the next run take
+// the ordinary unregistered path.
 func identityHint(err error) error {
-	if errors.Is(err, battleclient.ErrNoIdentity) {
+	switch {
+	case errors.Is(err, battleclient.ErrNoIdentity):
 		fmt.Fprintln(os.Stderr, "no trainer registered yet.")
+		fmt.Fprintln(os.Stderr, "  pokedex-cli register <your-name>")
+	case errors.Is(err, battleclient.ErrStaleIdentity):
+		fmt.Fprintln(os.Stderr, "the server no longer knows this trainer -")
+		fmt.Fprintln(os.Stderr, "it restarted, and trainers live in its memory.")
+		if clearErr := battleclient.ClearIdentity(); clearErr != nil {
+			fmt.Fprintf(os.Stderr, "  (could not remove the stored token: %v)\n", clearErr)
+		}
 		fmt.Fprintln(os.Stderr, "  pokedex-cli register <your-name>")
 	}
 	return err
