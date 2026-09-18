@@ -23,3 +23,22 @@ ingress:
 # secrets:
 #   vaultPath: <name>/config      # one Vault path per service
 #   keys: [SOME_TOKEN]
+
+# replicas: 1, and it has to stay 1 until battles leave memory.
+#
+# Trainers and battles live in this process (a map behind a mutex), and
+# the Service has sessionAffinity: None - so with two pods every request
+# round-robins to whichever one happens to answer. register mints a
+# token on pod A; the next command hits pod B and is told the token is
+# unknown. open creates a battle on A; the opponent's join hits B and
+# gets "no such battle" for one the lobby just listed. Clients poll
+# every second, so the board would flicker between the real battle and
+# a 404 indefinitely.
+#
+# That is WORSE than the current failure, not better. One replica loses
+# everything on a deploy - total, obvious, over in a rollout. Two would
+# lose about half of every operation, continuously, and look like a
+# flaky network rather than missing shared state.
+#
+# Scaling up is a change that waits on persistence, not a change that
+# improves availability on its own.
