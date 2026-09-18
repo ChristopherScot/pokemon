@@ -60,7 +60,10 @@ const esc = (s: unknown): string =>
 
 // The battle page. Everything below the initial render is done by the
 // inline script, which polls /battle/:id/state and swaps the board.
-function battlePage({ id, trainer }: { id: string; trainer: string }) {
+// Exported so a test can run the real browser code rather than assert
+// on the page's text. The bug this guards against - a non-participant
+// indexing sides[-1] - is only reachable by executing render().
+export function battlePage({ id, trainer }: { id: string; trainer: string }) {
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -194,8 +197,67 @@ function monEl(p, side, i, selectable, selected) {
     '<div class="hpnum">' + p.hp + '/' + p.maxHp + '</div></div>'
 }
 
+// renderSpectator draws a battle this trainer is not in.
+//
+// A waiting battle gets a join button, because that is the whole point
+// of sharing the link. One already underway is read-only - the server
+// would reject a third side anyway, and a button that always errors is
+// worse than no button.
+function renderSpectator(b) {
+  const joinable = b.status === 'waiting' && b.sides.length < 2
+  let html = '<div class="banner theirs">' +
+    (joinable ? 'this battle is waiting for an opponent'
+              : 'watching ' + esc(b.sides.map((s) => s.trainer).join(' vs '))) +
+    '</div>'
+
+  for (const side of b.sides) {
+    html += '<div class="side"><h2>' + esc(side.trainer) + '</h2>' +
+      side.team.map((p, i) => monEl(p, 'them', i, false, false)).join('') +
+      '</div>'
+  }
+
+  if (joinable) {
+    html += '<div class="pick"><div class="moves">' +
+      '<button id="join-battle">join as ' + esc(ME) + '</button>' +
+      '</div></div>'
+  }
+
+  html += '<div class="log" id="log">' + b.log.slice(-8).map(
+    (e) => '<div>' + esc(e.text) + '</div>').join('') + '</div>'
+
+  const board = document.getElementById('board')
+  board.innerHTML = html
+  board.className = 'board'
+
+  const join = document.getElementById('join-battle')
+  if (join) {
+    join.onclick = async () => {
+      join.disabled = true
+      const res = await fetch(location.pathname + '/join', { method: 'POST' })
+      if (res.ok) { location.reload(); return }
+      join.disabled = false
+      join.textContent = 'could not join - try the lobby'
+    }
+  }
+}
+
 function render(b) {
   const mineIdx = b.sides.findIndex((s) => s.trainer === ME)
+
+  // Not a participant: show the battle and a way in, rather than
+  // indexing our way into undefined.
+  //
+  // findIndex returns -1, which made theirsIdx 2, which made BOTH sides
+  // undefined, and render threw on the first .team - leaving the board
+  // on its initial "loading…" forever with no error anywhere the player
+  // could see. Reachable without doing anything strange: open a battle
+  // link someone sent you, or keep a trainer cookie across a deploy
+  // that cleared the server's in-memory battles.
+  if (mineIdx === -1) {
+    renderSpectator(b)
+    return
+  }
+
   const theirsIdx = 1 - mineIdx
   const mine = b.sides[mineIdx], theirs = b.sides[theirsIdx]
   const myTurn = b.status === 'active' && b.turn === ME

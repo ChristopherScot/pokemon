@@ -91,13 +91,15 @@ func openCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "open [pokemon pokemon pokemon]",
 		Short: "open a battle and wait for an opponent",
-		Long: "Names three Pokemon, or none at all for a random team - " +
-			"which is the fastest way to get into a battle.",
+		Long: "Names up to three Pokemon. The server fills whatever you " +
+			"leave out, so naming none at all is the fastest way into a " +
+			"battle and naming one is a perfectly good way to start.",
 		Args: cobra.RangeArgs(0, 3),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if n := len(args); n != 0 && n != 3 {
-				return fmt.Errorf("name three pokemon, or none for a random team")
-			}
+			// No "0 or exactly 3" check. The API took partial teams from
+			// 0.4.0 and both other clients offer them; this rule only
+			// lived here, so the CLI rejected a request the server would
+			// have accepted.
 			c, err := battleClient()
 			if err != nil {
 				return err
@@ -110,7 +112,7 @@ func openCmd() *cobra.Command {
 				return err
 			}
 			fmt.Printf("battle %s is open. tell your opponent:\n", b.ID)
-			fmt.Printf("  pokedex-cli join %s <three pokemon>\n\n", b.ID)
+			fmt.Printf("  pokedex-cli join %s [up to three pokemon]\n\n", b.ID)
 			fmt.Printf("then watch for your turn:\n  pokedex-cli watch %s\n", b.ID)
 			return nil
 		},
@@ -121,7 +123,7 @@ func joinCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "join <battle-id> [pokemon pokemon pokemon]",
 		Short: "join a waiting battle",
-		Long:  "Names three Pokemon, or none at all for a random team.",
+		Long:  "Names up to three Pokemon; the server fills the rest.",
 		Args:  cobra.RangeArgs(1, 4),
 		RunE: func(_ *cobra.Command, args []string) error {
 			c, err := battleClient()
@@ -131,9 +133,6 @@ func joinCmd() *cobra.Command {
 			ctx, cancel := withTimeout()
 			defer cancel()
 
-			if n := len(args) - 1; n != 0 && n != 3 {
-				return fmt.Errorf("name three pokemon, or none for a random team")
-			}
 			b, err := c.Join(ctx, args[0], args[1:])
 			if err != nil {
 				return err

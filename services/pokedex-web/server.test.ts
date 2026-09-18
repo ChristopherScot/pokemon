@@ -104,3 +104,74 @@ test('every battle route reports 502 when the API is unreachable', async () => {
     assert.equal(res.statusCode, 502, `${method} ${url} should be 502, got ${res.statusCode}`)
   }
 })
+
+// A trainer who is not in a battle must still get a board.
+//
+// render() found its own side with findIndex, which returns -1 for a
+// spectator; `1 - (-1)` is 2, so BOTH sides came back undefined and the
+// first `.team` threw. Nothing caught it, so the board sat on its
+// initial "loading…" forever with no error the player could see.
+//
+// Two ordinary paths reach it: opening a battle link somebody sent you,
+// and holding a trainer cookie across a deploy, since battles live in
+// the server's memory and a rollout clears them.
+//
+// Runs the real browser script out of the page rather than matching its
+// text - the arithmetic is the bug, and only executing it proves the
+// guard works.
+test('a spectator gets a board instead of an endless spinner', async () => {
+  const { battlePage } = await import('./battle.ts')
+  const page = battlePage({ id: 'abc123', trainer: 'not-playing' })
+
+  const open = page.match(/<script[^>]*>/)
+  assert.ok(open, 'the battle page should ship a script')
+  const start = open.index! + open[0].length
+  const script = page.slice(start, page.lastIndexOf('</script>'))
+
+  // Minimal DOM: the script only needs these to render a board.
+  const board: { innerHTML: string; className: string; scrollTop: number } = {
+    innerHTML: 'loading…', className: '', scrollTop: 0,
+  }
+  const els: Record<string, unknown> = { board, log: board }
+  const sandbox = {
+    document: {
+      getElementById: (id: string) => els[id] ?? null,
+      addEventListener: () => {},
+    },
+    location: { pathname: '/battle/abc123', reload: () => {} },
+    fetch: async () => ({ ok: false, status: 404, json: async () => ({}) }),
+    setTimeout: () => 0,
+    setInterval: () => 0,
+    requestAnimationFrame: () => 0,
+    console,
+  }
+
+  // Pull render() out of the script and call it with a battle whose
+  // only side belongs to somebody else.
+  const run = new Function(
+    ...Object.keys(sandbox),
+    script + '\n;return { render };',
+  ) as (...a: unknown[]) => { render: (b: unknown) => void }
+
+  const { render } = run(...Object.values(sandbox))
+  render({
+    id: 'abc123',
+    status: 'waiting',
+    version: 1,
+    turn: null,
+    winner: null,
+    log: [],
+    sides: [{
+      trainer: 'someone-else',
+      team: [{
+        name: 'onix', types: ['rock'], hp: 95, maxHp: 95,
+        fainted: false, sprite: '', moves: [],
+      }],
+    }],
+  })
+
+  assert.notEqual(board.innerHTML, 'loading…',
+    'the board never rendered - a spectator is stuck on the spinner')
+  assert.match(board.innerHTML, /someone-else/,
+    'the spectator board should show the trainer already waiting')
+})
