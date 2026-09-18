@@ -1,3 +1,5 @@
-v0.0.1
+v0.1.0
 
-v0.0.1 Initial release
+v0.1.0 Browse the Pokedex in the terminal: a filterable list of all 100
+       Pokemon with types, height, weight and moves, read from the same
+       generated client the CLI and web service use.
