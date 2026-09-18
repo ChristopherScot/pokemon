@@ -7,7 +7,9 @@ name: pokedex-cli
 on:
   push:
     branches: [main]
+    paths: ['services/pokedex-cli/**', '.github/workflows/pokedex-cli.yaml']
   pull_request:
+    paths: ['services/pokedex-cli/**']
   workflow_dispatch:
 
 jobs:
@@ -15,12 +17,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Everything below runs in the service directory: in a monorepo the
+    # CLI's go.mod is not at the repo root, and `go test ./...` from the
+    # root either finds nothing or tests a sibling service.
+    defaults:
+      run:
+        working-directory: services/pokedex-cli
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: services/pokedex-cli/go.mod
           cache: true
+          cache-dependency-path: services/pokedex-cli/go.sum
 
       - name: Test
         run: go test -race ./...
@@ -40,10 +49,15 @@ jobs:
         with:
           fetch-depth: 2
 
+      # grep -qx against the full path. A bare `VERSION` never matches
+      # in a monorepo, where the file is services/<name>/VERSION - so the
+      # gate stayed closed forever and no release could be cut, silently,
+      # because a gate that does not open looks the same as a commit that
+      # did not bump the version.
       - name: Release only on a VERSION change
         id: gate
         run: |
-          if git diff --name-only HEAD~1 HEAD | grep -qx VERSION; then
+          if git diff --name-only HEAD~1 HEAD | grep -qx 'services/pokedex-cli/VERSION'; then
             echo "go=true" >> $GITHUB_OUTPUT
           else
             echo "go=false" >> $GITHUB_OUTPUT
@@ -52,13 +66,14 @@ jobs:
       - uses: actions/setup-go@v5
         if: steps.gate.outputs.go == 'true'
         with:
-          go-version-file: go.mod
+          go-version-file: services/pokedex-cli/go.mod
           cache: true
+          cache-dependency-path: services/pokedex-cli/go.sum
 
       - name: Read version
         if: steps.gate.outputs.go == 'true'
         id: v
-        run: echo "version=$(head -n1 VERSION)" >> $GITHUB_OUTPUT
+        run: echo "version=$(head -n1 services/pokedex-cli/VERSION)" >> $GITHUB_OUTPUT
 
       # Asset names must match what `pokedex-cli update` looks for:
       # pokedex-cli_<goos>_<goarch>.tar.gz containing the bare binary.
@@ -66,6 +81,7 @@ jobs:
       # "dev" and refuses to update itself.
       - name: Cross-compile
         if: steps.gate.outputs.go == 'true'
+        working-directory: services/pokedex-cli
         run: |
           VERSION="${{ steps.v.outputs.version }}"
           LDFLAGS="-s -w -X main.Version=$VERSION"
@@ -82,5 +98,5 @@ jobs:
         with:
           tag_name: ${{ steps.v.outputs.version }}
           files: |
-            pokedex-cli_*.tar.gz
-            checksums.txt
+            services/pokedex-cli/pokedex-cli_*.tar.gz
+            services/pokedex-cli/checksums.txt
