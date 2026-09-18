@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=config.schema.json
+# The single source of truth for this service. `homelabctl render`
+# regenerates every manifest from it, so change things here rather than
+# editing deploy/ by hand.
+name: pokedex
+team: me-myself-and-i
+runtime: go-service
+spec: true
+image:
+    repository: ghcr.io/christopherscot/pokemon-pokedex
+port: 3000
+hardened: true
+metrics: true
+
+# Shares pokemon.home... with the UI, mounted under /api. The prefix is
+# stripped before requests arrive, so this service still serves /pokemon
+# and /types unprefixed and does not know where it is mounted.
+ingress:
+    hosts:
+        - pokemon.home.chrisscotmartin.com
+    path: /api
+
+# secrets:
+#   vaultPath: <name>/config      # one Vault path per service
+#   keys: [SOME_TOKEN]

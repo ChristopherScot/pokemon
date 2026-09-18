@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=config.schema.json
+# The single source of truth for this service. `homelabctl render`
+# regenerates every manifest from it, so change things here rather than
+# editing deploy/ by hand.
+name: pokedex-web
+team: me-myself-and-i
+runtime: node-service
+spec: false
+image:
+    repository: ghcr.io/christopherscot/pokemon-pokedex-web
+port: 3000
+hardened: true
+metrics: true
+
+# The name a browser lands on, and everything under it EXCEPT /api:
+# nginx resolves overlapping rules by longest prefix, so /charizard and
+# any page added later reach this service, while /api/* goes to the Go
+# API sharing the hostname. A browser can therefore call the API at a
+# relative /api/... with no CORS and no second hostname.
+#
+# The one cost is that /api is reserved: a page cannot live there.
+ingress:
+    hosts:
+        - pokemon.home.chrisscotmartin.com
+
+# secrets:
+#   vaultPath: <name>/config      # one Vault path per service
+#   keys: [SOME_TOKEN]

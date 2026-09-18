@@ -1,0 +1,85 @@
+# Builds and pushes the image. Deployment happens in-cluster:
+# argocd-image-updater watches the registry and commits the new digest to
+# the homelab repo itself, so this workflow needs no homelab credential -
+# GITHUB_TOKEN is issued per run and can only push packages.
+name: build pokedex-web
+
+on:
+  push:
+    branches: [main]
+    paths: ['services/pokedex-web/**', '.github/workflows/pokedex-web.yaml']
+  pull_request:
+    paths: ['services/pokedex-web/**']
+  workflow_dispatch:
+
+# Two pushes in quick succession otherwise race to publish :latest, and
+# whichever loses is the digest image-updater may pick up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: services/pokedex-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Not --if-present: the scaffold always ships tests, so a missing
+      # script means someone removed them, and CI should say so rather
+      # than skip silently.
+      - name: Test
+        run: npm test
+
+      - name: Check deploy manifests
+        run: |
+          curl -fsSL https://github.com/ChristopherScot/ci-scripts/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
+          ./homelabctl check deploy
+
+      # ghcr.io specifically: github.actor + GITHUB_TOKEN authenticate
+      # to GitHub's registry and nothing else. Pointing image.repository
+      # at ECR or Docker Hub means replacing this step with that
+      # registry's login action and a stored credential - and note
+      # `homelabctl init --overwrite` rewrites this file from the
+      # template, which would discard that edit.
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/christopherscot/pokemon-pokedex-web
+          # Full SHA: an abbreviated one is not a registry tag and gives
+          # ImagePullBackOff.
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/pokedex-web
+          # Stamps the commit into the image so log lines name their build.
+          build-args: |
+            VERSION=${{ github.sha }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,4225 @@
+[
+ {
+  "id": 1,
+  "name": "bulbasaur",
+  "types": [
+   "grass",
+   "poison"
+  ],
+  "height": 7,
+  "weight": 69,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "vine-whip",
+    "type": "grass",
+    "power": 45
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 2,
+  "name": "ivysaur",
+  "types": [
+   "grass",
+   "poison"
+  ],
+  "height": 10,
+  "weight": 130,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/2.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "vine-whip",
+    "type": "grass",
+    "power": 45
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   }
+  ]
+ },
+ {
+  "id": 3,
+  "name": "venusaur",
+  "types": [
+   "grass",
+   "poison"
+  ],
+  "height": 20,
+  "weight": 1000,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/3.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "vine-whip",
+    "type": "grass",
+    "power": 45
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   }
+  ]
+ },
+ {
+  "id": 4,
+  "name": "charmander",
+  "types": [
+   "fire"
+  ],
+  "height": 6,
+  "weight": 85,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   }
+  ]
+ },
+ {
+  "id": 5,
+  "name": "charmeleon",
+  "types": [
+   "fire"
+  ],
+  "height": 11,
+  "weight": 190,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/5.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   }
+  ]
+ },
+ {
+  "id": 6,
+  "name": "charizard",
+  "types": [
+   "fire",
+   "flying"
+  ],
+  "height": 17,
+  "weight": 905,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   }
+  ]
+ },
+ {
+  "id": 7,
+  "name": "squirtle",
+  "types": [
+   "water"
+  ],
+  "height": 5,
+  "weight": 90,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/7.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 8,
+  "name": "wartortle",
+  "types": [
+   "water"
+  ],
+  "height": 10,
+  "weight": 225,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/8.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 9,
+  "name": "blastoise",
+  "types": [
+   "water"
+  ],
+  "height": 16,
+  "weight": 855,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/9.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 10,
+  "name": "caterpie",
+  "types": [
+   "bug"
+  ],
+  "height": 3,
+  "weight": 29,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10.png",
+  "moves": [
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "string-shot",
+    "type": "bug",
+    "power": 0
+   },
+   {
+    "name": "snore",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "bug-bite",
+    "type": "bug",
+    "power": 60
+   },
+   {
+    "name": "electroweb",
+    "type": "electric",
+    "power": 55
+   }
+  ]
+ },
+ {
+  "id": 11,
+  "name": "metapod",
+  "types": [
+   "bug"
+  ],
+  "height": 7,
+  "weight": 99,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/11.png",
+  "moves": [
+   {
+    "name": "string-shot",
+    "type": "bug",
+    "power": 0
+   },
+   {
+    "name": "harden",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "iron-defense",
+    "type": "steel",
+    "power": 0
+   },
+   {
+    "name": "bug-bite",
+    "type": "bug",
+    "power": 60
+   },
+   {
+    "name": "electroweb",
+    "type": "electric",
+    "power": 55
+   }
+  ]
+ },
+ {
+  "id": 12,
+  "name": "butterfree",
+  "types": [
+   "bug",
+   "flying"
+  ],
+  "height": 11,
+  "weight": 320,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/12.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "gust",
+    "type": "flying",
+    "power": 40
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 13,
+  "name": "weedle",
+  "types": [
+   "bug",
+   "poison"
+  ],
+  "height": 3,
+  "weight": 32,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/13.png",
+  "moves": [
+   {
+    "name": "poison-sting",
+    "type": "poison",
+    "power": 15
+   },
+   {
+    "name": "string-shot",
+    "type": "bug",
+    "power": 0
+   },
+   {
+    "name": "bug-bite",
+    "type": "bug",
+    "power": 60
+   },
+   {
+    "name": "electroweb",
+    "type": "electric",
+    "power": 55
+   }
+  ]
+ },
+ {
+  "id": 14,
+  "name": "kakuna",
+  "types": [
+   "bug",
+   "poison"
+  ],
+  "height": 6,
+  "weight": 100,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/14.png",
+  "moves": [
+   {
+    "name": "string-shot",
+    "type": "bug",
+    "power": 0
+   },
+   {
+    "name": "harden",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "iron-defense",
+    "type": "steel",
+    "power": 0
+   },
+   {
+    "name": "bug-bite",
+    "type": "bug",
+    "power": 60
+   },
+   {
+    "name": "electroweb",
+    "type": "electric",
+    "power": 55
+   }
+  ]
+ },
+ {
+  "id": 15,
+  "name": "beedrill",
+  "types": [
+   "bug",
+   "poison"
+  ],
+  "height": 10,
+  "weight": 295,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/15.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "fury-attack",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 16,
+  "name": "pidgey",
+  "types": [
+   "normal",
+   "flying"
+  ],
+  "height": 3,
+  "weight": 18,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/16.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "gust",
+    "type": "flying",
+    "power": 40
+   },
+   {
+    "name": "wing-attack",
+    "type": "flying",
+    "power": 60
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 17,
+  "name": "pidgeotto",
+  "types": [
+   "normal",
+   "flying"
+  ],
+  "height": 11,
+  "weight": 300,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/17.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "gust",
+    "type": "flying",
+    "power": 40
+   },
+   {
+    "name": "wing-attack",
+    "type": "flying",
+    "power": 60
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 18,
+  "name": "pidgeot",
+  "types": [
+   "normal",
+   "flying"
+  ],
+  "height": 15,
+  "weight": 395,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/18.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "gust",
+    "type": "flying",
+    "power": 40
+   },
+   {
+    "name": "wing-attack",
+    "type": "flying",
+    "power": 60
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 19,
+  "name": "rattata",
+  "types": [
+   "normal"
+  ],
+  "height": 3,
+  "weight": 35,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/19.png",
+  "moves": [
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 20,
+  "name": "raticate",
+  "types": [
+   "normal"
+  ],
+  "height": 7,
+  "weight": 185,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/20.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 21,
+  "name": "spearow",
+  "types": [
+   "normal",
+   "flying"
+  ],
+  "height": 3,
+  "weight": 20,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/21.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "wing-attack",
+    "type": "flying",
+    "power": 60
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "fury-attack",
+    "type": "normal",
+    "power": 15
+   }
+  ]
+ },
+ {
+  "id": 22,
+  "name": "fearow",
+  "types": [
+   "normal",
+   "flying"
+  ],
+  "height": 12,
+  "weight": 380,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/22.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "wing-attack",
+    "type": "flying",
+    "power": 60
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "fury-attack",
+    "type": "normal",
+    "power": 15
+   }
+  ]
+ },
+ {
+  "id": 23,
+  "name": "ekans",
+  "types": [
+   "poison"
+  ],
+  "height": 20,
+  "weight": 69,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/23.png",
+  "moves": [
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "wrap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 24,
+  "name": "arbok",
+  "types": [
+   "poison"
+  ],
+  "height": 35,
+  "weight": 650,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/24.png",
+  "moves": [
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "wrap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 25,
+  "name": "pikachu",
+  "types": [
+   "electric"
+  ],
+  "height": 4,
+  "weight": 60,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "double-kick",
+    "type": "fighting",
+    "power": 30
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 26,
+  "name": "raichu",
+  "types": [
+   "electric"
+  ],
+  "height": 8,
+  "weight": 300,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/26.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 27,
+  "name": "sandshrew",
+  "types": [
+   "ground"
+  ],
+  "height": 6,
+  "weight": 120,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/27.png",
+  "moves": [
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 28,
+  "name": "sandslash",
+  "types": [
+   "ground"
+  ],
+  "height": 10,
+  "weight": 295,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/28.png",
+  "moves": [
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 29,
+  "name": "nidoran-f",
+  "types": [
+   "poison"
+  ],
+  "height": 4,
+  "weight": 70,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/29.png",
+  "moves": [
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "double-kick",
+    "type": "fighting",
+    "power": 30
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 30,
+  "name": "nidorina",
+  "types": [
+   "poison"
+  ],
+  "height": 8,
+  "weight": 200,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/30.png",
+  "moves": [
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "double-kick",
+    "type": "fighting",
+    "power": 30
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "horn-drill",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   }
+  ]
+ },
+ {
+  "id": 31,
+  "name": "nidoqueen",
+  "types": [
+   "poison",
+   "ground"
+  ],
+  "height": 13,
+  "weight": 600,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/31.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   }
+  ]
+ },
+ {
+  "id": 32,
+  "name": "nidoran-m",
+  "types": [
+   "poison"
+  ],
+  "height": 5,
+  "weight": 90,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/32.png",
+  "moves": [
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "double-kick",
+    "type": "fighting",
+    "power": 30
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "horn-attack",
+    "type": "normal",
+    "power": 65
+   },
+   {
+    "name": "fury-attack",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "horn-drill",
+    "type": "normal",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 33,
+  "name": "nidorino",
+  "types": [
+   "poison"
+  ],
+  "height": 9,
+  "weight": 195,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/33.png",
+  "moves": [
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "double-kick",
+    "type": "fighting",
+    "power": 30
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "horn-attack",
+    "type": "normal",
+    "power": 65
+   },
+   {
+    "name": "fury-attack",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "horn-drill",
+    "type": "normal",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 34,
+  "name": "nidoking",
+  "types": [
+   "poison",
+   "ground"
+  ],
+  "height": 14,
+  "weight": 620,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/34.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   }
+  ]
+ },
+ {
+  "id": 35,
+  "name": "clefairy",
+  "types": [
+   "fairy"
+  ],
+  "height": 6,
+  "weight": 75,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/35.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "double-slap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   }
+  ]
+ },
+ {
+  "id": 36,
+  "name": "clefable",
+  "types": [
+   "fairy"
+  ],
+  "height": 13,
+  "weight": 400,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/36.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "double-slap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   }
+  ]
+ },
+ {
+  "id": 37,
+  "name": "vulpix",
+  "types": [
+   "fire"
+  ],
+  "height": 6,
+  "weight": 99,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/37.png",
+  "moves": [
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "tail-whip",
+    "type": "normal",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 38,
+  "name": "ninetales",
+  "types": [
+   "fire"
+  ],
+  "height": 11,
+  "weight": 199,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/38.png",
+  "moves": [
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "tail-whip",
+    "type": "normal",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 39,
+  "name": "jigglypuff",
+  "types": [
+   "normal",
+   "fairy"
+  ],
+  "height": 5,
+  "weight": 55,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/39.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "double-slap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   }
+  ]
+ },
+ {
+  "id": 40,
+  "name": "wigglytuff",
+  "types": [
+   "normal",
+   "fairy"
+  ],
+  "height": 10,
+  "weight": 120,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/40.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "double-slap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   }
+  ]
+ },
+ {
+  "id": 41,
+  "name": "zubat",
+  "types": [
+   "poison",
+   "flying"
+  ],
+  "height": 8,
+  "weight": 75,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/41.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "gust",
+    "type": "flying",
+    "power": 40
+   },
+   {
+    "name": "wing-attack",
+    "type": "flying",
+    "power": 60
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 42,
+  "name": "golbat",
+  "types": [
+   "poison",
+   "flying"
+  ],
+  "height": 16,
+  "weight": 550,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/42.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "gust",
+    "type": "flying",
+    "power": 40
+   },
+   {
+    "name": "wing-attack",
+    "type": "flying",
+    "power": 60
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 43,
+  "name": "oddish",
+  "types": [
+   "grass",
+   "poison"
+  ],
+  "height": 5,
+  "weight": 54,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/43.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "acid",
+    "type": "poison",
+    "power": 40
+   }
+  ]
+ },
+ {
+  "id": 44,
+  "name": "gloom",
+  "types": [
+   "grass",
+   "poison"
+  ],
+  "height": 8,
+  "weight": 86,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/44.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "acid",
+    "type": "poison",
+    "power": 40
+   }
+  ]
+ },
+ {
+  "id": 45,
+  "name": "vileplume",
+  "types": [
+   "grass",
+   "poison"
+  ],
+  "height": 12,
+  "weight": 186,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/45.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 46,
+  "name": "paras",
+  "types": [
+   "bug",
+   "grass"
+  ],
+  "height": 3,
+  "weight": 54,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/46.png",
+  "moves": [
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 47,
+  "name": "parasect",
+  "types": [
+   "bug",
+   "grass"
+  ],
+  "height": 10,
+  "weight": 295,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/47.png",
+  "moves": [
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 48,
+  "name": "venonat",
+  "types": [
+   "bug",
+   "poison"
+  ],
+  "height": 10,
+  "weight": 300,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/48.png",
+  "moves": [
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "supersonic",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "disable",
+    "type": "normal",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 49,
+  "name": "venomoth",
+  "types": [
+   "bug",
+   "poison"
+  ],
+  "height": 15,
+  "weight": 125,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/49.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "gust",
+    "type": "flying",
+    "power": 40
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 50,
+  "name": "diglett",
+  "types": [
+   "ground"
+  ],
+  "height": 2,
+  "weight": 8,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/50.png",
+  "moves": [
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 51,
+  "name": "dugtrio",
+  "types": [
+   "ground"
+  ],
+  "height": 7,
+  "weight": 333,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/51.png",
+  "moves": [
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 52,
+  "name": "meowth",
+  "types": [
+   "normal"
+  ],
+  "height": 4,
+  "weight": 42,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/52.png",
+  "moves": [
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 53,
+  "name": "persian",
+  "types": [
+   "normal"
+  ],
+  "height": 10,
+  "weight": 320,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/53.png",
+  "moves": [
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 54,
+  "name": "psyduck",
+  "types": [
+   "water"
+  ],
+  "height": 8,
+  "weight": 196,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/54.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 55,
+  "name": "golduck",
+  "types": [
+   "water"
+  ],
+  "height": 17,
+  "weight": 766,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/55.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "scratch",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 56,
+  "name": "mankey",
+  "types": [
+   "fighting"
+  ],
+  "height": 5,
+  "weight": 280,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/56.png",
+  "moves": [
+   {
+    "name": "karate-chop",
+    "type": "fighting",
+    "power": 50
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   }
+  ]
+ },
+ {
+  "id": 57,
+  "name": "primeape",
+  "types": [
+   "fighting"
+  ],
+  "height": 10,
+  "weight": 320,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/57.png",
+  "moves": [
+   {
+    "name": "karate-chop",
+    "type": "fighting",
+    "power": 50
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   }
+  ]
+ },
+ {
+  "id": 58,
+  "name": "growlithe",
+  "types": [
+   "fire"
+  ],
+  "height": 7,
+  "weight": 190,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/58.png",
+  "moves": [
+   {
+    "name": "double-kick",
+    "type": "fighting",
+    "power": 30
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "thrash",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 59,
+  "name": "arcanine",
+  "types": [
+   "fire"
+  ],
+  "height": 19,
+  "weight": 1550,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/59.png",
+  "moves": [
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "thrash",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "leer",
+    "type": "normal",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 60,
+  "name": "poliwag",
+  "types": [
+   "water"
+  ],
+  "height": 6,
+  "weight": 124,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/60.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "double-slap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 61,
+  "name": "poliwhirl",
+  "types": [
+   "water"
+  ],
+  "height": 10,
+  "weight": 200,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/61.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "double-slap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 62,
+  "name": "poliwrath",
+  "types": [
+   "water",
+   "fighting"
+  ],
+  "height": 13,
+  "weight": 540,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/62.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "double-slap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 63,
+  "name": "abra",
+  "types": [
+   "psychic"
+  ],
+  "height": 9,
+  "weight": 195,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/63.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 64,
+  "name": "kadabra",
+  "types": [
+   "psychic"
+  ],
+  "height": 13,
+  "weight": 565,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/64.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 65,
+  "name": "alakazam",
+  "types": [
+   "psychic"
+  ],
+  "height": 15,
+  "weight": 480,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/65.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 66,
+  "name": "machop",
+  "types": [
+   "fighting"
+  ],
+  "height": 8,
+  "weight": 195,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/66.png",
+  "moves": [
+   {
+    "name": "karate-chop",
+    "type": "fighting",
+    "power": 50
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 67,
+  "name": "machoke",
+  "types": [
+   "fighting"
+  ],
+  "height": 15,
+  "weight": 705,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/67.png",
+  "moves": [
+   {
+    "name": "karate-chop",
+    "type": "fighting",
+    "power": 50
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 68,
+  "name": "machamp",
+  "types": [
+   "fighting"
+  ],
+  "height": 16,
+  "weight": 1300,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/68.png",
+  "moves": [
+   {
+    "name": "karate-chop",
+    "type": "fighting",
+    "power": 50
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 69,
+  "name": "bellsprout",
+  "types": [
+   "grass",
+   "poison"
+  ],
+  "height": 7,
+  "weight": 40,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/69.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "vine-whip",
+    "type": "grass",
+    "power": 45
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 70,
+  "name": "weepinbell",
+  "types": [
+   "grass",
+   "poison"
+  ],
+  "height": 10,
+  "weight": 64,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/70.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "vine-whip",
+    "type": "grass",
+    "power": 45
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 71,
+  "name": "victreebel",
+  "types": [
+   "grass",
+   "poison"
+  ],
+  "height": 17,
+  "weight": 155,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/71.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "vine-whip",
+    "type": "grass",
+    "power": 45
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 72,
+  "name": "tentacool",
+  "types": [
+   "water",
+   "poison"
+  ],
+  "height": 9,
+  "weight": 455,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/72.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "wrap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 73,
+  "name": "tentacruel",
+  "types": [
+   "water",
+   "poison"
+  ],
+  "height": 16,
+  "weight": 550,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/73.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "wrap",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 74,
+  "name": "geodude",
+  "types": [
+   "rock",
+   "ground"
+  ],
+  "height": 4,
+  "weight": 200,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/74.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   }
+  ]
+ },
+ {
+  "id": 75,
+  "name": "graveler",
+  "types": [
+   "rock",
+   "ground"
+  ],
+  "height": 10,
+  "weight": 1050,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/75.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   }
+  ]
+ },
+ {
+  "id": 76,
+  "name": "golem",
+  "types": [
+   "rock",
+   "ground"
+  ],
+  "height": 14,
+  "weight": 3000,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/76.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "sand-attack",
+    "type": "ground",
+    "power": 0
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 77,
+  "name": "ponyta",
+  "types": [
+   "fire"
+  ],
+  "height": 10,
+  "weight": 300,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/77.png",
+  "moves": [
+   {
+    "name": "stomp",
+    "type": "normal",
+    "power": 65
+   },
+   {
+    "name": "double-kick",
+    "type": "fighting",
+    "power": 30
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "horn-drill",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 78,
+  "name": "rapidash",
+  "types": [
+   "fire"
+  ],
+  "height": 17,
+  "weight": 950,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/78.png",
+  "moves": [
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "stomp",
+    "type": "normal",
+    "power": 65
+   },
+   {
+    "name": "double-kick",
+    "type": "fighting",
+    "power": 30
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "fury-attack",
+    "type": "normal",
+    "power": 15
+   }
+  ]
+ },
+ {
+  "id": 79,
+  "name": "slowpoke",
+  "types": [
+   "water",
+   "psychic"
+  ],
+  "height": 12,
+  "weight": 360,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/79.png",
+  "moves": [
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "stomp",
+    "type": "normal",
+    "power": 65
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 80,
+  "name": "slowbro",
+  "types": [
+   "water",
+   "psychic"
+  ],
+  "height": 16,
+  "weight": 785,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/80.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "stomp",
+    "type": "normal",
+    "power": 65
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 81,
+  "name": "magnemite",
+  "types": [
+   "electric",
+   "steel"
+  ],
+  "height": 3,
+  "weight": 60,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/81.png",
+  "moves": [
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "supersonic",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "sonic-boom",
+    "type": "normal",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 82,
+  "name": "magneton",
+  "types": [
+   "electric",
+   "steel"
+  ],
+  "height": 10,
+  "weight": 600,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/82.png",
+  "moves": [
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "supersonic",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "sonic-boom",
+    "type": "normal",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 83,
+  "name": "farfetchd",
+  "types": [
+   "normal",
+   "flying"
+  ],
+  "height": 8,
+  "weight": 150,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/83.png",
+  "moves": [
+   {
+    "name": "razor-wind",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "gust",
+    "type": "flying",
+    "power": 40
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 84,
+  "name": "doduo",
+  "types": [
+   "normal",
+   "flying"
+  ],
+  "height": 14,
+  "weight": 392,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/84.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "wing-attack",
+    "type": "flying",
+    "power": 60
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   },
+   {
+    "name": "jump-kick",
+    "type": "fighting",
+    "power": 100
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 85,
+  "name": "dodrio",
+  "types": [
+   "normal",
+   "flying"
+  ],
+  "height": 18,
+  "weight": 852,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/85.png",
+  "moves": [
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "wing-attack",
+    "type": "flying",
+    "power": 60
+   },
+   {
+    "name": "whirlwind",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "fly",
+    "type": "flying",
+    "power": 90
+   },
+   {
+    "name": "jump-kick",
+    "type": "fighting",
+    "power": 100
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 86,
+  "name": "seel",
+  "types": [
+   "water"
+  ],
+  "height": 11,
+  "weight": 900,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/86.png",
+  "moves": [
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "horn-drill",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 87,
+  "name": "dewgong",
+  "types": [
+   "water",
+   "ice"
+  ],
+  "height": 17,
+  "weight": 1200,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/87.png",
+  "moves": [
+   {
+    "name": "pay-day",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "horn-drill",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 88,
+  "name": "grimer",
+  "types": [
+   "poison"
+  ],
+  "height": 9,
+  "weight": 300,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/88.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 89,
+  "name": "muk",
+  "types": [
+   "poison"
+  ],
+  "height": 12,
+  "weight": 300,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/89.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   }
+  ]
+ },
+ {
+  "id": 90,
+  "name": "shellder",
+  "types": [
+   "water"
+  ],
+  "height": 3,
+  "weight": 40,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/90.png",
+  "moves": [
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "twineedle",
+    "type": "bug",
+    "power": 25
+   },
+   {
+    "name": "leer",
+    "type": "normal",
+    "power": 0
+   }
+  ]
+ },
+ {
+  "id": 91,
+  "name": "cloyster",
+  "types": [
+   "water",
+   "ice"
+  ],
+  "height": 15,
+  "weight": 1325,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/91.png",
+  "moves": [
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "twineedle",
+    "type": "bug",
+    "power": 25
+   }
+  ]
+ },
+ {
+  "id": 92,
+  "name": "gastly",
+  "types": [
+   "ghost",
+   "poison"
+  ],
+  "height": 13,
+  "weight": 1,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/92.png",
+  "moves": [
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "disable",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "mega-drain",
+    "type": "grass",
+    "power": 40
+   }
+  ]
+ },
+ {
+  "id": 93,
+  "name": "haunter",
+  "types": [
+   "ghost",
+   "poison"
+  ],
+  "height": 16,
+  "weight": 1,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/93.png",
+  "moves": [
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "mega-drain",
+    "type": "grass",
+    "power": 40
+   },
+   {
+    "name": "thunderbolt",
+    "type": "electric",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 94,
+  "name": "gengar",
+  "types": [
+   "ghost",
+   "poison"
+  ],
+  "height": 15,
+  "weight": 405,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/94.png",
+  "moves": [
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   }
+  ]
+ },
+ {
+  "id": 95,
+  "name": "onix",
+  "types": [
+   "rock",
+   "ground"
+  ],
+  "height": 88,
+  "weight": 2100,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/95.png",
+  "moves": [
+   {
+    "name": "bind",
+    "type": "normal",
+    "power": 15
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "body-slam",
+    "type": "normal",
+    "power": 85
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   }
+  ]
+ },
+ {
+  "id": 96,
+  "name": "drowzee",
+  "types": [
+   "psychic"
+  ],
+  "height": 10,
+  "weight": 324,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/96.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 97,
+  "name": "hypno",
+  "types": [
+   "psychic"
+  ],
+  "height": 16,
+  "weight": 756,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/97.png",
+  "moves": [
+   {
+    "name": "pound",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "mega-punch",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "fire-punch",
+    "type": "fire",
+    "power": 75
+   },
+   {
+    "name": "ice-punch",
+    "type": "ice",
+    "power": 75
+   },
+   {
+    "name": "thunder-punch",
+    "type": "electric",
+    "power": 75
+   },
+   {
+    "name": "mega-kick",
+    "type": "normal",
+    "power": 120
+   }
+  ]
+ },
+ {
+  "id": 98,
+  "name": "krabby",
+  "types": [
+   "water"
+  ],
+  "height": 4,
+  "weight": 65,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/98.png",
+  "moves": [
+   {
+    "name": "vice-grip",
+    "type": "normal",
+    "power": 55
+   },
+   {
+    "name": "guillotine",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "stomp",
+    "type": "normal",
+    "power": 65
+   }
+  ]
+ },
+ {
+  "id": 99,
+  "name": "kingler",
+  "types": [
+   "water"
+  ],
+  "height": 13,
+  "weight": 600,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/99.png",
+  "moves": [
+   {
+    "name": "vice-grip",
+    "type": "normal",
+    "power": 55
+   },
+   {
+    "name": "guillotine",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "swords-dance",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "cut",
+    "type": "normal",
+    "power": 50
+   },
+   {
+    "name": "slam",
+    "type": "normal",
+    "power": 80
+   },
+   {
+    "name": "stomp",
+    "type": "normal",
+    "power": 65
+   }
+  ]
+ },
+ {
+  "id": 100,
+  "name": "voltorb",
+  "types": [
+   "electric"
+  ],
+  "height": 5,
+  "weight": 104,
+  "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/100.png",
+  "moves": [
+   {
+    "name": "headbutt",
+    "type": "normal",
+    "power": 70
+   },
+   {
+    "name": "tackle",
+    "type": "normal",
+    "power": 40
+   },
+   {
+    "name": "take-down",
+    "type": "normal",
+    "power": 90
+   },
+   {
+    "name": "double-edge",
+    "type": "normal",
+    "power": 120
+   },
+   {
+    "name": "sonic-boom",
+    "type": "normal",
+    "power": 0
+   },
+   {
+    "name": "thunder-shock",
+    "type": "electric",
+    "power": 40
+   }
+  ]
+ }
+]

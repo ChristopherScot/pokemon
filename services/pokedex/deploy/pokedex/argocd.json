@@ -1,0 +1,6 @@
+{
+  "name": "pokedex",
+  "team": "me-myself-and-i",
+  "namespace": "pokedex",
+  "image": "ghcr.io/christopherscot/pokemon-pokedex"
+}

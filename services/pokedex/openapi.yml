@@ -1,0 +1,230 @@
+# The API contract. This file is the source of truth: `go generate`
+# turns it into the server interface, request/response types, validation
+# and a typed client, and the compiler then refuses to build until the
+# handlers match. Change the API here, not in Go.
+openapi: 3.0.3
+info:
+  title: pokedex
+  # Bump this when the API changes. The generated client reports it in
+  # X-Client-Version, so one version covers the API and its clients.
+  version: 0.1.0
+  description: pokedex, owned by me-myself-and-i.
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealthz
+      summary: Liveness and readiness probe.
+      responses:
+        '200':
+          description: The service is up.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /:
+    get:
+      operationId: getRoot
+      summary: Identify the service and the running build.
+      responses:
+        '200':
+          description: Service identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identity'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pokemon:
+    get:
+      operationId: listPokemon
+      summary: List Pokemon, optionally filtered by type.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: Filter to Pokemon having this type, e.g. "fire".
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+      responses:
+        '200':
+          description: The matching Pokemon, in Pokedex order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PokemonList'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pokemon/{name}:
+    get:
+      operationId: getPokemon
+      summary: One Pokemon by name.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Lowercase name, e.g. "pikachu".
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The Pokemon.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pokemon'
+        '404':
+          description: No Pokemon by that name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /types:
+    get:
+      operationId: listTypes
+      summary: Every type present in the Pokedex, with a count.
+      responses:
+        '200':
+          description: The types.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TypeList'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    Identity:
+      type: object
+      required: [service, version]
+      properties:
+        service:
+          type: string
+        version:
+          type: string
+
+    Pokemon:
+      type: object
+      required: [id, name, types, height, weight, sprite, moves]
+      properties:
+        id:
+          type: integer
+          description: National Pokedex number.
+        name:
+          type: string
+        types:
+          type: array
+          items:
+            type: string
+          description: One or two types, e.g. ["grass", "poison"].
+        height:
+          type: integer
+          description: Decimetres, as the upstream Pokedex reports it.
+        weight:
+          type: integer
+          description: Hectograms, as the upstream Pokedex reports it.
+        sprite:
+          type: string
+          description: Absolute URL to the front-facing sprite.
+        moves:
+          type: array
+          items:
+            $ref: '#/components/schemas/Move'
+
+    Move:
+      type: object
+      required: [name, type, power]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        power:
+          type: integer
+          description: Base power; 0 for status moves that deal no damage.
+
+    PokemonList:
+      type: object
+      required: [count, pokemon]
+      properties:
+        count:
+          type: integer
+        pokemon:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pokemon'
+
+    TypeSummary:
+      type: object
+      required: [name, count]
+      properties:
+        name:
+          type: string
+        count:
+          type: integer
+
+    TypeList:
+      type: object
+      required: [types]
+      properties:
+        types:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypeSummary'
+
+    # Declaring a `default` response with this shape is what lets ogen
+    # generate convenient errors: a handler can return a plain error and
+    # the generated code renders it, instead of every operation needing
+    # its own error union.
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string

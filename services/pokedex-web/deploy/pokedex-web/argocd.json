@@ -1,0 +1,6 @@
+{
+  "name": "pokedex-web",
+  "team": "me-myself-and-i",
+  "namespace": "pokedex-web",
+  "image": "ghcr.io/christopherscot/pokemon-pokedex-web"
+}
