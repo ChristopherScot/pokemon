@@ -201,7 +201,7 @@ func watchCmd() *cobra.Command {
 				// Only what is new: re-printing the whole log every poll
 				// would bury the turn that just happened.
 				for _, ev := range b.Log[min(shown, len(b.Log)):] {
-					fmt.Println(" ", ev.Text)
+					printEvent(ev)
 				}
 				shown = len(b.Log)
 				seen = b.Version
@@ -250,7 +250,7 @@ func attackCmd() *cobra.Command {
 				return err
 			}
 			for _, ev := range lastTurn(b) {
-				fmt.Println(" ", ev.Text)
+				printEvent(ev)
 			}
 			fmt.Println()
 			printBattle(c, b)
@@ -274,6 +274,22 @@ func index1(s, what string) (int, error) {
 
 // lastTurn is the events from the most recent turn, which is what a
 // player wants to see after attacking.
+// printEvent writes one log line with a glyph for what it did.
+//
+// The CLI cannot animate a hit the way the web does, so the glyph is
+// how a super-effective hit reads differently from an ordinary one at a
+// glance. It leads the line and is padded to a fixed width, because a
+// column that moves with the content is harder to scan than no column.
+//
+// Events with no glyph still get the indent, so the prose stays aligned.
+func printEvent(ev api.BattleEvent) {
+	if icon := battleclient.EventIcon(ev); icon != "" {
+		fmt.Printf(" %s %s\n", icon, ev.Text)
+		return
+	}
+	fmt.Println("   ", ev.Text)
+}
+
 func lastTurn(b *api.Battle) []api.BattleEvent {
 	if len(b.Log) == 0 {
 		return nil

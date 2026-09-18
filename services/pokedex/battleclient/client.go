@@ -338,3 +338,41 @@ func MoveUsable(p api.BattlePokemon, moveIdx int) bool {
 	i, ok := p.DisabledMove.Get()
 	return !ok || i != moveIdx
 }
+
+// EventIcon is a one-glyph summary of what a log line did, for clients
+// that cannot animate. Returns "" for events that are pure narration.
+//
+// Keyed off the structured fields rather than off ev.Text: the server
+// owns the wording precisely so clients do not restate it, and a client
+// that greps prose for "super effective" breaks the first time that
+// sentence is reworded. effectiveness, damage and fainted are on the
+// event for exactly this.
+//
+// Shared with the TUI so the same turn does not get two different
+// glyphs depending on which terminal is watching.
+func EventIcon(ev api.BattleEvent) string {
+	if f, ok := ev.Fainted.Get(); ok && f {
+		return "💀"
+	}
+	// Effectiveness before damage: a 2x hit and an ordinary hit are both
+	// damage, and which one it was is the thing worth a glyph.
+	if e, ok := ev.Effectiveness.Get(); ok {
+		switch {
+		case e == 0:
+			return "🚫" // immune
+		case e >= 2:
+			return "💥"
+		case e > 0 && e < 1:
+			return "🪨"
+		}
+	}
+	if d, ok := ev.Damage.Get(); ok && d > 0 {
+		return "👊"
+	}
+	// A move with no damage and no multiplier is a status move; it
+	// still did something, which is the whole point of them existing.
+	if _, ok := ev.Move.Get(); ok {
+		return "✨"
+	}
+	return ""
+}
