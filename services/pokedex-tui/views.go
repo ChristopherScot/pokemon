@@ -51,13 +51,20 @@ func (m model) teamView() string {
 		head += dimStyle.Render("  ·  opening a new battle")
 	}
 
+	// An empty slot shows a die, not an ellipsis, and says so in the
+	// hint below. The server fills whatever is left out, so starting
+	// with one pick - or none - is a real option, and an ellipsis reads
+	// as "incomplete, keep going" rather than "this will be random".
+	// The web picker uses the same die for the same reason.
 	picked := "  "
 	for i := 0; i < 3; i++ {
 		if i < len(m.team) {
 			picked += selStyle.Render(fmt.Sprintf("%d. %-14s", i+1, m.team[i]))
-		} else {
-			picked += dimStyle.Render(fmt.Sprintf("%d. %-14s", i+1, "…"))
+			continue
 		}
+		// Padded to 13, not 14: the die is two columns wide and
+		// %-14s counts it as one, so the columns step right without it.
+		picked += dimStyle.Render(fmt.Sprintf("%d. \U0001F3B2 %-13s", i+1, "random"))
 	}
 
 	left := listStyle.Width(listWidth).Render(m.list.View())
@@ -65,5 +72,5 @@ func (m model) teamView() string {
 
 	return head + "\n" + picked + "\n\n" +
 		lipgloss.JoinHorizontal(lipgloss.Top, left, right) + "\n" +
-		dimStyle.Render("  enter pick · backspace undo · / filter · esc back")
+		dimStyle.Render("  enter pick · backspace undo · / filter · tab start with what you have · esc back")
 }

@@ -313,7 +313,14 @@ func (bs *battleState) logView(height int) string {
 		case e == 0:
 			text = dimStyle.Render(text)
 		}
-		sb.WriteString("  " + text + "\n")
+		// Glyph as well as colour. Colour alone cannot say "fainted" or
+		// "that was a status move", and it is the first thing lost to a
+		// screenshot, a pipe, or a colourblind reader.
+		if icon := battleclient.EventIcon(ev); icon != "" {
+			sb.WriteString(" " + icon + " " + text + "\n")
+			continue
+		}
+		sb.WriteString("    " + text + "\n")
 	}
 	return sb.String()
 }

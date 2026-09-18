@@ -143,6 +143,14 @@ func (m model) teamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, m.startBattle()
 		}
 		return m, nil
+	case "tab":
+		// Start with fewer than three; the server fills the rest.
+		//
+		// Without this the picker could only start on a full team, so
+		// the empty slots' die was decoration - the API has taken a
+		// partial team since 0.4.0 and the web has offered it since,
+		// but a TUI player had to name all three or go back.
+		return m, m.startBattle()
 	}
 	// Everything else drives the list, so filtering works while picking.
 	var cmd tea.Cmd
