@@ -1,0 +1,9 @@
+{
+  "name": "pokemon",
+  "private": true,
+  "description": "Workspace root. Not published - it exists so npm can resolve the generated TypeScript client from a sibling service without publishing it first.",
+  "workspaces": [
+    "services/pokedex/clients/ts",
+    "services/pokedex-web"
+  ]
+}
