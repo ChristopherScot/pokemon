@@ -422,9 +422,21 @@ func (m model) browseView() string {
 	left := listStyle.Width(listWidth).Render(m.list.View())
 	joined := lipgloss.JoinHorizontal(lipgloss.Top, left, body)
 
-	hint := "  b battle"
-	if m.bc != nil {
-		hint = fmt.Sprintf("  b battle as %s", m.trainer)
+	// The team, shown as three slots above the help line. A die for a
+	// slot nobody picked, because the server fills those at random and
+	// that should look like a choice rather than a gap.
+	slots := make([]string, 3)
+	for i := range slots {
+		if i < len(m.team) {
+			slots[i] = selStyle.Render(fmt.Sprintf("[%s]", m.team[i]))
+		} else {
+			slots[i] = labelStyle.Render("[🎲 random]")
+		}
 	}
-	return joined + "\n" + labelStyle.Render(hint)
+
+	hint := "  enter pick · backspace undo · / filter · q quit"
+	if m.bc != nil {
+		hint = fmt.Sprintf("  enter pick · ctrl+r battle as %s · b lobby · / filter · q quit", m.trainer)
+	}
+	return joined + "\n  team " + strings.Join(slots, " ") + "\n" + labelStyle.Render(hint)
 }

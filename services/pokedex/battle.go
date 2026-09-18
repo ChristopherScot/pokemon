@@ -35,7 +35,11 @@ const (
 	// Scales raw move power into the HP range below. Tuned so a neutral
 	// hit takes roughly a fifth of a healthy Pokemon's HP: long enough to
 	// make targeting choices matter, short enough to finish.
-	damageScale = 0.55
+	// Tuned after attack and defense entered the formula: the ratio
+	// averages near 1 but swings from about 0.3 (Gengar into Onix) to
+	// 3 (Machamp into a frail target), and the old 0.55 left the slow
+	// end at nine turns for one Pokemon.
+	damageScale = 0.85
 )
 
 var (
@@ -119,6 +123,20 @@ type combatant struct {
 	mon   api.Pokemon
 	hp    int
 	maxHP int
+
+	// The game's base stats, which the damage formula needs.
+	base baseStats
+
+	// Stat changes accumulated this battle, from moves like
+	// swords-dance and leer.
+	stages stages
+
+	// confused halves nothing directly - it gives a chance to hit
+	// yourself instead, resolved at attack time.
+	confused bool
+
+	// disabled is a move index this Pokemon cannot use, or -1.
+	disabled int
 }
 
 func (c *combatant) fainted() bool { return c.hp <= 0 }
@@ -145,8 +163,11 @@ func newCombatants(dex *pokedex, names []string) ([]*combatant, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: %q", errUnknownMon, n)
 		}
-		hp := maxHP(dex.baseHP[mon.ID], battleIV, battleEV, battleLevel)
-		team = append(team, &combatant{mon: mon, hp: hp, maxHP: hp})
+		st := dex.stats[mon.ID]
+		hp := maxHP(st.hp, battleIV, battleEV, battleLevel)
+		team = append(team, &combatant{
+			mon: mon, hp: hp, maxHP: hp, base: st, disabled: -1,
+		})
 	}
 	return team, nil
 }
@@ -235,7 +256,14 @@ func damage(attacker, defender *combatant, move api.Move, rng *rand.Rand) (int, 
 		}
 	}
 
-	base := float64(move.Power) * damageScale * mult * stab
+	// Attack over defense, each scaled by its stat stages. This is what
+	// makes swords-dance and harden mean something, and what makes a
+	// Machamp (130 attack) hit harder than a Gengar (65) with the same
+	// move.
+	atk := float64(attacker.base.attack) * statMultiplier(attacker.stages.attack)
+	def := float64(defender.base.defense) * statMultiplier(defender.stages.defense)
+
+	base := float64(move.Power) * damageScale * mult * stab * (atk / def)
 	spread := 1 + (rng.Float64()*2-1)*damageSpread
 	d := int(base * spread)
 	if d < 1 {
@@ -394,38 +422,98 @@ func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng
 	}
 
 	move := attacker.mon.Moves[moveIdx]
+	if moveIdx == attacker.disabled {
+		return fmt.Errorf("%w: %s is disabled", errIllegalMove, move.Name)
+	}
+
+	b.turnNumber++
+
+	// Confusion resolves before the move: a confused Pokemon can hit
+	// itself instead of attacking, which is the whole point of
+	// supersonic.
+	if attacker.confused {
+		// A third of the time, and it wears off on the same roll that
+		// spares it, so confusion is a real cost rather than permanent.
+		if rng.Float64() < 0.33 {
+			self := move.Power / 2
+			if self < 1 {
+				self = 1
+			}
+			attacker.hp -= self
+			if attacker.hp < 0 {
+				attacker.hp = 0
+			}
+			b.log = append(b.log, api.BattleEvent{
+				TurnNumber: b.turnNumber,
+				Text:       fmt.Sprintf("%s is confused and hurt itself!", title(attacker.mon.Name)),
+				Attacker:   api.NewOptString(attacker.mon.Name),
+				Damage:     api.NewOptInt(self),
+			})
+			b.finishTurn(me, opponent, attacker)
+			return nil
+		}
+		attacker.confused = false
+		b.log = append(b.log, api.BattleEvent{
+			TurnNumber: b.turnNumber,
+			Text:       fmt.Sprintf("%s snapped out of its confusion.", title(attacker.mon.Name)),
+		})
+	}
+
+	// A status move does something other than damage, and every one in
+	// the dataset now does what it does in the games.
+	if move.Power == 0 {
+		b.resolveStatus(attacker, target, move, rng)
+		b.finishTurn(me, opponent, target)
+		return nil
+	}
+
 	dealt, mult := damage(attacker, target, move, rng)
 	target.hp -= dealt
 	if target.hp < 0 {
 		target.hp = 0
 	}
 
-	b.turnNumber++
 	b.appendEvent(attacker, target, move, dealt, mult)
 
-	if target.fainted() {
+	b.finishTurn(me, opponent, target)
+	return nil
+}
+
+// finishTurn records a faint, checks the win condition and hands over.
+// Shared because a turn can end after damage, after a status move, or
+// after a confused Pokemon hits itself.
+func (b *battle) finishTurn(me, opponent *side, hurt *combatant) {
+	if hurt != nil && hurt.fainted() {
 		b.log = append(b.log, api.BattleEvent{
 			TurnNumber: b.turnNumber,
-			Text:       fmt.Sprintf("%s fainted!", title(target.mon.Name)),
+			Text:       fmt.Sprintf("%s fainted!", title(hurt.mon.Name)),
 			Fainted:    api.NewOptBool(true),
-			Target:     api.NewOptString(target.mon.Name),
+			Target:     api.NewOptString(hurt.mon.Name),
 		})
 	}
 
-	if opponent.defeated() {
+	switch {
+	case opponent.defeated():
 		b.status = "finished"
 		b.winner = me.trainer
 		b.log = append(b.log, api.BattleEvent{
 			TurnNumber: b.turnNumber,
 			Text:       fmt.Sprintf("%s wins!", me.trainer),
 		})
-	} else {
+	case me.defeated():
+		// Reachable through confusion: a Pokemon can knock itself out.
+		b.status = "finished"
+		b.winner = opponent.trainer
+		b.log = append(b.log, api.BattleEvent{
+			TurnNumber: b.turnNumber,
+			Text:       fmt.Sprintf("%s wins!", opponent.trainer),
+		})
+	default:
 		b.turn = 1 - b.turn
 	}
 
 	b.version++
 	b.touched = time.Now()
-	return nil
 }
 
 // appendEvent narrates a hit. The server writes the prose so three
@@ -495,4 +583,107 @@ func (b *battle) toAPI() *api.Battle {
 		out.Sides = append(out.Sides, side)
 	}
 	return out
+}
+
+// resolveStatus applies a power-0 move.
+//
+// Every one in the dataset does what it does in the games; a move with
+// no entry says it had no effect, which is honest rather than silent.
+func (b *battle) resolveStatus(attacker, target *combatant, move api.Move, rng *rand.Rand) {
+	eff, known := statusMoves[move.Name]
+	say := func(format string, a ...any) {
+		b.log = append(b.log, api.BattleEvent{
+			TurnNumber: b.turnNumber,
+			Text:       fmt.Sprintf(format, a...),
+			Attacker:   api.NewOptString(attacker.mon.Name),
+			Move:       api.NewOptString(move.Name),
+		})
+	}
+
+	if !known || eff == (effect{}) {
+		say("%s used %s, but nothing happened.", title(attacker.mon.Name), title(move.Name))
+		return
+	}
+
+	// Accuracy first: a move that misses does nothing at all.
+	if !lands(eff.accuracy, attacker.stages.accuracy, rng.Float64()) {
+		say("%s used %s, but it missed!", title(attacker.mon.Name), title(move.Name))
+		return
+	}
+
+	switch {
+	case eff.ohko:
+		target.hp = 0
+		b.log = append(b.log, api.BattleEvent{
+			TurnNumber: b.turnNumber,
+			Text: fmt.Sprintf("%s used %s. It's a one-hit KO!",
+				title(attacker.mon.Name), title(move.Name)),
+			Attacker: api.NewOptString(attacker.mon.Name),
+			Target:   api.NewOptString(target.mon.Name),
+			Move:     api.NewOptString(move.Name),
+			Damage:   api.NewOptInt(target.maxHP),
+		})
+
+	case eff.fixedDamage > 0:
+		// Ignores types and stats entirely, which is the point of it.
+		dealt := eff.fixedDamage
+		if dealt > target.hp {
+			dealt = target.hp
+		}
+		target.hp -= dealt
+		b.log = append(b.log, api.BattleEvent{
+			TurnNumber: b.turnNumber,
+			Text: fmt.Sprintf("%s used %s on %s!",
+				title(attacker.mon.Name), title(move.Name), title(target.mon.Name)),
+			Attacker: api.NewOptString(attacker.mon.Name),
+			Target:   api.NewOptString(target.mon.Name),
+			Move:     api.NewOptString(move.Name),
+			Damage:   api.NewOptInt(dealt),
+		})
+
+	case eff.confuse:
+		target.confused = true
+		say("%s used %s. %s became confused!",
+			title(attacker.mon.Name), title(move.Name), title(target.mon.Name))
+
+	case eff.disable:
+		// The move it would most likely use again: its strongest.
+		best, power := -1, 0
+		for i, m := range target.mon.Moves {
+			if m.Power > power {
+				best, power = i, m.Power
+			}
+		}
+		if best < 0 {
+			say("%s used %s, but there was nothing to disable.",
+				title(attacker.mon.Name), title(move.Name))
+			return
+		}
+		target.disabled = best
+		say("%s used %s. %s's %s was disabled!",
+			title(attacker.mon.Name), title(move.Name),
+			title(target.mon.Name), title(target.mon.Moves[best].Name))
+
+	case eff.stat != "":
+		on := target
+		if eff.self {
+			on = attacker
+		}
+		applied := on.stages.add(eff.stat, eff.delta)
+		if applied == 0 {
+			// Already at the cap. Saying so beats a turn that appears
+			// to do nothing.
+			say("%s used %s, but %s's %s cannot go any %s.",
+				title(attacker.mon.Name), title(move.Name), title(on.mon.Name),
+				eff.stat, map[bool]string{true: "higher", false: "lower"}[eff.delta > 0])
+			return
+		}
+		say("%s used %s. %s's %s %s%s!",
+			title(attacker.mon.Name), title(move.Name), title(on.mon.Name), eff.stat,
+			map[bool]string{true: "rose", false: "fell"}[applied > 0],
+			map[bool]string{true: " sharply", false: ""}[applied > 1 || applied < -1])
+
+	default:
+		say("%s used %s, but nothing happened.", title(attacker.mon.Name), title(move.Name))
+	}
 }

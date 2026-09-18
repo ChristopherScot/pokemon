@@ -24,10 +24,17 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// defaultBaseURL is where the service runs in the cluster. $POKEDEX_URL
-// overrides it, so the same binary works against a port-forward or a
-// local `go run` without a rebuild.
-const defaultBaseURL = "http://pokedex.pokedex.svc.cluster.local"
+// defaultBaseURL is the DEPLOYED Pokedex, reachable from anywhere.
+// $POKEDEX_URL overrides it, so the same binary works against a local
+// server or a port-forward without a rebuild.
+//
+// Not the in-cluster address, which is what this used to be: this
+// binary is published as a release and run on laptops, where
+// pokedex.pokedex.svc.cluster.local does not resolve and the failure -
+// "no such host" - reads as a broken install rather than a default
+// that only works in one place. The TUI already pointed here; the two
+// disagreeing was the bug.
+const defaultBaseURL = "https://pokemon.home.chrisscotmartin.com/api"
 
 func baseURL() string {
 	if u := strings.TrimSpace(os.Getenv("POKEDEX_URL")); u != "" {

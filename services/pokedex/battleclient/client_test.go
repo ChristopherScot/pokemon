@@ -102,3 +102,21 @@ func TestEmptyTeamIsSentAsAbsent(t *testing.T) {
 		t.Errorf("team should be absent entirely: %s", got)
 	}
 }
+
+// Every Go client points at the same deployed API by default.
+//
+// They did not: the CLI defaulted to the in-cluster address while the
+// TUI defaulted to the public URL. The CLI is published as a release
+// binary and run on laptops, where pokedex.pokedex.svc.cluster.local
+// does not resolve - and "no such host" reads as a broken install
+// rather than a default that only works inside the cluster.
+func TestDefaultAPIIsReachableFromAnywhere(t *testing.T) {
+	if !strings.HasPrefix(DefaultAPI, "https://") {
+		t.Errorf("DefaultAPI = %q, which is not a public address", DefaultAPI)
+	}
+	// An in-cluster name resolves nowhere else, so it cannot be the
+	// default for a binary people download.
+	if strings.Contains(DefaultAPI, ".svc.cluster.local") {
+		t.Errorf("DefaultAPI = %q, an in-cluster address", DefaultAPI)
+	}
+}

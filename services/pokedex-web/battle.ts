@@ -100,8 +100,9 @@ function battlePage({ id, trainer }: { id: string; trainer: string }) {
     15%  { opacity:1; transform:translateY(0) scale(1.08); }
     100% { opacity:0; transform:translateY(-26px) scale(1); }
   }
-  .float { position:absolute; right:104px; top:8px; font-weight:800; font-size:17px;
-           pointer-events:none; animation:floatUp 1.5s ease-out forwards; }
+  .float { position:absolute; right:104px; top:8px; font-weight:800; font-size:22px;
+           pointer-events:none; animation:floatUp 2.4s ease-out forwards;
+           text-shadow:0 2px 8px rgba(0,0,0,.6); }
   .float.super { color:var(--warn); text-shadow:0 0 12px rgba(251,191,36,.6); }
   .float.weak  { color:var(--dim); font-size:14px; }
   .float.normal{ color:var(--danger); }
@@ -112,6 +113,14 @@ function battlePage({ id, trainer }: { id: string; trainer: string }) {
     60% { transform:translateX(-3px); } 80% { transform:translateX(3px); }
   }
   .mon.hit { animation:shake .4s ease-in-out; }
+  @keyframes shakeHard {
+    0%,100% { transform:translateX(0); }
+    15% { transform:translateX(-9px); } 30% { transform:translateX(9px); }
+    45% { transform:translateX(-7px); } 60% { transform:translateX(7px); }
+    75% { transform:translateX(-4px); } 90% { transform:translateX(4px); }
+  }
+  .mon.hit-hard { animation:shakeHard .5s ease-in-out;
+                  box-shadow:0 0 22px rgba(251,191,36,.45); }
   .banner { font-size:15px; font-weight:700; padding:10px 14px; border-radius:10px;
             margin-bottom:18px; transition:background-color .4s ease; }
   .banner.mine { background:rgba(74,222,128,.14); color:var(--good); }
@@ -153,7 +162,14 @@ const COLOURS = ${JSON.stringify(TYPE_COLOURS)}
 
 let seen = -1
 let picked = { attacker: 0, move: 0, target: 0 }
-let lastLogLen = 0
+// -1 means "not rendered yet"; the first render adopts the log's
+// length rather than replaying it.
+let lastLogLen = -1
+
+// The hp percentage each bar is currently DRAWING, so a re-render can
+// start the transition from where the bar was rather than from the
+// value it is moving to.
+const shownHp = new Map()
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
   { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))
@@ -174,7 +190,7 @@ function monEl(p, side, i, selectable, selected) {
     '<img src="' + esc(p.sprite) + '" alt="" loading="lazy">' +
     '<div><div class="name">' + esc(p.name) + '</div>' +
     '<div class="types">' + types + '</div>' +
-    '<div class="hpwrap"><div class="hp" style="width:' + pct + '%;background:' + hpColour(p.hp, p.maxHp) + '"></div></div></div>' +
+    '<div class="hpwrap"><div class="hp" data-pct="' + pct + '" style="width:' + pct + '%;background:' + hpColour(p.hp, p.maxHp) + '"></div></div></div>' +
     '<div class="hpnum">' + p.hp + '/' + p.maxHp + '</div></div>'
 }
 
@@ -230,9 +246,40 @@ function render(b) {
   board.className = 'board' + (b.status === 'finished' && b.winner === ME ? ' won' : '')
   document.getElementById('log').scrollTop = 9e9
 
+  // The bars start at the PREVIOUS hp and are moved to the real one on
+  // the next frame, so the CSS width transition has something to
+  // animate from. Rendering straight to the new value paints the bar
+  // already drained - the transition has no start state, and the drop
+  // you are meant to watch has already happened.
+  for (const [key, was] of shownHp) {
+    const bar = board.querySelector('[data-slot="' + key + '"] .hp')
+    if (bar && bar.dataset.pct !== undefined && was !== bar.dataset.pct) {
+      bar.style.width = was + '%'
+    }
+  }
+  requestAnimationFrame(() => {
+    for (const bar of board.querySelectorAll('.hp')) {
+      bar.style.width = bar.dataset.pct + '%'
+    }
+    for (const [, s] of b.sides.entries()) void s
+    shownHp.clear()
+    for (const [si, side] of b.sides.entries()) {
+      for (const [i, p] of side.team.entries()) {
+        const key = (si === mineIdx ? 'me' : 'them') + '-' + i
+        shownHp.set(key, p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0)
+      }
+    }
+  })
+
   // Damage floats come from the NEW log entries, so a poll that brings
   // three turns at once animates all three rather than only the last.
-  if (b.log.length > lastLogLen) {
+  //
+  // lastLogLen starts at the log's length on the FIRST render, not at
+  // zero: a battle joined mid-way would otherwise replay every hit that
+  // already happened as floats, and then go quiet for the turns that
+  // actually arrive while you are watching.
+  if (lastLogLen < 0) lastLogLen = b.log.length
+  else if (b.log.length > lastLogLen) {
     for (const e of b.log.slice(lastLogLen)) {
       if (!e.damage || !e.target) continue
       for (const [si, s] of b.sides.entries()) {
@@ -245,11 +292,12 @@ function render(b) {
         f.className = 'float ' + (e.effectiveness >= 2 ? 'super' : e.effectiveness < 1 ? 'weak' : 'normal')
         f.textContent = '-' + e.damage + (e.effectiveness >= 2 ? ' !!' : '')
         el.appendChild(f)
-        if (e.effectiveness >= 2) {
-          el.classList.add('hit')
-          setTimeout(() => el.classList.remove('hit'), 400)
-        }
-        setTimeout(() => f.remove(), 1500)
+        // Every hit shakes; a super-effective one shakes harder. Only
+        // animating 2x meant most turns had no feedback at all beyond a
+        // bar moving.
+        el.classList.add(e.effectiveness >= 2 ? 'hit-hard' : 'hit')
+        setTimeout(() => el.classList.remove('hit', 'hit-hard'), 500)
+        setTimeout(() => f.remove(), 2400)
       }
     }
     lastLogLen = b.log.length

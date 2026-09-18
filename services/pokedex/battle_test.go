@@ -138,8 +138,8 @@ func TestBulkFollowsBaseStatsNotWeight(t *testing.T) {
 		t.Skip("jigglypuff not in this dataset")
 	}
 
-	onixHP := maxHP(s.dex.baseHP[onix.ID], 0, 0, battleLevel)
-	jigglyHP := maxHP(s.dex.baseHP[jiggly.ID], 0, 0, battleLevel)
+	onixHP := maxHP(s.dex.stats[onix.ID].hp, 0, 0, battleLevel)
+	jigglyHP := maxHP(s.dex.stats[jiggly.ID].hp, 0, 0, battleLevel)
 
 	if onix.Weight <= jiggly.Weight {
 		t.Fatalf("premise broken: onix %d should outweigh jigglypuff %d", onix.Weight, jiggly.Weight)
@@ -156,7 +156,7 @@ func TestBulkFollowsBaseStatsNotWeight(t *testing.T) {
 func TestEveryPokemonHasABaseStat(t *testing.T) {
 	s := testService(t)
 	for _, mon := range s.dex.list("", 0) {
-		if s.dex.baseHP[mon.ID] <= 0 {
+		if s.dex.stats[mon.ID].hp <= 0 {
 			t.Errorf("#%d %s has no base HP", mon.ID, mon.Name)
 		}
 	}

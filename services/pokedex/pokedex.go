@@ -38,9 +38,15 @@ type entry struct {
 	// It is data rather than anything derivable: weight correlates with
 	// it at 0.33 and inverts for the cases players notice - Onix
 	// outweighs Jigglypuff 38x and has a third the HP.
-	BaseHp int    `json:"baseHp"`
-	Sprite string `json:"sprite"`
-	Moves  []struct {
+	BaseHp int `json:"baseHp"`
+	// The rest of the battle stats, same source and same reason: a
+	// damage formula needs attack and defense, and stat-changing moves
+	// need something to change.
+	BaseAttack  int    `json:"baseAttack"`
+	BaseDefense int    `json:"baseDefense"`
+	BaseSpeed   int    `json:"baseSpeed"`
+	Sprite      string `json:"sprite"`
+	Moves       []struct {
 		Name  string `json:"name"`
 		Type  string `json:"type"`
 		Power int    `json:"power"`
@@ -53,8 +59,9 @@ type pokedex struct {
 	ordered []api.Pokemon
 	byName  map[string]api.Pokemon
 
-	// baseHP by dex number, for the battle HP formula.
-	baseHP map[int]int
+	// Battle stats by dex number. Not on api.Pokemon: a client is shown
+	// the HP a battle computes from these, not the inputs.
+	stats map[int]baseStats
 }
 
 // loadPokedex decodes the embedded dataset once at startup.
@@ -78,17 +85,22 @@ func loadPokedex() (*pokedex, error) {
 		// BattlePokemon, which is what this feeds. Putting the base stat
 		// in the API would expose an input to a calculation the server
 		// owns, and invite a client to redo it differently.
-		baseHP: make(map[int]int, len(raw)),
+		stats: make(map[int]baseStats, len(raw)),
 	}
 	for _, e := range raw {
 		// A missing baseHp decodes to 0, which would give every Pokemon
 		// a flat level+10 HP and make every battle identical - a failure
 		// that is invisible until someone notices the numbers never
 		// differ. Refuse to start instead.
-		if e.BaseHp <= 0 {
-			return nil, fmt.Errorf("pokedex entry #%d %q has no baseHp", e.ID, e.Name)
+		if e.BaseHp <= 0 || e.BaseAttack <= 0 || e.BaseDefense <= 0 || e.BaseSpeed <= 0 {
+			return nil, fmt.Errorf("pokedex entry #%d %q is missing a base stat", e.ID, e.Name)
 		}
-		p.baseHP[e.ID] = e.BaseHp
+		p.stats[e.ID] = baseStats{
+			hp:      e.BaseHp,
+			attack:  e.BaseAttack,
+			defense: e.BaseDefense,
+			speed:   e.BaseSpeed,
+		}
 
 		moves := make([]api.Move, 0, len(e.Moves))
 		for _, m := range e.Moves {
@@ -176,4 +188,10 @@ func (p *pokedex) types() []api.TypeSummary {
 		return out[i].Name < out[j].Name
 	})
 	return out
+}
+
+// baseStats are the game's base stats for one Pokemon, which the battle
+// engine turns into HP, damage and turn order.
+type baseStats struct {
+	hp, attack, defense, speed int
 }

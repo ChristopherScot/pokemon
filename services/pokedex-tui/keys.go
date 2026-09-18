@@ -25,6 +25,35 @@ func (m model) browseKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q":
 		return m, tea.Quit
+
+	case "enter", "\r":
+		// Toggle the highlighted Pokemon on the team, here on the
+		// browse screen rather than behind a separate picker. This is
+		// the list you are already looking at, and hiding selection
+		// three screens away made enter look broken.
+		it, ok := m.list.SelectedItem().(item)
+		if !ok {
+			return m, nil
+		}
+		for i, n := range m.team {
+			if n == it.p.Name {
+				m.team = append(m.team[:i], m.team[i+1:]...)
+				return m, nil
+			}
+		}
+		if len(m.team) < 3 {
+			m.team = append(m.team, it.p.Name)
+		} else {
+			m.status = "three is a full team — press enter on one to drop it"
+		}
+		return m, nil
+
+	case "backspace":
+		if n := len(m.team); n > 0 {
+			m.team = m.team[:n-1]
+		}
+		return m, nil
+
 	case "b":
 		// Battle mode needs a trainer; say so rather than opening a
 		// lobby that cannot do anything.
@@ -35,6 +64,17 @@ func (m model) browseKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenLobby
 		m.status = ""
 		return m, fetchLobby(m.bc)
+
+	case "ctrl+r":
+		// Open a battle with whatever is picked. Anything left out is
+		// chosen by the server, so this works with an empty team too.
+		if m.bc == nil {
+			m.status = "no trainer registered — run `pokedex-cli register <name>` first"
+			return m, nil
+		}
+		m.joining = ""
+		m.status = "opening a battle…"
+		return m, m.startBattle()
 	}
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
@@ -68,7 +108,7 @@ func (m model) lobbyKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.team = nil
 		m.status = ""
 		return m, nil
-	case "enter":
+	case "enter", "\r":
 		if m.lobby == nil || len(m.lobby.Waiting) == 0 {
 			return m, nil
 		}
@@ -95,7 +135,7 @@ func (m model) teamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.team = m.team[:n-1]
 		}
 		return m, nil
-	case "enter":
+	case "enter", "\r":
 		if it, ok := m.list.SelectedItem().(item); ok && len(m.team) < 3 {
 			m.team = append(m.team, it.p.Name)
 		}
@@ -192,7 +232,7 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if n := len(mine.Team[bs.pickAttacker].Moves); bs.pickMove < n-1 {
 			bs.pickMove++
 		}
-	case "enter":
+	case "enter", "\r":
 		return m, m.attack()
 	}
 	return m, nil

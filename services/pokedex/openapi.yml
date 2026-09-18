@@ -7,7 +7,7 @@ info:
   title: pokedex
   # Bump this when the API changes. The generated client reports it in
   # X-Client-Version, so one version covers the API and its clients.
-  version: 0.4.0
+  version: 0.5.0
   description: pokedex, owned by me-myself-and-i.
 
 paths:
