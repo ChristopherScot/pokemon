@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "POKEDEX_NO_RETRY=1 node --test"
   },
   "dependencies": {
     "@christopherscot/pokedex-client": "^0.1.0",

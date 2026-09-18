@@ -1,6 +1,11 @@
 package battleclient
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
@@ -62,5 +67,38 @@ func TestSideForWorksFromEitherSlot(t *testing.T) {
 	// than the caller indexing past the end.
 	if _, _, ok := c.SideFor(battle(api.BattleStatusWaiting, "", "ash")); ok {
 		t.Error("SideFor reported ok for a battle with one side")
+	}
+}
+
+// An empty team means "pick for me", and has to be sent as an ABSENT
+// field rather than an empty array.
+//
+// The spec says minItems 3, so `"team": []` is a validation error - and
+// the 400 it produces does not even decode as the client's Error type,
+// so the caller sees "invalid: message (field required)" instead of
+// anything about teams. A nil slice is what makes ogen omit the field.
+func TestEmptyTeamIsSentAsAbsent(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = string(b)
+		w.Header().Set("content-type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"x","status":"waiting","version":1,"sides":[],"log":[]}`))
+	}))
+	defer srv.Close()
+
+	c, err := New(Identity{Name: "ash", Token: "t", API: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Create(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got, `"team":[]`) {
+		t.Errorf("sent an empty array, which fails minItems: %s", got)
+	}
+	if strings.Contains(got, `"team"`) {
+		t.Errorf("team should be absent entirely: %s", got)
 	}
 }

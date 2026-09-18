@@ -144,8 +144,16 @@ func Register(ctx context.Context, apiURL, name string) (Identity, error) {
 	}
 }
 
-// Create opens a battle with three Pokemon.
+// Create opens a battle with three Pokemon, or a random team when team
+// is empty.
+//
+// An empty team is sent as an ABSENT field, not an empty array: the spec
+// says minItems 3, so `"team": []` is a validation error rather than
+// "pick for me". A nil slice is what makes ogen omit the field.
 func (c *Client) Create(ctx context.Context, team []string) (*api.Battle, error) {
+	if len(team) == 0 {
+		team = nil
+	}
 	res, err := c.API.CreateBattle(ctx, &api.CreateBattle{Team: team},
 		api.CreateBattleParams{XTrainerToken: c.Token})
 	if err != nil {
@@ -163,8 +171,11 @@ func (c *Client) Create(ctx context.Context, team []string) (*api.Battle, error)
 	}
 }
 
-// Join enters a waiting battle.
+// Join enters a waiting battle, with a random team when team is empty.
 func (c *Client) Join(ctx context.Context, id string, team []string) (*api.Battle, error) {
+	if len(team) == 0 {
+		team = nil
+	}
 	res, err := c.API.JoinBattle(ctx, &api.JoinBattle{Team: team},
 		api.JoinBattleParams{ID: id, XTrainerToken: c.Token})
 	if err != nil {

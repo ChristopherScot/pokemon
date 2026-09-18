@@ -8,10 +8,17 @@
 // The API decides everything. This file renders state and posts intents,
 // exactly as the CLI and TUI do.
 
-import createClient, { exponentialRetry } from '@christopherscot/pokedex-client'
+import createClient, { exponentialRetry, noRetry } from '@christopherscot/pokedex-client'
 
 const baseUrl = process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local'
-const api = createClient({ baseUrl, retry: exponentialRetry })
+// exponentialRetry spends about 3.4s across five attempts before giving
+// up, which is right in front of a rolling deployment and wrong in a
+// test suite with no API behind it - four routes times five attempts is
+// a minute of waiting to assert a 502. POKEDEX_NO_RETRY turns it off.
+const api = createClient({
+  baseUrl,
+  policy: process.env.POKEDEX_NO_RETRY ? noRetry : exponentialRetry,
+})
 
 // Type colours, shared with the card grid so a badge means the same
 // thing on both pages.

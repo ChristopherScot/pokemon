@@ -89,10 +89,15 @@ func lobbyCmd() *cobra.Command {
 
 func openCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "open <pokemon> <pokemon> <pokemon>",
+		Use:   "open [pokemon pokemon pokemon]",
 		Short: "open a battle and wait for an opponent",
-		Args:  cobra.ExactArgs(3),
+		Long: "Names three Pokemon, or none at all for a random team - " +
+			"which is the fastest way to get into a battle.",
+		Args: cobra.RangeArgs(0, 3),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if n := len(args); n != 0 && n != 3 {
+				return fmt.Errorf("name three pokemon, or none for a random team")
+			}
 			c, err := battleClient()
 			if err != nil {
 				return err
@@ -114,9 +119,10 @@ func openCmd() *cobra.Command {
 
 func joinCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "join <battle-id> <pokemon> <pokemon> <pokemon>",
+		Use:   "join <battle-id> [pokemon pokemon pokemon]",
 		Short: "join a waiting battle",
-		Args:  cobra.ExactArgs(4),
+		Long:  "Names three Pokemon, or none at all for a random team.",
+		Args:  cobra.RangeArgs(1, 4),
 		RunE: func(_ *cobra.Command, args []string) error {
 			c, err := battleClient()
 			if err != nil {
@@ -125,6 +131,9 @@ func joinCmd() *cobra.Command {
 			ctx, cancel := withTimeout()
 			defer cancel()
 
+			if n := len(args) - 1; n != 0 && n != 3 {
+				return fmt.Errorf("name three pokemon, or none for a random team")
+			}
 			b, err := c.Join(ctx, args[0], args[1:])
 			if err != nil {
 				return err

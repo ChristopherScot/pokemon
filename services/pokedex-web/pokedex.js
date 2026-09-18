@@ -10,7 +10,7 @@
 // need a framework, a build step or a client bundle, and not having one
 // means the container is `node server.js` with no compile stage.
 
-import createClient, { exponentialRetry } from '@christopherscot/pokedex-client'
+import createClient, { exponentialRetry, noRetry } from '@christopherscot/pokedex-client'
 
 // Where the API lives. The in-cluster address is the default so the
 // deployment needs no configuration; $POKEDEX_URL overrides it for a
@@ -20,7 +20,14 @@ const baseUrl = process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.l
 // exponentialRetry rather than noRetry: this is a read-only UI in front
 // of a rolling deployment, and a request that lands mid-rollout should
 // wait rather than show the visitor an error page.
-const api = createClient({ baseUrl, retry: exponentialRetry })
+// exponentialRetry spends about 3.4s across five attempts before giving
+// up, which is right in front of a rolling deployment and wrong in a
+// test suite with no API behind it - four routes times five attempts is
+// a minute of waiting to assert a 502. POKEDEX_NO_RETRY turns it off.
+const api = createClient({
+  baseUrl,
+  policy: process.env.POKEDEX_NO_RETRY ? noRetry : exponentialRetry,
+})
 
 // One colour per type, so a card is scannable without reading it. These
 // are the familiar Pokedex colours; anything unknown falls back to grey
