@@ -7,7 +7,7 @@ info:
   title: pokedex
   # Bump this when the API changes. The generated client reports it in
   # X-Client-Version, so one version covers the API and its clients.
-  version: 0.5.0
+  version: 0.6.0
   description: pokedex, owned by me-myself-and-i.
 
 paths:
@@ -530,6 +530,22 @@ components:
           items:
             $ref: '#/components/schemas/BattlePokemon'
 
+    StatStages:
+      type: object
+      description: >
+        Stat changes accumulated this battle, -6 to +6. Zero everywhere
+        is the normal state, so a client can skip drawing any of it
+        until something moves.
+      properties:
+        attack:
+          type: integer
+        defense:
+          type: integer
+        speed:
+          type: integer
+        accuracy:
+          type: integer
+
     BattlePokemon:
       type: object
       required: [name, types, hp, maxHp, fainted, moves, sprite]
@@ -552,6 +568,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Move'
+        stages:
+          $ref: '#/components/schemas/StatStages'
+        confused:
+          type: boolean
+          description: >
+            A confused Pokemon can hit itself instead of attacking, so a
+            client should say so before the player commits a turn.
+        disabledMove:
+          type: integer
+          description: >
+            Index of a move this Pokemon cannot currently use, or absent.
+            Selecting it is a 409, so a client should show it as
+            unavailable rather than letting the turn fail.
 
     BattleEvent:
       type: object

@@ -488,9 +488,27 @@ func (s *BattlePokemon) encodeFields(e *jx.Encoder) {
 		}
 		e.ArrEnd()
 	}
+	{
+		if s.Stages.Set {
+			e.FieldStart("stages")
+			s.Stages.Encode(e)
+		}
+	}
+	{
+		if s.Confused.Set {
+			e.FieldStart("confused")
+			s.Confused.Encode(e)
+		}
+	}
+	{
+		if s.DisabledMove.Set {
+			e.FieldStart("disabledMove")
+			s.DisabledMove.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfBattlePokemon = [7]string{
+var jsonFieldsNameOfBattlePokemon = [10]string{
 	0: "name",
 	1: "types",
 	2: "hp",
@@ -498,6 +516,9 @@ var jsonFieldsNameOfBattlePokemon = [7]string{
 	4: "fainted",
 	5: "sprite",
 	6: "moves",
+	7: "stages",
+	8: "confused",
+	9: "disabledMove",
 }
 
 // Decode decodes BattlePokemon from json.
@@ -505,7 +526,7 @@ func (s *BattlePokemon) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode BattlePokemon to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -607,6 +628,36 @@ func (s *BattlePokemon) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"moves\"")
 			}
+		case "stages":
+			if err := func() error {
+				s.Stages.Reset()
+				if err := s.Stages.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"stages\"")
+			}
+		case "confused":
+			if err := func() error {
+				s.Confused.Reset()
+				if err := s.Confused.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"confused\"")
+			}
+		case "disabledMove":
+			if err := func() error {
+				s.DisabledMove.Reset()
+				if err := s.DisabledMove.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"disabledMove\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -616,8 +667,9 @@ func (s *BattlePokemon) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
+	for i, mask := range [2]uint8{
 		0b01111111,
+		0b00000000,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -1661,6 +1713,39 @@ func (s *OptInt) UnmarshalJSON(data []byte) error {
 	return s.Decode(d)
 }
 
+// Encode encodes StatStages as json.
+func (o OptStatStages) Encode(e *jx.Encoder) {
+	if !o.Set {
+		return
+	}
+	o.Value.Encode(e)
+}
+
+// Decode decodes StatStages from json.
+func (o *OptStatStages) Decode(d *jx.Decoder) error {
+	if o == nil {
+		return errors.New("invalid: unable to decode OptStatStages to nil")
+	}
+	o.Set = true
+	if err := o.Value.Decode(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s OptStatStages) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *OptStatStages) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
 // Encode encodes string as json.
 func (o OptString) Encode(e *jx.Encoder) {
 	if !o.Set {
@@ -2254,6 +2339,120 @@ func (s *Side) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *Side) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *StatStages) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *StatStages) encodeFields(e *jx.Encoder) {
+	{
+		if s.Attack.Set {
+			e.FieldStart("attack")
+			s.Attack.Encode(e)
+		}
+	}
+	{
+		if s.Defense.Set {
+			e.FieldStart("defense")
+			s.Defense.Encode(e)
+		}
+	}
+	{
+		if s.Speed.Set {
+			e.FieldStart("speed")
+			s.Speed.Encode(e)
+		}
+	}
+	{
+		if s.Accuracy.Set {
+			e.FieldStart("accuracy")
+			s.Accuracy.Encode(e)
+		}
+	}
+}
+
+var jsonFieldsNameOfStatStages = [4]string{
+	0: "attack",
+	1: "defense",
+	2: "speed",
+	3: "accuracy",
+}
+
+// Decode decodes StatStages from json.
+func (s *StatStages) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode StatStages to nil")
+	}
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "attack":
+			if err := func() error {
+				s.Attack.Reset()
+				if err := s.Attack.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"attack\"")
+			}
+		case "defense":
+			if err := func() error {
+				s.Defense.Reset()
+				if err := s.Defense.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"defense\"")
+			}
+		case "speed":
+			if err := func() error {
+				s.Speed.Reset()
+				if err := s.Speed.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"speed\"")
+			}
+		case "accuracy":
+			if err := func() error {
+				s.Accuracy.Reset()
+				if err := s.Accuracy.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"accuracy\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode StatStages")
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *StatStages) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *StatStages) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }

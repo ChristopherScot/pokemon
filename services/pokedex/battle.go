@@ -570,7 +570,7 @@ func (b *battle) toAPI() *api.Battle {
 	for _, s := range b.sides {
 		side := api.Side{Trainer: s.trainer}
 		for _, c := range s.team {
-			side.Team = append(side.Team, api.BattlePokemon{
+			bp := api.BattlePokemon{
 				Name:    c.mon.Name,
 				Types:   c.mon.Types,
 				Hp:      c.hp,
@@ -578,7 +578,25 @@ func (b *battle) toAPI() *api.Battle {
 				Fainted: c.fainted(),
 				Sprite:  c.mon.Sprite,
 				Moves:   c.mon.Moves,
-			})
+			}
+			// Only when something has actually changed: a client that
+			// draws every zero would put +0 badges on six Pokemon for
+			// the whole battle.
+			if c.stages != (stages{}) {
+				bp.Stages = api.NewOptStatStages(api.StatStages{
+					Attack:   api.NewOptInt(c.stages.attack),
+					Defense:  api.NewOptInt(c.stages.defense),
+					Speed:    api.NewOptInt(c.stages.speed),
+					Accuracy: api.NewOptInt(c.stages.accuracy),
+				})
+			}
+			if c.confused {
+				bp.Confused = api.NewOptBool(true)
+			}
+			if c.disabled >= 0 {
+				bp.DisabledMove = api.NewOptInt(c.disabled)
+			}
+			side.Team = append(side.Team, bp)
 		}
 		out.Sides = append(out.Sides, side)
 	}

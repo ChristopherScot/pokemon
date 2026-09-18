@@ -202,13 +202,20 @@ func (s *BattleEvent) SetFainted(val OptBool) {
 
 // Ref: #/components/schemas/BattlePokemon
 type BattlePokemon struct {
-	Name    string   `json:"name"`
-	Types   []string `json:"types"`
-	Hp      int      `json:"hp"`
-	MaxHp   int      `json:"maxHp"`
-	Fainted bool     `json:"fainted"`
-	Sprite  string   `json:"sprite"`
-	Moves   []Move   `json:"moves"`
+	Name    string        `json:"name"`
+	Types   []string      `json:"types"`
+	Hp      int           `json:"hp"`
+	MaxHp   int           `json:"maxHp"`
+	Fainted bool          `json:"fainted"`
+	Sprite  string        `json:"sprite"`
+	Moves   []Move        `json:"moves"`
+	Stages  OptStatStages `json:"stages"`
+	// A confused Pokemon can hit itself instead of attacking, so a client should say so before the player
+	// commits a turn.
+	Confused OptBool `json:"confused"`
+	// Index of a move this Pokemon cannot currently use, or absent. Selecting it is a 409, so a client
+	// should show it as unavailable rather than letting the turn fail.
+	DisabledMove OptInt `json:"disabledMove"`
 }
 
 // GetName returns the value of Name.
@@ -246,6 +253,21 @@ func (s *BattlePokemon) GetMoves() []Move {
 	return s.Moves
 }
 
+// GetStages returns the value of Stages.
+func (s *BattlePokemon) GetStages() OptStatStages {
+	return s.Stages
+}
+
+// GetConfused returns the value of Confused.
+func (s *BattlePokemon) GetConfused() OptBool {
+	return s.Confused
+}
+
+// GetDisabledMove returns the value of DisabledMove.
+func (s *BattlePokemon) GetDisabledMove() OptInt {
+	return s.DisabledMove
+}
+
 // SetName sets the value of Name.
 func (s *BattlePokemon) SetName(val string) {
 	s.Name = val
@@ -279,6 +301,21 @@ func (s *BattlePokemon) SetSprite(val string) {
 // SetMoves sets the value of Moves.
 func (s *BattlePokemon) SetMoves(val []Move) {
 	s.Moves = val
+}
+
+// SetStages sets the value of Stages.
+func (s *BattlePokemon) SetStages(val OptStatStages) {
+	s.Stages = val
+}
+
+// SetConfused sets the value of Confused.
+func (s *BattlePokemon) SetConfused(val OptBool) {
+	s.Confused = val
+}
+
+// SetDisabledMove sets the value of DisabledMove.
+func (s *BattlePokemon) SetDisabledMove(val OptInt) {
+	s.DisabledMove = val
 }
 
 type BattleStatus string
@@ -683,6 +720,52 @@ func (o OptInt) Or(d int) int {
 	return d
 }
 
+// NewOptStatStages returns new OptStatStages with value set to v.
+func NewOptStatStages(v StatStages) OptStatStages {
+	return OptStatStages{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptStatStages is optional StatStages.
+type OptStatStages struct {
+	Value StatStages
+	Set   bool
+}
+
+// IsSet returns true if OptStatStages was set.
+func (o OptStatStages) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptStatStages) Reset() {
+	var v StatStages
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptStatStages) SetTo(v StatStages) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptStatStages) Get() (v StatStages, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptStatStages) Or(d StatStages) StatStages {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
 // NewOptString returns new OptString with value set to v.
 func NewOptString(v string) OptString {
 	return OptString{
@@ -883,6 +966,56 @@ func (s *Side) SetTrainer(val string) {
 // SetTeam sets the value of Team.
 func (s *Side) SetTeam(val []BattlePokemon) {
 	s.Team = val
+}
+
+// Stat changes accumulated this battle, -6 to +6. Zero everywhere is the normal state, so a client can
+// skip drawing any of it until something moves.
+// Ref: #/components/schemas/StatStages
+type StatStages struct {
+	Attack   OptInt `json:"attack"`
+	Defense  OptInt `json:"defense"`
+	Speed    OptInt `json:"speed"`
+	Accuracy OptInt `json:"accuracy"`
+}
+
+// GetAttack returns the value of Attack.
+func (s *StatStages) GetAttack() OptInt {
+	return s.Attack
+}
+
+// GetDefense returns the value of Defense.
+func (s *StatStages) GetDefense() OptInt {
+	return s.Defense
+}
+
+// GetSpeed returns the value of Speed.
+func (s *StatStages) GetSpeed() OptInt {
+	return s.Speed
+}
+
+// GetAccuracy returns the value of Accuracy.
+func (s *StatStages) GetAccuracy() OptInt {
+	return s.Accuracy
+}
+
+// SetAttack sets the value of Attack.
+func (s *StatStages) SetAttack(val OptInt) {
+	s.Attack = val
+}
+
+// SetDefense sets the value of Defense.
+func (s *StatStages) SetDefense(val OptInt) {
+	s.Defense = val
+}
+
+// SetSpeed sets the value of Speed.
+func (s *StatStages) SetSpeed(val OptInt) {
+	s.Speed = val
+}
+
+// SetAccuracy sets the value of Accuracy.
+func (s *StatStages) SetAccuracy(val OptInt) {
+	s.Accuracy = val
 }
 
 // Ref: #/components/schemas/TakeTurn

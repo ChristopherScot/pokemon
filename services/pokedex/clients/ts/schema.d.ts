@@ -266,6 +266,13 @@ export interface components {
             trainer: string;
             team: components["schemas"]["BattlePokemon"][];
         };
+        /** @description Stat changes accumulated this battle, -6 to +6. Zero everywhere is the normal state, so a client can skip drawing any of it until something moves. */
+        StatStages: {
+            attack?: number;
+            defense?: number;
+            speed?: number;
+            accuracy?: number;
+        };
         BattlePokemon: {
             name: string;
             types: string[];
@@ -274,6 +281,11 @@ export interface components {
             fainted: boolean;
             sprite: string;
             moves: components["schemas"]["Move"][];
+            stages?: components["schemas"]["StatStages"];
+            /** @description A confused Pokemon can hit itself instead of attacking, so a client should say so before the player commits a turn. */
+            confused?: boolean;
+            /** @description Index of a move this Pokemon cannot currently use, or absent. Selecting it is a 409, so a client should show it as unavailable rather than letting the turn fail. */
+            disabledMove?: number;
         };
         BattleEvent: {
             turnNumber: number;

@@ -9,9 +9,15 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 var (
+	// Stat changes read as a buff; a condition reads as a warning.
+	stageStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	disabledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Strikethrough(true)
+	condStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Italic(true)
+
 	// Fixed-width columns. Set on the style rather than with fmt verbs,
 	// because these strings carry ANSI escapes and only lipgloss
 	// measures their DISPLAY width.
@@ -128,6 +134,15 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 		bar,
 		hpCol.Render(fmt.Sprintf("%d/%d", shown, p.MaxHp)),
 		strings.Join(badges, " "))
+
+	// Stat changes and conditions, after the types. Only when there is
+	// something to say, so an ordinary battle draws no extra clutter.
+	if st := battleclient.StageLabel(p); st != "" {
+		line += "  " + stageStyle.Render(st)
+	}
+	for _, cond := range battleclient.Conditions(p) {
+		line += "  " + condStyle.Render(cond)
+	}
 
 	// The damage number rides alongside the bar while it is alive,
 	// fading as it goes.
@@ -250,15 +265,21 @@ func (bs *battleState) moveRow(mine api.Side) string {
 	if bs.pickAttacker >= len(mine.Team) {
 		return ""
 	}
-	moves := mine.Team[bs.pickAttacker].Moves
+	attacker := mine.Team[bs.pickAttacker]
+	moves := attacker.Moves
 	parts := make([]string, 0, len(moves))
 	for i, mv := range moves {
 		label := fmt.Sprintf("%s %s", mv.Name, powerLabel(mv.Power))
-		if bs.focus == focusMove && i == bs.pickMove {
+		switch {
+		case !battleclient.MoveUsable(attacker, i):
+			// Selecting a disabled move is a 409, so it must not look
+			// available - a failed turn is worse than a greyed label.
+			label = disabledStyle.Render(label + " (disabled)")
+		case bs.focus == focusMove && i == bs.pickMove:
 			label = pickStyle.Render("▸" + label)
-		} else if i == bs.pickMove {
+		case i == bs.pickMove:
 			label = lipgloss.NewStyle().Underline(true).Render(label)
-		} else {
+		default:
 			label = dimStyle.Render(label)
 		}
 		parts = append(parts, label)

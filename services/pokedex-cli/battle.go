@@ -220,7 +220,8 @@ func attackCmd() *cobra.Command {
 		Short: "attack, naming your pokemon, its move and the target",
 		Long: "Positions are 1-based, as `battle` prints them: " +
 			"`attack abc123 1 2 3` is your first Pokemon using its second " +
-			"move on their third.",
+			"move on their third.\n\n" +
+			"A move shown as (disabled) cannot be used this turn.",
 		Args: cobra.ExactArgs(4),
 		RunE: func(_ *cobra.Command, args []string) error {
 			c, err := battleClient()
@@ -315,6 +316,27 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 			fmt.Println("\nthe battle is a draw.")
 		}
 	case c.MyTurn(b):
+		// The moves, with their numbers. Picking "move 4" out of a
+		// board that never lists them means going to `show <name>` for
+		// every turn, which is not a CLI anyone wants to use.
+		fmt.Println("\nyour moves")
+		for i, p := range mine.Team {
+			if p.Fainted {
+				continue
+			}
+			fmt.Printf("  %d %s\n", i+1, p.Name)
+			for j, mv := range p.Moves {
+				power := fmt.Sprintf("%d", mv.Power)
+				if mv.Power == 0 {
+					power = "status"
+				}
+				note := ""
+				if !battleclient.MoveUsable(p, j) {
+					note = "  (disabled)"
+				}
+				fmt.Printf("      %d %-16s %-9s %s%s\n", j+1, mv.Name, mv.Type, power, note)
+			}
+		}
 		fmt.Printf("\nyour move: pokedex-cli attack %s <your 1-3> <move 1-6> <their 1-3>\n", b.ID)
 	default:
 		fmt.Printf("\nwaiting on %s. `watch %s` to block until it is your turn.\n", b.Turn.Value, b.ID)
@@ -330,6 +352,19 @@ func printSide(label string, s api.Side) {
 		}
 		fmt.Printf("  %d %-22s %s %3d/%-3d %s\n",
 			i+1, name, hpBar(p.Hp, p.MaxHp), p.Hp, p.MaxHp, strings.Join(p.Types, "/"))
+
+		// Stat changes and conditions on their own line, indented under
+		// the Pokemon they belong to. Only when there is something to
+		// say - a battle where nothing has been buffed prints nothing
+		// extra.
+		var notes []string
+		if st := battleclient.StageLabel(p); st != "" {
+			notes = append(notes, st)
+		}
+		notes = append(notes, battleclient.Conditions(p)...)
+		if len(notes) > 0 {
+			fmt.Printf("    %s\n", strings.Join(notes, " · "))
+		}
 	}
 }
 

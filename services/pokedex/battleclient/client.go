@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
@@ -282,4 +283,58 @@ func (c *Client) SideFor(b *api.Battle) (mine, theirs api.Side, ok bool) {
 		return b.Sides[0], b.Sides[1], true
 	}
 	return b.Sides[1], b.Sides[0], true
+}
+
+// StageLabel renders a Pokemon's stat changes as something short enough
+// to sit beside its name: "+2 atk -1 def", or "" when nothing has moved.
+//
+// Here rather than in each client because both terminals want the same
+// string and the ordering has to be stable - a label whose fields
+// reshuffle between polls reads as flicker.
+func StageLabel(p api.BattlePokemon) string {
+	st, ok := p.Stages.Get()
+	if !ok {
+		return ""
+	}
+	var parts []string
+	for _, f := range []struct {
+		name string
+		val  api.OptInt
+	}{
+		{"atk", st.Attack},
+		{"def", st.Defense},
+		{"spd", st.Speed},
+		{"acc", st.Accuracy},
+	} {
+		if v, ok := f.val.Get(); ok && v != 0 {
+			parts = append(parts, fmt.Sprintf("%+d %s", v, f.name))
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// Conditions are the non-stat things worth warning about before a turn:
+// confusion, and a move that cannot be used.
+//
+// Returned as strings rather than booleans so a caller can print them
+// without restating the wording, and so adding a condition later does
+// not change every call site.
+func Conditions(p api.BattlePokemon) []string {
+	var out []string
+	if c, ok := p.Confused.Get(); ok && c {
+		out = append(out, "confused")
+	}
+	if i, ok := p.DisabledMove.Get(); ok && i >= 0 && i < len(p.Moves) {
+		out = append(out, "disabled: "+p.Moves[i].Name)
+	}
+	return out
+}
+
+// MoveUsable reports whether a move can be selected right now.
+//
+// A disabled move is a 409 rather than a wasted turn, so a client that
+// shows it as available is setting the player up to fail.
+func MoveUsable(p api.BattlePokemon, moveIdx int) bool {
+	i, ok := p.DisabledMove.Get()
+	return !ok || i != moveIdx
 }
