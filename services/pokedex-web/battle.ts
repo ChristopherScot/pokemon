@@ -332,6 +332,16 @@ export function registerBattle(app: FastifyInstance) {
   // The trainer is kept in a cookie so the browser behaves like the CLI:
   // register once, then play. Not auth - it is the same token model the
   // API uses, which stops one player moving another's Pokemon.
+  // A token the API does not know is the same situation as having no
+  // cookie at all: the server restarted and lost its trainers, or the
+  // cookie outlived them. Both need a fresh registration, so both are a
+  // 401 - and the stale cookie is cleared, or the browser sends it
+  // again on the next attempt and nothing improves.
+  const staleTrainer = (reply: FastifyReply) => {
+    reply.header('set-cookie', 'trainer=; Path=/; Max-Age=0; SameSite=Lax')
+    return reply.code(401).send({ message: 'register first' })
+  }
+
   const readTrainer = (request: FastifyRequest): Trainer | null => {
     const raw = request.headers.cookie || ''
     const m = /(?:^|;\s*)trainer=([^;]+)/.exec(raw)
@@ -381,22 +391,31 @@ export function registerBattle(app: FastifyInstance) {
   app.post<{ Body: TeamBody }>('/battle/open', reachable(async (request, reply) => {
     const me = readTrainer(request)
     if (!me) return reply.code(401).send({ message: 'register first' })
-    const { data, error } = await api.POST('/battles', {
+    const { data, error, response } = await api.POST('/battles', {
       body: { team: (request.body || {}).team || [] },
       params: { header: { 'X-Trainer-Token': me.token } },
     })
-    if (error) return reply.code(400).send(error)
+    if (error) {
+      // 401 from the API means the token is unknown, which the client
+      // can recover from by asking for a name. Flattening it to 400
+      // turned that into a dead-end alert.
+      if (response.status === 401) return staleTrainer(reply)
+      return reply.code(400).send(error)
+    }
     return { id: data.id }
   }))
 
   app.post<{ Params: IdParam; Body: TeamBody }>('/battle/:id/join', reachable(async (request, reply) => {
     const me = readTrainer(request)
     if (!me) return reply.code(401).send({ message: 'register first' })
-    const { data, error } = await api.POST('/battles/{id}/join', {
+    const { data, error, response } = await api.POST('/battles/{id}/join', {
       params: { path: { id: request.params.id }, header: { 'X-Trainer-Token': me.token } },
       body: { team: (request.body || {}).team || [] },
     })
-    if (error) return reply.code(409).send(error)
+    if (error) {
+      if (response.status === 401) return staleTrainer(reply)
+      return reply.code(409).send(error)
+    }
     return { id: data.id }
   }))
 
@@ -420,11 +439,14 @@ export function registerBattle(app: FastifyInstance) {
     const me = readTrainer(request)
     if (!me) return reply.code(401).send({ message: 'register first' })
     const { attacker, move, target } = request.body || {}
-    const { data, error } = await api.POST('/battles/{id}/turn', {
+    const { data, error, response } = await api.POST('/battles/{id}/turn', {
       params: { path: { id: request.params.id }, header: { 'X-Trainer-Token': me.token } },
       body: { attacker, move, target },
     })
-    if (error) return reply.code(409).send(error)
+    if (error) {
+      if (response.status === 401) return staleTrainer(reply)
+      return reply.code(409).send(error)
+    }
     return data
   }))
 }
