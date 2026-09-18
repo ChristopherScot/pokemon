@@ -27,11 +27,11 @@ func testModel(t *testing.T) model {
 
 func loaded(t *testing.T) model {
 	t.Helper()
-	m, _ := testModel(t).Update(loadedMsg{pokemon: []api.Pokemon{
+	m, _ := testModel(t).Update(loadedMsg([]api.Pokemon{
 		{ID: 1, Name: "bulbasaur", Types: []string{"grass", "poison"}, Height: 7, Weight: 69,
 			Moves: []api.Move{{Name: "tackle", Type: "normal", Power: 40}}},
 		{ID: 4, Name: "charmander", Types: []string{"fire"}, Height: 6, Weight: 85},
-	}})
+	}))
 	return m.(model)
 }
 
@@ -46,7 +46,7 @@ func TestLoadingStateRendersBeforeTheAPIAnswers(t *testing.T) {
 // An API that is down must not blank the interface: it says what
 // happened and stays usable.
 func TestAPIErrorIsShownRatherThanFatal(t *testing.T) {
-	m, _ := testModel(t).Update(loadedMsg{err: errors.New("connection refused")})
+	m, _ := testModel(t).Update(errMsg{errors.New("connection refused")})
 
 	content := m.(model).View().Content
 	if !strings.Contains(content, "could not reach the API") {

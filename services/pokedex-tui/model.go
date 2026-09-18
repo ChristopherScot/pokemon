@@ -44,13 +44,14 @@ func (i item) FilterValue() string {
 	return i.p.Name + " " + strings.Join(i.p.Types, " ")
 }
 
-// loadedMsg carries the result of the initial fetch back onto the event
-// loop. An error is a value here, not a panic: the interface has to keep
-// running and say what went wrong.
-type loadedMsg struct {
-	pokemon []api.Pokemon
-	err     error
-}
+// One message type per outcome, which is the shape the upstream command
+// tutorial uses: the type switch in Update then reads as "what
+// happened", not "what happened, and did it work".
+type loadedMsg []api.Pokemon
+
+type errMsg struct{ err error }
+
+func (e errMsg) Error() string { return e.err.Error() }
 
 type model struct {
 	list   list.Model
@@ -62,12 +63,21 @@ type model struct {
 	width, height int
 }
 
+// newDelegate builds the row renderer for a light or dark terminal.
+func newDelegate(isDark bool) list.DefaultDelegate {
+	d := list.NewDefaultDelegate()
+	d.Styles = list.NewDefaultItemStyles(isDark)
+	return d
+}
+
 func newModel(c *api.Client) model {
 	// Zero size, as the upstream list examples do. Bubble Tea reads the
 	// terminal size at startup and delivers a WindowSizeMsg BEFORE the
 	// first render, so the real dimensions always arrive before anything
 	// is drawn and a placeholder would only ever be wrong.
-	l := list.New(nil, list.NewDefaultDelegate(), 0, 0)
+	// Dark styles to begin with, replaced as soon as the terminal
+	// answers RequestBackgroundColor in Init.
+	l := list.New(nil, newDelegate(true), 0, 0)
 	l.Title = "Pokedex"
 	l.SetShowStatusBar(true)
 	l.SetStatusBarItemName("pokemon", "pokemon")
@@ -87,7 +97,9 @@ func newModel(c *api.Client) model {
 // here is what keeps the first frame instant: the interface draws
 // "loading" immediately and fills in when the response arrives.
 func (m model) Init() tea.Cmd {
-	return m.fetch
+	// Batch: both run at once and each reports back as its own message,
+	// so the background query does not wait on the API call.
+	return tea.Batch(tea.RequestBackgroundColor, m.fetch)
 }
 
 // fetch is a tea.Cmd: it runs off the event loop and its return value is
@@ -100,9 +112,9 @@ func (m model) fetch() tea.Msg {
 
 	res, err := m.client.ListPokemon(ctx, api.ListPokemonParams{})
 	if err != nil {
-		return loadedMsg{err: err}
+		return errMsg{err}
 	}
-	return loadedMsg{pokemon: res.Pokemon}
+	return loadedMsg(res.Pokemon)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -116,17 +128,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetSize(listWidth-lh, msg.Height-lv)
 		return m, nil
 
+	case tea.BackgroundColorMsg:
+		// The answer to RequestBackgroundColor. Lip Gloss v2 removed
+		// AdaptiveColor, so the list keeps its dark defaults until the
+		// terminal says otherwise.
+		isDark := msg.IsDark()
+		m.list.Styles = list.DefaultStyles(isDark)
+		m.list.SetDelegate(newDelegate(isDark))
+		return m, nil
+
 	case loadedMsg:
 		m.loading = false
-		if msg.err != nil {
-			m.err = msg.err
-			return m, nil
-		}
-		items := make([]list.Item, len(msg.pokemon))
-		for i, p := range msg.pokemon {
+		items := make([]list.Item, len(msg))
+		for i, p := range msg {
 			items[i] = item{p: p}
 		}
 		return m, m.list.SetItems(items)
+
+	case errMsg:
+		m.loading = false
+		m.err = msg.err
+		return m, nil
 
 	case tea.KeyPressMsg:
 		// While the filter is open every key belongs to it - including
