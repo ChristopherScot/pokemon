@@ -50,21 +50,44 @@ var (
 	errTargetFainted = errors.New("that target has already fainted")
 )
 
-// maxHP is derived rather than stored: the dataset has no stats, and
-// deriving it from public fields means a client can show the same number
-// the server computed without a second source of truth.
+// Battle level, and the IV/EV the formula is evaluated at.
 //
-// Weight dominates, height nudges it, and the result is clamped so a
-// Pidgey is not one-shot and a Snorlax is not unkillable.
-func maxHP(mon api.Pokemon) int {
-	hp := 90 + mon.Weight/12 + mon.Height/4
-	if hp < 90 {
-		hp = 90
+// Level 50 is the competitive standard and keeps the spread readable: at
+// level 50 the formula reduces to base + 60, so the frailest Pokemon in
+// this dataset (Diglett, base 10) has 70 HP and the bulkiest (Wigglytuff,
+// base 140) has 200. Level 100 does not buy more variety - the flat
+// +level+10 term grows with it, so the bulk ratio stays ~3x - it only
+// makes battles longer.
+//
+// IVs and EVs are pinned to their minimums for now. They are parameters
+// rather than constants folded into the formula so per-Pokemon values
+// become a caller decision later rather than a rewrite.
+const (
+	battleLevel = 50
+	battleIV    = 0
+	battleEV    = 0
+)
+
+// maxHP is the Generation III+ HP formula:
+//
+//	HP = floor((2*Base + IV + floor(EV/4)) * Level / 100) + Level + 10
+//
+// Integer division in Go truncates toward zero, which equals floor for
+// the non-negative inputs here - so no math.Floor and no float64
+// round-trip.
+//
+// The multiply must come before the divide. Dividing first loses about
+// 43%: base 45 at level 50 is 105 the right way round and 60 the wrong
+// way, which is a difference no test of a single Pokemon would catch.
+func maxHP(base, iv, ev, level int) int {
+	if base <= 0 {
+		// Shedinja is the one Pokemon whose HP the formula does not
+		// describe - it is always 1. Not in this dataset, but loading
+		// refuses a zero base anyway, so reaching here means a caller
+		// passed something impossible.
+		return 1
 	}
-	if hp > 220 {
-		hp = 220
-	}
-	return hp
+	return (2*base+iv+ev/4)*level/100 + level + 10
 }
 
 // battle is the server's copy. The API type is derived from it, so
@@ -122,7 +145,7 @@ func newCombatants(dex *pokedex, names []string) ([]*combatant, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: %q", errUnknownMon, n)
 		}
-		hp := maxHP(mon)
+		hp := maxHP(dex.baseHP[mon.ID], battleIV, battleEV, battleLevel)
 		team = append(team, &combatant{mon: mon, hp: hp, maxHP: hp})
 	}
 	return team, nil

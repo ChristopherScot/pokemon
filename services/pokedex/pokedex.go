@@ -34,7 +34,12 @@ type entry struct {
 	Types  []string `json:"types"`
 	Height int      `json:"height"`
 	Weight int      `json:"weight"`
-	Sprite string   `json:"sprite"`
+	// BaseHp is the games' base HP stat, which the battle formula needs.
+	// It is data rather than anything derivable: weight correlates with
+	// it at 0.33 and inverts for the cases players notice - Onix
+	// outweighs Jigglypuff 38x and has a third the HP.
+	BaseHp int    `json:"baseHp"`
+	Sprite string `json:"sprite"`
 	Moves  []struct {
 		Name  string `json:"name"`
 		Type  string `json:"type"`
@@ -47,6 +52,9 @@ type entry struct {
 type pokedex struct {
 	ordered []api.Pokemon
 	byName  map[string]api.Pokemon
+
+	// baseHP by dex number, for the battle HP formula.
+	baseHP map[int]int
 }
 
 // loadPokedex decodes the embedded dataset once at startup.
@@ -66,8 +74,22 @@ func loadPokedex() (*pokedex, error) {
 	p := &pokedex{
 		ordered: make([]api.Pokemon, 0, len(raw)),
 		byName:  make(map[string]api.Pokemon, len(raw)),
+		// Deliberately not on api.Pokemon: a client is shown maxHp on a
+		// BattlePokemon, which is what this feeds. Putting the base stat
+		// in the API would expose an input to a calculation the server
+		// owns, and invite a client to redo it differently.
+		baseHP: make(map[int]int, len(raw)),
 	}
 	for _, e := range raw {
+		// A missing baseHp decodes to 0, which would give every Pokemon
+		// a flat level+10 HP and make every battle identical - a failure
+		// that is invisible until someone notices the numbers never
+		// differ. Refuse to start instead.
+		if e.BaseHp <= 0 {
+			return nil, fmt.Errorf("pokedex entry #%d %q has no baseHp", e.ID, e.Name)
+		}
+		p.baseHP[e.ID] = e.BaseHp
+
 		moves := make([]api.Move, 0, len(e.Moves))
 		for _, m := range e.Moves {
 			moves = append(moves, api.Move{Name: m.Name, Type: m.Type, Power: m.Power})

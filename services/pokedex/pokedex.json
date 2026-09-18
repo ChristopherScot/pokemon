@@ -8,6 +8,7 @@
   ],
   "height": 7,
   "weight": 69,
+  "baseHp": 45,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/1.png",
   "moves": [
    {
@@ -51,6 +52,7 @@
   ],
   "height": 10,
   "weight": 130,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/2.png",
   "moves": [
    {
@@ -94,6 +96,7 @@
   ],
   "height": 20,
   "weight": 1000,
+  "baseHp": 80,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/3.png",
   "moves": [
    {
@@ -136,6 +139,7 @@
   ],
   "height": 6,
   "weight": 85,
+  "baseHp": 39,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png",
   "moves": [
    {
@@ -178,6 +182,7 @@
   ],
   "height": 11,
   "weight": 190,
+  "baseHp": 58,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/5.png",
   "moves": [
    {
@@ -221,6 +226,7 @@
   ],
   "height": 17,
   "weight": 905,
+  "baseHp": 78,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png",
   "moves": [
    {
@@ -263,6 +269,7 @@
   ],
   "height": 5,
   "weight": 90,
+  "baseHp": 44,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/7.png",
   "moves": [
    {
@@ -305,6 +312,7 @@
   ],
   "height": 10,
   "weight": 225,
+  "baseHp": 59,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/8.png",
   "moves": [
    {
@@ -347,6 +355,7 @@
   ],
   "height": 16,
   "weight": 855,
+  "baseHp": 79,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/9.png",
   "moves": [
    {
@@ -389,6 +398,7 @@
   ],
   "height": 3,
   "weight": 29,
+  "baseHp": 45,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10.png",
   "moves": [
    {
@@ -426,6 +436,7 @@
   ],
   "height": 7,
   "weight": 99,
+  "baseHp": 50,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/11.png",
   "moves": [
    {
@@ -464,6 +475,7 @@
   ],
   "height": 11,
   "weight": 320,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/12.png",
   "moves": [
    {
@@ -507,6 +519,7 @@
   ],
   "height": 3,
   "weight": 32,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/13.png",
   "moves": [
    {
@@ -540,6 +553,7 @@
   ],
   "height": 6,
   "weight": 100,
+  "baseHp": 45,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/14.png",
   "moves": [
    {
@@ -578,6 +592,7 @@
   ],
   "height": 10,
   "weight": 295,
+  "baseHp": 65,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/15.png",
   "moves": [
    {
@@ -621,6 +636,7 @@
   ],
   "height": 3,
   "weight": 18,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/16.png",
   "moves": [
    {
@@ -664,6 +680,7 @@
   ],
   "height": 11,
   "weight": 300,
+  "baseHp": 63,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/17.png",
   "moves": [
    {
@@ -707,6 +724,7 @@
   ],
   "height": 15,
   "weight": 395,
+  "baseHp": 83,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/18.png",
   "moves": [
    {
@@ -749,6 +767,7 @@
   ],
   "height": 3,
   "weight": 35,
+  "baseHp": 30,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/19.png",
   "moves": [
    {
@@ -791,6 +810,7 @@
   ],
   "height": 7,
   "weight": 185,
+  "baseHp": 55,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/20.png",
   "moves": [
    {
@@ -834,6 +854,7 @@
   ],
   "height": 3,
   "weight": 20,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/21.png",
   "moves": [
    {
@@ -877,6 +898,7 @@
   ],
   "height": 12,
   "weight": 380,
+  "baseHp": 65,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/22.png",
   "moves": [
    {
@@ -919,6 +941,7 @@
   ],
   "height": 20,
   "weight": 69,
+  "baseHp": 35,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/23.png",
   "moves": [
    {
@@ -961,6 +984,7 @@
   ],
   "height": 35,
   "weight": 650,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/24.png",
   "moves": [
    {
@@ -1003,6 +1027,7 @@
   ],
   "height": 4,
   "weight": 60,
+  "baseHp": 35,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png",
   "moves": [
    {
@@ -1045,6 +1070,7 @@
   ],
   "height": 8,
   "weight": 300,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/26.png",
   "moves": [
    {
@@ -1087,6 +1113,7 @@
   ],
   "height": 6,
   "weight": 120,
+  "baseHp": 50,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/27.png",
   "moves": [
    {
@@ -1129,6 +1156,7 @@
   ],
   "height": 10,
   "weight": 295,
+  "baseHp": 75,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/28.png",
   "moves": [
    {
@@ -1171,6 +1199,7 @@
   ],
   "height": 4,
   "weight": 70,
+  "baseHp": 55,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/29.png",
   "moves": [
    {
@@ -1213,6 +1242,7 @@
   ],
   "height": 8,
   "weight": 200,
+  "baseHp": 70,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/30.png",
   "moves": [
    {
@@ -1256,6 +1286,7 @@
   ],
   "height": 13,
   "weight": 600,
+  "baseHp": 90,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/31.png",
   "moves": [
    {
@@ -1298,6 +1329,7 @@
   ],
   "height": 5,
   "weight": 90,
+  "baseHp": 46,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/32.png",
   "moves": [
    {
@@ -1340,6 +1372,7 @@
   ],
   "height": 9,
   "weight": 195,
+  "baseHp": 61,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/33.png",
   "moves": [
    {
@@ -1383,6 +1416,7 @@
   ],
   "height": 14,
   "weight": 620,
+  "baseHp": 81,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/34.png",
   "moves": [
    {
@@ -1425,6 +1459,7 @@
   ],
   "height": 6,
   "weight": 75,
+  "baseHp": 70,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/35.png",
   "moves": [
    {
@@ -1467,6 +1502,7 @@
   ],
   "height": 13,
   "weight": 400,
+  "baseHp": 95,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/36.png",
   "moves": [
    {
@@ -1509,6 +1545,7 @@
   ],
   "height": 6,
   "weight": 99,
+  "baseHp": 38,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/37.png",
   "moves": [
    {
@@ -1551,6 +1588,7 @@
   ],
   "height": 11,
   "weight": 199,
+  "baseHp": 73,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/38.png",
   "moves": [
    {
@@ -1594,6 +1632,7 @@
   ],
   "height": 5,
   "weight": 55,
+  "baseHp": 115,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/39.png",
   "moves": [
    {
@@ -1637,6 +1676,7 @@
   ],
   "height": 10,
   "weight": 120,
+  "baseHp": 140,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/40.png",
   "moves": [
    {
@@ -1680,6 +1720,7 @@
   ],
   "height": 8,
   "weight": 75,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/41.png",
   "moves": [
    {
@@ -1723,6 +1764,7 @@
   ],
   "height": 16,
   "weight": 550,
+  "baseHp": 75,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/42.png",
   "moves": [
    {
@@ -1766,6 +1808,7 @@
   ],
   "height": 5,
   "weight": 54,
+  "baseHp": 45,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/43.png",
   "moves": [
    {
@@ -1809,6 +1852,7 @@
   ],
   "height": 8,
   "weight": 86,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/44.png",
   "moves": [
    {
@@ -1852,6 +1896,7 @@
   ],
   "height": 12,
   "weight": 186,
+  "baseHp": 75,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/45.png",
   "moves": [
    {
@@ -1895,6 +1940,7 @@
   ],
   "height": 3,
   "weight": 54,
+  "baseHp": 35,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/46.png",
   "moves": [
    {
@@ -1938,6 +1984,7 @@
   ],
   "height": 10,
   "weight": 295,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/47.png",
   "moves": [
    {
@@ -1981,6 +2028,7 @@
   ],
   "height": 10,
   "weight": 300,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/48.png",
   "moves": [
    {
@@ -2024,6 +2072,7 @@
   ],
   "height": 15,
   "weight": 125,
+  "baseHp": 70,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/49.png",
   "moves": [
    {
@@ -2066,6 +2115,7 @@
   ],
   "height": 2,
   "weight": 8,
+  "baseHp": 10,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/50.png",
   "moves": [
    {
@@ -2108,6 +2158,7 @@
   ],
   "height": 7,
   "weight": 333,
+  "baseHp": 35,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/51.png",
   "moves": [
    {
@@ -2150,6 +2201,7 @@
   ],
   "height": 4,
   "weight": 42,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/52.png",
   "moves": [
    {
@@ -2192,6 +2244,7 @@
   ],
   "height": 10,
   "weight": 320,
+  "baseHp": 65,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/53.png",
   "moves": [
    {
@@ -2234,6 +2287,7 @@
   ],
   "height": 8,
   "weight": 196,
+  "baseHp": 50,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/54.png",
   "moves": [
    {
@@ -2276,6 +2330,7 @@
   ],
   "height": 17,
   "weight": 766,
+  "baseHp": 80,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/55.png",
   "moves": [
    {
@@ -2318,6 +2373,7 @@
   ],
   "height": 5,
   "weight": 280,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/56.png",
   "moves": [
    {
@@ -2360,6 +2416,7 @@
   ],
   "height": 10,
   "weight": 320,
+  "baseHp": 65,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/57.png",
   "moves": [
    {
@@ -2402,6 +2459,7 @@
   ],
   "height": 7,
   "weight": 190,
+  "baseHp": 55,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/58.png",
   "moves": [
    {
@@ -2444,6 +2502,7 @@
   ],
   "height": 19,
   "weight": 1550,
+  "baseHp": 90,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/59.png",
   "moves": [
    {
@@ -2486,6 +2545,7 @@
   ],
   "height": 6,
   "weight": 124,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/60.png",
   "moves": [
    {
@@ -2528,6 +2588,7 @@
   ],
   "height": 10,
   "weight": 200,
+  "baseHp": 65,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/61.png",
   "moves": [
    {
@@ -2571,6 +2632,7 @@
   ],
   "height": 13,
   "weight": 540,
+  "baseHp": 90,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/62.png",
   "moves": [
    {
@@ -2613,6 +2675,7 @@
   ],
   "height": 9,
   "weight": 195,
+  "baseHp": 25,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/63.png",
   "moves": [
    {
@@ -2655,6 +2718,7 @@
   ],
   "height": 13,
   "weight": 565,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/64.png",
   "moves": [
    {
@@ -2697,6 +2761,7 @@
   ],
   "height": 15,
   "weight": 480,
+  "baseHp": 55,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/65.png",
   "moves": [
    {
@@ -2739,6 +2804,7 @@
   ],
   "height": 8,
   "weight": 195,
+  "baseHp": 70,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/66.png",
   "moves": [
    {
@@ -2781,6 +2847,7 @@
   ],
   "height": 15,
   "weight": 705,
+  "baseHp": 80,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/67.png",
   "moves": [
    {
@@ -2823,6 +2890,7 @@
   ],
   "height": 16,
   "weight": 1300,
+  "baseHp": 90,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/68.png",
   "moves": [
    {
@@ -2866,6 +2934,7 @@
   ],
   "height": 7,
   "weight": 40,
+  "baseHp": 50,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/69.png",
   "moves": [
    {
@@ -2909,6 +2978,7 @@
   ],
   "height": 10,
   "weight": 64,
+  "baseHp": 65,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/70.png",
   "moves": [
    {
@@ -2952,6 +3022,7 @@
   ],
   "height": 17,
   "weight": 155,
+  "baseHp": 80,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/71.png",
   "moves": [
    {
@@ -2995,6 +3066,7 @@
   ],
   "height": 9,
   "weight": 455,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/72.png",
   "moves": [
    {
@@ -3038,6 +3110,7 @@
   ],
   "height": 16,
   "weight": 550,
+  "baseHp": 80,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/73.png",
   "moves": [
    {
@@ -3081,6 +3154,7 @@
   ],
   "height": 4,
   "weight": 200,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/74.png",
   "moves": [
    {
@@ -3124,6 +3198,7 @@
   ],
   "height": 10,
   "weight": 1050,
+  "baseHp": 55,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/75.png",
   "moves": [
    {
@@ -3167,6 +3242,7 @@
   ],
   "height": 14,
   "weight": 3000,
+  "baseHp": 80,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/76.png",
   "moves": [
    {
@@ -3209,6 +3285,7 @@
   ],
   "height": 10,
   "weight": 300,
+  "baseHp": 50,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/77.png",
   "moves": [
    {
@@ -3251,6 +3328,7 @@
   ],
   "height": 17,
   "weight": 950,
+  "baseHp": 65,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/78.png",
   "moves": [
    {
@@ -3294,6 +3372,7 @@
   ],
   "height": 12,
   "weight": 360,
+  "baseHp": 90,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/79.png",
   "moves": [
    {
@@ -3337,6 +3416,7 @@
   ],
   "height": 16,
   "weight": 785,
+  "baseHp": 95,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/80.png",
   "moves": [
    {
@@ -3380,6 +3460,7 @@
   ],
   "height": 3,
   "weight": 60,
+  "baseHp": 25,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/81.png",
   "moves": [
    {
@@ -3423,6 +3504,7 @@
   ],
   "height": 10,
   "weight": 600,
+  "baseHp": 50,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/82.png",
   "moves": [
    {
@@ -3466,6 +3548,7 @@
   ],
   "height": 8,
   "weight": 150,
+  "baseHp": 52,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/83.png",
   "moves": [
    {
@@ -3509,6 +3592,7 @@
   ],
   "height": 14,
   "weight": 392,
+  "baseHp": 35,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/84.png",
   "moves": [
    {
@@ -3552,6 +3636,7 @@
   ],
   "height": 18,
   "weight": 852,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/85.png",
   "moves": [
    {
@@ -3594,6 +3679,7 @@
   ],
   "height": 11,
   "weight": 900,
+  "baseHp": 65,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/86.png",
   "moves": [
    {
@@ -3637,6 +3723,7 @@
   ],
   "height": 17,
   "weight": 1200,
+  "baseHp": 90,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/87.png",
   "moves": [
    {
@@ -3679,6 +3766,7 @@
   ],
   "height": 9,
   "weight": 300,
+  "baseHp": 80,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/88.png",
   "moves": [
    {
@@ -3721,6 +3809,7 @@
   ],
   "height": 12,
   "weight": 300,
+  "baseHp": 105,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/89.png",
   "moves": [
    {
@@ -3763,6 +3852,7 @@
   ],
   "height": 3,
   "weight": 40,
+  "baseHp": 30,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/90.png",
   "moves": [
    {
@@ -3806,6 +3896,7 @@
   ],
   "height": 15,
   "weight": 1325,
+  "baseHp": 50,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/91.png",
   "moves": [
    {
@@ -3849,6 +3940,7 @@
   ],
   "height": 13,
   "weight": 1,
+  "baseHp": 30,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/92.png",
   "moves": [
    {
@@ -3892,6 +3984,7 @@
   ],
   "height": 16,
   "weight": 1,
+  "baseHp": 45,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/93.png",
   "moves": [
    {
@@ -3935,6 +4028,7 @@
   ],
   "height": 15,
   "weight": 405,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/94.png",
   "moves": [
    {
@@ -3978,6 +4072,7 @@
   ],
   "height": 88,
   "weight": 2100,
+  "baseHp": 35,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/95.png",
   "moves": [
    {
@@ -4020,6 +4115,7 @@
   ],
   "height": 10,
   "weight": 324,
+  "baseHp": 60,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/96.png",
   "moves": [
    {
@@ -4062,6 +4158,7 @@
   ],
   "height": 16,
   "weight": 756,
+  "baseHp": 85,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/97.png",
   "moves": [
    {
@@ -4104,6 +4201,7 @@
   ],
   "height": 4,
   "weight": 65,
+  "baseHp": 30,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/98.png",
   "moves": [
    {
@@ -4146,6 +4244,7 @@
   ],
   "height": 13,
   "weight": 600,
+  "baseHp": 55,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/99.png",
   "moves": [
    {
@@ -4188,6 +4287,7 @@
   ],
   "height": 5,
   "weight": 104,
+  "baseHp": 40,
   "sprite": "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/100.png",
   "moves": [
    {

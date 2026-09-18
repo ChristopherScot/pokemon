@@ -82,21 +82,82 @@ func TestTypeMultipliers(t *testing.T) {
 	}
 }
 
-// HP has to be derived, bounded, and identical for the same Pokemon
-// every time - a client shows this number too.
-func TestMaxHPIsBoundedAndDeterministic(t *testing.T) {
+// The Generation III+ HP formula, at minimum IVs and EVs:
+//
+//	HP = floor((2*Base + IV + floor(EV/4)) * Level / 100) + Level + 10
+//
+// At level 50 with IV=EV=0 this reduces to base + 60. Pinned by hand
+// because an off-by-one in the floor, or a level constant that drifts,
+// would change every battle in the game without breaking anything
+// visibly.
+func TestMaxHPFollowsTheRealFormula(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		base int
+		want int
+	}{
+		{"bulbasaur", 45, 105},
+		{"charizard", 78, 138},
+		{"wigglytuff", 140, 200}, // the bulkiest in this dataset
+		{"diglett", 10, 70},      // the frailest
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := maxHP(tc.base, 0, 0, 50); got != tc.want {
+				t.Errorf("maxHP(base=%d) = %d, want %d", tc.base, got, tc.want)
+			}
+		})
+	}
+}
+
+// The multiply has to happen before the divide. Dividing first loses
+// about 43% and no single-Pokemon expectation would catch it: base 45
+// gives 105 the right way round and 60 the wrong way.
+func TestMaxHPDoesNotDivideBeforeMultiplying(t *testing.T) {
+	const base, level = 45, 50
+	got := maxHP(base, 0, 0, level)
+	divideFirst := (2*base+0+0/4)/100*level + level + 10
+	if got == divideFirst {
+		t.Errorf("maxHP = %d, which matches the divide-first result; operator order is wrong", got)
+	}
+	if got != 105 {
+		t.Errorf("maxHP = %d, want 105", got)
+	}
+}
+
+// Base HP is data, not a function of the fields that look related.
+// Weight correlates with it at 0.33 and inverts for the cases players
+// notice, so a heuristic would make Onix bulkier than Jigglypuff.
+func TestBulkFollowsBaseStatsNotWeight(t *testing.T) {
 	s := testService(t)
-	for _, name := range []string{"pidgey", "snorlax", "bulbasaur", "onix"} {
-		mon, ok := s.dex.get(name)
-		if !ok {
-			continue
-		}
-		hp := maxHP(mon)
-		if hp < 90 || hp > 220 {
-			t.Errorf("%s: hp %d outside the clamp", name, hp)
-		}
-		if again := maxHP(mon); again != hp {
-			t.Errorf("%s: hp not deterministic: %d then %d", name, hp, again)
+	onix, ok := s.dex.get("onix")
+	if !ok {
+		t.Skip("onix not in this dataset")
+	}
+	jiggly, ok := s.dex.get("jigglypuff")
+	if !ok {
+		t.Skip("jigglypuff not in this dataset")
+	}
+
+	onixHP := maxHP(s.dex.baseHP[onix.ID], 0, 0, battleLevel)
+	jigglyHP := maxHP(s.dex.baseHP[jiggly.ID], 0, 0, battleLevel)
+
+	if onix.Weight <= jiggly.Weight {
+		t.Fatalf("premise broken: onix %d should outweigh jigglypuff %d", onix.Weight, jiggly.Weight)
+	}
+	if onixHP >= jigglyHP {
+		t.Errorf("onix %d HP >= jigglypuff %d HP; bulk is tracking weight rather than the base stat",
+			onixHP, jigglyHP)
+	}
+}
+
+// Every Pokemon the dataset ships must carry a base stat. A missing one
+// decodes to zero, which loadPokedex refuses - this makes the data side
+// of that contract explicit.
+func TestEveryPokemonHasABaseStat(t *testing.T) {
+	s := testService(t)
+	for _, mon := range s.dex.list("", 0) {
+		if s.dex.baseHP[mon.ID] <= 0 {
+			t.Errorf("#%d %s has no base HP", mon.ID, mon.Name)
 		}
 	}
 }
@@ -298,6 +359,36 @@ func TestAPIViewNeverLeaksTokens(t *testing.T) {
 	for _, ev := range out.Log {
 		if strings.Contains(ev.Text, ash) || strings.Contains(ev.Text, gary) {
 			t.Errorf("token leaked into the log: %q", ev.Text)
+		}
+	}
+}
+
+// A hit that connects never rounds to zero, and an immune matchup never
+// rounds up to one. Damage is computed in float and truncated, which is
+// where off-by-one HP bugs hide: a weak move against a resistant target
+// can land under 1.0 and truncate away, and the player sees an attack
+// that did nothing with no explanation.
+func TestDamageRoundingAtTheEdges(t *testing.T) {
+	s := testService(t)
+	weakest, _ := s.dex.get("caterpie")
+	tough, _ := s.dex.get("onix")
+	att := &combatant{mon: weakest, hp: 100, maxHP: 100}
+	def := &combatant{mon: tough, hp: 200, maxHP: 200}
+
+	// Every damaging move, every seed: anything that connects does at
+	// least 1.
+	for _, mv := range weakest.Moves {
+		if mv.Power == 0 {
+			continue
+		}
+		for seed := int64(1); seed <= 50; seed++ {
+			d, mult := damage(att, def, mv, rngFor(seed))
+			if mult > 0 && d < 1 {
+				t.Fatalf("%s at seed %d: %d damage at %vx", mv.Name, seed, d, mult)
+			}
+			if mult == 0 && d != 0 {
+				t.Fatalf("%s at seed %d: %d damage against an immune target", mv.Name, seed, d)
+			}
 		}
 	}
 }
