@@ -17,8 +17,13 @@ import (
 )
 
 const (
-	repoOwner = "christopherscot"
-	repoName  = "pokedex-cli"
+	repoOwner = "ChristopherScot"
+
+	// The repo that holds this service, which is where its releases
+	// land. In a monorepo that is the PARENT repo, not the service - a
+	// release is per repository, so naming the service here asks
+	// api.github.com for a repository that does not exist.
+	repoName = "pokemon"
 
 	// A pokedex-cli binary is a few MB; anything near this is not our asset.
 	maxBinarySize = 100 * 1024 * 1024
