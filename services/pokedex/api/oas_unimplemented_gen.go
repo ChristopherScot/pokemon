@@ -13,6 +13,26 @@ type UnimplementedHandler struct{}
 
 var _ Handler = UnimplementedHandler{}
 
+// CreateBattle implements createBattle operation.
+//
+// Names three Pokemon. The battle sits in `waiting` until another trainer joins, which is when turn
+// order is decided.
+//
+// POST /battles
+func (UnimplementedHandler) CreateBattle(ctx context.Context, req *CreateBattle, params CreateBattleParams) (r CreateBattleRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// GetBattle implements getBattle operation.
+//
+// Poll this. `version` increases on every change, so a client that has seen a version can skip
+// re-rendering until it moves.
+//
+// GET /battles/{id}
+func (UnimplementedHandler) GetBattle(ctx context.Context, params GetBattleParams) (r GetBattleRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetHealthz implements getHealthz operation.
 //
 // Liveness and readiness probe.
@@ -40,6 +60,15 @@ func (UnimplementedHandler) GetRoot(ctx context.Context) (r *Identity, _ error) 
 	return r, ht.ErrNotImplemented
 }
 
+// JoinBattle implements joinBattle operation.
+//
+// Join a waiting battle with your own three Pokemon.
+//
+// POST /battles/{id}/join
+func (UnimplementedHandler) JoinBattle(ctx context.Context, req *JoinBattle, params JoinBattleParams) (r JoinBattleRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListPokemon implements listPokemon operation.
 //
 // List Pokemon, optionally filtered by type.
@@ -55,6 +84,38 @@ func (UnimplementedHandler) ListPokemon(ctx context.Context, params ListPokemonP
 //
 // GET /types
 func (UnimplementedHandler) ListTypes(ctx context.Context) (r *TypeList, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListWaitingTrainers implements listWaitingTrainers operation.
+//
+// The matchmaking lobby. A trainer appears here after creating a battle and disappears when someone
+// joins it or it expires.
+//
+// GET /trainers/waiting
+func (UnimplementedHandler) ListWaitingTrainers(ctx context.Context) (r *WaitingList, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// RegisterTrainer implements registerTrainer operation.
+//
+// The token authorises this trainer's moves; the name is public. This is not authentication - it stops
+// one player moving another player's Pokemon, nothing more. Names are first-come, and a name already
+// in use is a 409.
+//
+// POST /trainers
+func (UnimplementedHandler) RegisterTrainer(ctx context.Context, req *RegisterTrainer) (r RegisterTrainerRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// TakeTurn implements takeTurn operation.
+//
+// Names the attacker, the move and the target. The server decides damage and whether the battle is
+// over. Out-of-turn moves, fainted attackers and illegal targets are 409s rather than silent no-ops,
+// so a client bug is visible instead of looking like lag.
+//
+// POST /battles/{id}/turn
+func (UnimplementedHandler) TakeTurn(ctx context.Context, req *TakeTurn, params TakeTurnParams) (r TakeTurnRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 

@@ -135,7 +135,17 @@ func (p *pokedex) types() []api.TypeSummary {
 	}
 	out := make([]api.TypeSummary, 0, len(counts))
 	for name, n := range counts {
-		out = append(out, api.TypeSummary{Name: name, Count: n})
+		// The matchup chart travels with the type, so a client can show
+		// "super effective against..." without carrying its own copy of
+		// a table the server computes damage from.
+		strong, weak, none := matchups(name)
+		out = append(out, api.TypeSummary{
+			Name:            name,
+			Count:           n,
+			StrongAgainst:   strong,
+			WeakAgainst:     weak,
+			NoEffectAgainst: none,
+		})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Count != out[j].Count {

@@ -7,7 +7,7 @@ info:
   title: pokedex
   # Bump this when the API changes. The generated client reports it in
   # X-Client-Version, so one version covers the API and its clients.
-  version: 0.1.0
+  version: 0.2.0
   description: pokedex, owned by me-myself-and-i.
 
 paths:
@@ -130,8 +130,454 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  # ---------------------------------------------------------------- battles
+  #
+  # Battles are server-authoritative: damage, turn order, legality and the
+  # win condition are decided here. Clients post intents and render what
+  # comes back. Three client implementations agreeing on a damage formula
+  # is three chances to disagree, and a disagreement looks like cheating.
+  #
+  # Clients poll GET /battles/{id} and compare `version`, which increases
+  # on every change. Websockets would need hand-written transport in each
+  # client and an ingress that negotiates upgrades; polling is what the
+  # generated client already does well.
+
+  /trainers:
+    post:
+      operationId: registerTrainer
+      summary: Claim a trainer name and receive a token.
+      description: >
+        The token authorises this trainer's moves; the name is public.
+        This is not authentication - it stops one player moving another
+        player's Pokemon, nothing more. Names are first-come, and a name
+        already in use is a 409.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterTrainer'
+      responses:
+        '201':
+          description: Registered. Keep the token; it is shown once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trainer'
+        '409':
+          description: That name is taken.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /trainers/waiting:
+    get:
+      operationId: listWaitingTrainers
+      summary: Trainers who have an open battle invitation.
+      description: >
+        The matchmaking lobby. A trainer appears here after creating a
+        battle and disappears when someone joins it or it expires.
+      responses:
+        '200':
+          description: Open invitations, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WaitingList'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /battles:
+    post:
+      operationId: createBattle
+      summary: Open a battle and wait for an opponent.
+      description: >
+        Names three Pokemon. The battle sits in `waiting` until another
+        trainer joins, which is when turn order is decided.
+      parameters:
+        - $ref: '#/components/parameters/TrainerToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBattle'
+      responses:
+        '201':
+          description: Battle open, waiting for an opponent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Battle'
+        '400':
+          description: Not three known Pokemon.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unknown or missing trainer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /battles/{id}:
+    get:
+      operationId: getBattle
+      summary: The full state of one battle.
+      description: >
+        Poll this. `version` increases on every change, so a client that
+        has seen a version can skip re-rendering until it moves.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Battle'
+        '404':
+          description: No such battle, or it expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /battles/{id}/join:
+    post:
+      operationId: joinBattle
+      summary: Join a waiting battle with your own three Pokemon.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/TrainerToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinBattle'
+      responses:
+        '200':
+          description: Joined. The battle is now active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Battle'
+        '400':
+          description: Not three known Pokemon.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unknown or missing trainer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No such battle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Already full, or you are already in it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /battles/{id}/turn:
+    post:
+      operationId: takeTurn
+      summary: Attack with one of your Pokemon.
+      description: >
+        Names the attacker, the move and the target. The server decides
+        damage and whether the battle is over. Out-of-turn moves, fainted
+        attackers and illegal targets are 409s rather than silent no-ops,
+        so a client bug is visible instead of looking like lag.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/TrainerToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TakeTurn'
+      responses:
+        '200':
+          description: The turn resolved; state reflects it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Battle'
+        '401':
+          description: Unknown or missing trainer token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No such battle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Not your turn, or the move is not legal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
 components:
+  parameters:
+    TrainerToken:
+      name: X-Trainer-Token
+      in: header
+      required: true
+      description: >
+        The token returned by POST /trainers. Identifies who is acting,
+        so one player cannot move another player's Pokemon.
+      schema:
+        type: string
+
   schemas:
+    RegisterTrainer:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: Displayed to other trainers in the lobby.
+
+    Trainer:
+      type: object
+      required: [name, token]
+      properties:
+        name:
+          type: string
+        token:
+          type: string
+          description: >
+            Send as X-Trainer-Token. Returned once, at registration.
+
+    WaitingList:
+      type: object
+      required: [count, waiting]
+      properties:
+        count:
+          type: integer
+        waiting:
+          type: array
+          items:
+            $ref: '#/components/schemas/WaitingBattle'
+
+    WaitingBattle:
+      type: object
+      required: [battleId, trainer, team, createdAt]
+      properties:
+        battleId:
+          type: string
+        trainer:
+          type: string
+        team:
+          type: array
+          description: Who they are bringing, so you can pick a counter.
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateBattle:
+      type: object
+      required: [team]
+      properties:
+        team:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: string
+          description: Three Pokemon names.
+
+    JoinBattle:
+      type: object
+      required: [team]
+      properties:
+        team:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: string
+
+    TakeTurn:
+      type: object
+      required: [attacker, move, target]
+      properties:
+        attacker:
+          type: integer
+          description: Index into your own team, 0-2.
+        move:
+          type: integer
+          description: Index into that Pokemon's moves.
+        target:
+          type: integer
+          description: Index into the opponent's team, 0-2.
+
+    Battle:
+      type: object
+      required: [id, status, version, sides, log]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [waiting, active, finished]
+        version:
+          type: integer
+          description: >
+            Increases on every change. A client that has rendered version
+            N can skip re-rendering until it sees something higher, which
+            is what makes polling cheap.
+        turn:
+          type: string
+          description: >
+            Name of the trainer whose turn it is. Absent while waiting
+            and once finished.
+        winner:
+          type: string
+          description: Set when status is finished. Absent on a draw.
+        sides:
+          type: array
+          description: Always two once active; one while waiting.
+          items:
+            $ref: '#/components/schemas/Side'
+        log:
+          type: array
+          description: >
+            What happened, oldest first. Clients animate from this rather
+            than recomputing events from state diffs.
+          items:
+            $ref: '#/components/schemas/BattleEvent'
+
+    Side:
+      type: object
+      required: [trainer, team]
+      properties:
+        trainer:
+          type: string
+        team:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattlePokemon'
+
+    BattlePokemon:
+      type: object
+      required: [name, types, hp, maxHp, fainted, moves, sprite]
+      properties:
+        name:
+          type: string
+        types:
+          type: array
+          items:
+            type: string
+        hp:
+          type: integer
+        maxHp:
+          type: integer
+        fainted:
+          type: boolean
+        sprite:
+          type: string
+        moves:
+          type: array
+          items:
+            $ref: '#/components/schemas/Move'
+
+    BattleEvent:
+      type: object
+      required: [turnNumber, text]
+      properties:
+        turnNumber:
+          type: integer
+        text:
+          type: string
+          description: >
+            Pre-rendered prose, so three clients narrate a battle
+            identically instead of each inventing wording.
+        attacker:
+          type: string
+        target:
+          type: string
+        move:
+          type: string
+        damage:
+          type: integer
+        effectiveness:
+          type: number
+          description: >
+            Type multiplier applied, e.g. 2 for super effective. Clients
+            use it to colour or animate the hit.
+        fainted:
+          type: boolean
+
+
     Health:
       type: object
       required: [status]
@@ -208,6 +654,25 @@ components:
           type: string
         count:
           type: integer
+        strongAgainst:
+          type: array
+          description: >
+            Types this one deals double damage to. Served here so the
+            clients do not each carry a copy of the chart the server
+            computes damage from - three copies is three chances to
+            disagree with the server, and the server is what decides.
+          items:
+            type: string
+        weakAgainst:
+          type: array
+          description: Types this one deals half damage to.
+          items:
+            type: string
+        noEffectAgainst:
+          type: array
+          description: Types this one cannot damage at all.
+          items:
+            type: string
 
     TypeList:
       type: object

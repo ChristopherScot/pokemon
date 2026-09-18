@@ -27,6 +27,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"time"
@@ -62,6 +63,15 @@ var (
 // handler exists - that is the point of generating from the spec.
 type service struct {
 	dex *pokedex
+
+	// Battle state. In memory because this runs replicas: 1 with no
+	// database; behind an interface so that stops being true without a
+	// rewrite.
+	battles store
+
+	// One source for damage rolls, so a test can seed it and get the
+	// same battle twice.
+	rng *rand.Rand
 }
 
 func (service) GetHealthz(context.Context) (*api.Health, error) {
@@ -169,7 +179,17 @@ func handler() (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	srv, err := api.NewServer(service{dex: dex}, api.WithMiddleware(observe))
+	// Seeded from the clock: battles should not replay identically
+	// across restarts. Tests construct the service directly with a fixed
+	// seed instead.
+	seed := time.Now().UnixNano()
+	svc := service{
+		dex:     dex,
+		battles: newMemStore(seed),
+		rng:     rngFor(seed),
+	}
+
+	srv, err := api.NewServer(svc, api.WithMiddleware(observe))
 	if err != nil {
 		return nil, err
 	}

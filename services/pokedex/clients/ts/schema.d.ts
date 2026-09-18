@@ -89,10 +89,203 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/trainers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim a trainer name and receive a token.
+         * @description The token authorises this trainer's moves; the name is public. This is not authentication - it stops one player moving another player's Pokemon, nothing more. Names are first-come, and a name already in use is a 409.
+         */
+        post: operations["registerTrainer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/trainers/waiting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trainers who have an open battle invitation.
+         * @description The matchmaking lobby. A trainer appears here after creating a battle and disappears when someone joins it or it expires.
+         */
+        get: operations["listWaitingTrainers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/battles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a battle and wait for an opponent.
+         * @description Names three Pokemon. The battle sits in `waiting` until another trainer joins, which is when turn order is decided.
+         */
+        post: operations["createBattle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/battles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The full state of one battle.
+         * @description Poll this. `version` increases on every change, so a client that has seen a version can skip re-rendering until it moves.
+         */
+        get: operations["getBattle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/battles/{id}/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Join a waiting battle with your own three Pokemon. */
+        post: operations["joinBattle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/battles/{id}/turn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attack with one of your Pokemon.
+         * @description Names the attacker, the move and the target. The server decides damage and whether the battle is over. Out-of-turn moves, fainted attackers and illegal targets are 409s rather than silent no-ops, so a client bug is visible instead of looking like lag.
+         */
+        post: operations["takeTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        RegisterTrainer: {
+            /** @description Displayed to other trainers in the lobby. */
+            name: string;
+        };
+        Trainer: {
+            name: string;
+            /** @description Send as X-Trainer-Token. Returned once, at registration. */
+            token: string;
+        };
+        WaitingList: {
+            count: number;
+            waiting: components["schemas"]["WaitingBattle"][];
+        };
+        WaitingBattle: {
+            battleId: string;
+            trainer: string;
+            /** @description Who they are bringing, so you can pick a counter. */
+            team: string[];
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateBattle: {
+            /** @description Three Pokemon names. */
+            team: string[];
+        };
+        JoinBattle: {
+            team: string[];
+        };
+        TakeTurn: {
+            /** @description Index into your own team, 0-2. */
+            attacker: number;
+            /** @description Index into that Pokemon's moves. */
+            move: number;
+            /** @description Index into the opponent's team, 0-2. */
+            target: number;
+        };
+        Battle: {
+            id: string;
+            /** @enum {string} */
+            status: "waiting" | "active" | "finished";
+            /** @description Increases on every change. A client that has rendered version N can skip re-rendering until it sees something higher, which is what makes polling cheap. */
+            version: number;
+            /** @description Name of the trainer whose turn it is. Absent while waiting and once finished. */
+            turn?: string;
+            /** @description Set when status is finished. Absent on a draw. */
+            winner?: string;
+            /** @description Always two once active; one while waiting. */
+            sides: components["schemas"]["Side"][];
+            /** @description What happened, oldest first. Clients animate from this rather than recomputing events from state diffs. */
+            log: components["schemas"]["BattleEvent"][];
+        };
+        Side: {
+            trainer: string;
+            team: components["schemas"]["BattlePokemon"][];
+        };
+        BattlePokemon: {
+            name: string;
+            types: string[];
+            hp: number;
+            maxHp: number;
+            fainted: boolean;
+            sprite: string;
+            moves: components["schemas"]["Move"][];
+        };
+        BattleEvent: {
+            turnNumber: number;
+            /** @description Pre-rendered prose, so three clients narrate a battle identically instead of each inventing wording. */
+            text: string;
+            attacker?: string;
+            target?: string;
+            move?: string;
+            damage?: number;
+            /** @description Type multiplier applied, e.g. 2 for super effective. Clients use it to colour or animate the hit. */
+            effectiveness?: number;
+            fainted?: boolean;
+        };
         Health: {
             /** @enum {string} */
             status: "ok";
@@ -128,6 +321,12 @@ export interface components {
         TypeSummary: {
             name: string;
             count: number;
+            /** @description Types this one deals double damage to. Served here so the clients do not each carry a copy of the chart the server computes damage from - three copies is three chances to disagree with the server, and the server is what decides. */
+            strongAgainst?: string[];
+            /** @description Types this one deals half damage to. */
+            weakAgainst?: string[];
+            /** @description Types this one cannot damage at all. */
+            noEffectAgainst?: string[];
         };
         TypeList: {
             types: components["schemas"]["TypeSummary"][];
@@ -137,7 +336,10 @@ export interface components {
         };
     };
     responses: never;
-    parameters: never;
+    parameters: {
+        /** @description The token returned by POST /trainers. Identifies who is acting, so one player cannot move another player's Pokemon. */
+        TrainerToken: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -293,6 +495,310 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TypeList"];
+                };
+            };
+            /** @description Unexpected error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    registerTrainer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterTrainer"];
+            };
+        };
+        responses: {
+            /** @description Registered. Keep the token; it is shown once. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trainer"];
+                };
+            };
+            /** @description That name is taken. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unexpected error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listWaitingTrainers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Open invitations, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WaitingList"];
+                };
+            };
+            /** @description Unexpected error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createBattle: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The token returned by POST /trainers. Identifies who is acting, so one player cannot move another player's Pokemon. */
+                "X-Trainer-Token": components["parameters"]["TrainerToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBattle"];
+            };
+        };
+        responses: {
+            /** @description Battle open, waiting for an opponent. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Battle"];
+                };
+            };
+            /** @description Not three known Pokemon. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unknown or missing trainer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unexpected error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getBattle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Battle"];
+                };
+            };
+            /** @description No such battle, or it expired. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unexpected error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    joinBattle: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The token returned by POST /trainers. Identifies who is acting, so one player cannot move another player's Pokemon. */
+                "X-Trainer-Token": components["parameters"]["TrainerToken"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinBattle"];
+            };
+        };
+        responses: {
+            /** @description Joined. The battle is now active. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Battle"];
+                };
+            };
+            /** @description Not three known Pokemon. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unknown or missing trainer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such battle. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Already full, or you are already in it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unexpected error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    takeTurn: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The token returned by POST /trainers. Identifies who is acting, so one player cannot move another player's Pokemon. */
+                "X-Trainer-Token": components["parameters"]["TrainerToken"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeTurn"];
+            };
+        };
+        responses: {
+            /** @description The turn resolved; state reflects it. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Battle"];
+                };
+            };
+            /** @description Unknown or missing trainer token. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No such battle. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Not your turn, or the move is not legal. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Unexpected error. */

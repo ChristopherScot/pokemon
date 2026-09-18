@@ -8,6 +8,20 @@ import (
 
 // Handler handles operations described by OpenAPI v3 specification.
 type Handler interface {
+	// CreateBattle implements createBattle operation.
+	//
+	// Names three Pokemon. The battle sits in `waiting` until another trainer joins, which is when turn
+	// order is decided.
+	//
+	// POST /battles
+	CreateBattle(ctx context.Context, req *CreateBattle, params CreateBattleParams) (CreateBattleRes, error)
+	// GetBattle implements getBattle operation.
+	//
+	// Poll this. `version` increases on every change, so a client that has seen a version can skip
+	// re-rendering until it moves.
+	//
+	// GET /battles/{id}
+	GetBattle(ctx context.Context, params GetBattleParams) (GetBattleRes, error)
 	// GetHealthz implements getHealthz operation.
 	//
 	// Liveness and readiness probe.
@@ -26,6 +40,12 @@ type Handler interface {
 	//
 	// GET /
 	GetRoot(ctx context.Context) (*Identity, error)
+	// JoinBattle implements joinBattle operation.
+	//
+	// Join a waiting battle with your own three Pokemon.
+	//
+	// POST /battles/{id}/join
+	JoinBattle(ctx context.Context, req *JoinBattle, params JoinBattleParams) (JoinBattleRes, error)
 	// ListPokemon implements listPokemon operation.
 	//
 	// List Pokemon, optionally filtered by type.
@@ -38,6 +58,29 @@ type Handler interface {
 	//
 	// GET /types
 	ListTypes(ctx context.Context) (*TypeList, error)
+	// ListWaitingTrainers implements listWaitingTrainers operation.
+	//
+	// The matchmaking lobby. A trainer appears here after creating a battle and disappears when someone
+	// joins it or it expires.
+	//
+	// GET /trainers/waiting
+	ListWaitingTrainers(ctx context.Context) (*WaitingList, error)
+	// RegisterTrainer implements registerTrainer operation.
+	//
+	// The token authorises this trainer's moves; the name is public. This is not authentication - it stops
+	// one player moving another player's Pokemon, nothing more. Names are first-come, and a name already
+	// in use is a 409.
+	//
+	// POST /trainers
+	RegisterTrainer(ctx context.Context, req *RegisterTrainer) (RegisterTrainerRes, error)
+	// TakeTurn implements takeTurn operation.
+	//
+	// Names the attacker, the move and the target. The server decides damage and whether the battle is
+	// over. Out-of-turn moves, fainted attackers and illegal targets are 409s rather than silent no-ops,
+	// so a client bug is visible instead of looking like lag.
+	//
+	// POST /battles/{id}/turn
+	TakeTurn(ctx context.Context, req *TakeTurn, params TakeTurnParams) (TakeTurnRes, error)
 	// NewError creates *ErrorStatusCode from error returned by handler.
 	//
 	// Used for common default response.

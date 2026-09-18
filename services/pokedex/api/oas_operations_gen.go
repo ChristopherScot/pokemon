@@ -6,9 +6,15 @@ package api
 type OperationName = string
 
 const (
-	GetHealthzOperation  OperationName = "GetHealthz"
-	GetPokemonOperation  OperationName = "GetPokemon"
-	GetRootOperation     OperationName = "GetRoot"
-	ListPokemonOperation OperationName = "ListPokemon"
-	ListTypesOperation   OperationName = "ListTypes"
+	CreateBattleOperation        OperationName = "CreateBattle"
+	GetBattleOperation           OperationName = "GetBattle"
+	GetHealthzOperation          OperationName = "GetHealthz"
+	GetPokemonOperation          OperationName = "GetPokemon"
+	GetRootOperation             OperationName = "GetRoot"
+	JoinBattleOperation          OperationName = "JoinBattle"
+	ListPokemonOperation         OperationName = "ListPokemon"
+	ListTypesOperation           OperationName = "ListTypes"
+	ListWaitingTrainersOperation OperationName = "ListWaitingTrainers"
+	RegisterTrainerOperation     OperationName = "RegisterTrainer"
+	TakeTurnOperation            OperationName = "TakeTurn"
 )

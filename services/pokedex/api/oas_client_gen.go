@@ -21,6 +21,20 @@ func trimTrailingSlashes(u *url.URL) {
 
 // Invoker invokes operations described by OpenAPI v3 specification.
 type Invoker interface {
+	// CreateBattle invokes createBattle operation.
+	//
+	// Names three Pokemon. The battle sits in `waiting` until another trainer joins, which is when turn
+	// order is decided.
+	//
+	// POST /battles
+	CreateBattle(ctx context.Context, request *CreateBattle, params CreateBattleParams) (CreateBattleRes, error)
+	// GetBattle invokes getBattle operation.
+	//
+	// Poll this. `version` increases on every change, so a client that has seen a version can skip
+	// re-rendering until it moves.
+	//
+	// GET /battles/{id}
+	GetBattle(ctx context.Context, params GetBattleParams) (GetBattleRes, error)
 	// GetHealthz invokes getHealthz operation.
 	//
 	// Liveness and readiness probe.
@@ -39,6 +53,12 @@ type Invoker interface {
 	//
 	// GET /
 	GetRoot(ctx context.Context) (*Identity, error)
+	// JoinBattle invokes joinBattle operation.
+	//
+	// Join a waiting battle with your own three Pokemon.
+	//
+	// POST /battles/{id}/join
+	JoinBattle(ctx context.Context, request *JoinBattle, params JoinBattleParams) (JoinBattleRes, error)
 	// ListPokemon invokes listPokemon operation.
 	//
 	// List Pokemon, optionally filtered by type.
@@ -51,6 +71,29 @@ type Invoker interface {
 	//
 	// GET /types
 	ListTypes(ctx context.Context) (*TypeList, error)
+	// ListWaitingTrainers invokes listWaitingTrainers operation.
+	//
+	// The matchmaking lobby. A trainer appears here after creating a battle and disappears when someone
+	// joins it or it expires.
+	//
+	// GET /trainers/waiting
+	ListWaitingTrainers(ctx context.Context) (*WaitingList, error)
+	// RegisterTrainer invokes registerTrainer operation.
+	//
+	// The token authorises this trainer's moves; the name is public. This is not authentication - it stops
+	// one player moving another player's Pokemon, nothing more. Names are first-come, and a name already
+	// in use is a 409.
+	//
+	// POST /trainers
+	RegisterTrainer(ctx context.Context, request *RegisterTrainer) (RegisterTrainerRes, error)
+	// TakeTurn invokes takeTurn operation.
+	//
+	// Names the attacker, the move and the target. The server decides damage and whether the battle is
+	// over. Out-of-turn moves, fainted attackers and illegal targets are 409s rather than silent no-ops,
+	// so a client bug is visible instead of looking like lag.
+	//
+	// POST /battles/{id}/turn
+	TakeTurn(ctx context.Context, request *TakeTurn, params TakeTurnParams) (TakeTurnRes, error)
 }
 
 // Client implements OAS client.
@@ -90,6 +133,128 @@ func (c *Client) requestURL(ctx context.Context) *url.URL {
 		return c.serverURL
 	}
 	return u
+}
+
+// CreateBattle invokes createBattle operation.
+//
+// Names three Pokemon. The battle sits in `waiting` until another trainer joins, which is when turn
+// order is decided.
+//
+// POST /battles
+func (c *Client) CreateBattle(ctx context.Context, request *CreateBattle, params CreateBattleParams) (CreateBattleRes, error) {
+	res, err := c.sendCreateBattle(ctx, request, params)
+	return res, err
+}
+
+func (c *Client) sendCreateBattle(ctx context.Context, request *CreateBattle, params CreateBattleParams) (res CreateBattleRes, err error) {
+
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/battles"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeCreateBattleRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	h := uri.NewHeaderEncoder(r.Header)
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "X-Trainer-Token",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			return e.EncodeValue(conv.StringToString(params.XTrainerToken))
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	result, err := decodeCreateBattleResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// GetBattle invokes getBattle operation.
+//
+// Poll this. `version` increases on every change, so a client that has seen a version can skip
+// re-rendering until it moves.
+//
+// GET /battles/{id}
+func (c *Client) GetBattle(ctx context.Context, params GetBattleParams) (GetBattleRes, error) {
+	res, err := c.sendGetBattle(ctx, params)
+	return res, err
+}
+
+func (c *Client) sendGetBattle(ctx context.Context, params GetBattleParams) (res GetBattleRes, err error) {
+
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [2]string
+	pathParts[0] = "/battles/"
+	{
+		// Encode "id" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "id",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.StringToString(params.ID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	uri.AddPathParts(u, pathParts[:]...)
+
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	result, err := decodeGetBattleResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
 }
 
 // GetHealthz invokes getHealthz operation.
@@ -239,6 +404,84 @@ func (c *Client) sendGetRoot(ctx context.Context) (res *Identity, err error) {
 	return result, nil
 }
 
+// JoinBattle invokes joinBattle operation.
+//
+// Join a waiting battle with your own three Pokemon.
+//
+// POST /battles/{id}/join
+func (c *Client) JoinBattle(ctx context.Context, request *JoinBattle, params JoinBattleParams) (JoinBattleRes, error) {
+	res, err := c.sendJoinBattle(ctx, request, params)
+	return res, err
+}
+
+func (c *Client) sendJoinBattle(ctx context.Context, request *JoinBattle, params JoinBattleParams) (res JoinBattleRes, err error) {
+
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [3]string
+	pathParts[0] = "/battles/"
+	{
+		// Encode "id" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "id",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.StringToString(params.ID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	pathParts[2] = "/join"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeJoinBattleRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	h := uri.NewHeaderEncoder(r.Header)
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "X-Trainer-Token",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			return e.EncodeValue(conv.StringToString(params.XTrainerToken))
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	result, err := decodeJoinBattleResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
 // ListPokemon invokes listPokemon operation.
 //
 // List Pokemon, optionally filtered by type.
@@ -355,6 +598,178 @@ func (c *Client) sendListTypes(ctx context.Context) (res *TypeList, err error) {
 	}()
 
 	result, err := decodeListTypesResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// ListWaitingTrainers invokes listWaitingTrainers operation.
+//
+// The matchmaking lobby. A trainer appears here after creating a battle and disappears when someone
+// joins it or it expires.
+//
+// GET /trainers/waiting
+func (c *Client) ListWaitingTrainers(ctx context.Context) (*WaitingList, error) {
+	res, err := c.sendListWaitingTrainers(ctx)
+	return res, err
+}
+
+func (c *Client) sendListWaitingTrainers(ctx context.Context) (res *WaitingList, err error) {
+
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/trainers/waiting"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	result, err := decodeListWaitingTrainersResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// RegisterTrainer invokes registerTrainer operation.
+//
+// The token authorises this trainer's moves; the name is public. This is not authentication - it stops
+// one player moving another player's Pokemon, nothing more. Names are first-come, and a name already
+// in use is a 409.
+//
+// POST /trainers
+func (c *Client) RegisterTrainer(ctx context.Context, request *RegisterTrainer) (RegisterTrainerRes, error) {
+	res, err := c.sendRegisterTrainer(ctx, request)
+	return res, err
+}
+
+func (c *Client) sendRegisterTrainer(ctx context.Context, request *RegisterTrainer) (res RegisterTrainerRes, err error) {
+
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/trainers"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeRegisterTrainerRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	result, err := decodeRegisterTrainerResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// TakeTurn invokes takeTurn operation.
+//
+// Names the attacker, the move and the target. The server decides damage and whether the battle is
+// over. Out-of-turn moves, fainted attackers and illegal targets are 409s rather than silent no-ops,
+// so a client bug is visible instead of looking like lag.
+//
+// POST /battles/{id}/turn
+func (c *Client) TakeTurn(ctx context.Context, request *TakeTurn, params TakeTurnParams) (TakeTurnRes, error) {
+	res, err := c.sendTakeTurn(ctx, request, params)
+	return res, err
+}
+
+func (c *Client) sendTakeTurn(ctx context.Context, request *TakeTurn, params TakeTurnParams) (res TakeTurnRes, err error) {
+
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [3]string
+	pathParts[0] = "/battles/"
+	{
+		// Encode "id" parameter.
+		e := uri.NewPathEncoder(uri.PathEncoderConfig{
+			Param:   "id",
+			Style:   uri.PathStyleSimple,
+			Explode: false,
+		})
+		if err := func() error {
+			return e.EncodeValue(conv.StringToString(params.ID))
+		}(); err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		encoded, err := e.Result()
+		if err != nil {
+			return res, errors.Wrap(err, "encode path")
+		}
+		pathParts[1] = encoded
+	}
+	pathParts[2] = "/turn"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	r, err := ht.NewRequest(ctx, "POST", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+	if err := encodeTakeTurnRequest(request, r); err != nil {
+		return res, errors.Wrap(err, "encode request")
+	}
+
+	h := uri.NewHeaderEncoder(r.Header)
+	{
+		cfg := uri.HeaderParameterEncodingConfig{
+			Name:    "X-Trainer-Token",
+			Explode: false,
+		}
+		if err := h.EncodeParam(cfg, func(e uri.Encoder) error {
+			return e.EncodeValue(conv.StringToString(params.XTrainerToken))
+		}); err != nil {
+			return res, errors.Wrap(err, "encode header")
+		}
+	}
+
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	result, err := decodeTakeTurnResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

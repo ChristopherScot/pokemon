@@ -4,6 +4,7 @@ package api
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/go-faster/errors"
 )
@@ -11,6 +12,346 @@ import (
 func (s *ErrorStatusCode) Error() string {
 	return fmt.Sprintf("code %d: %+v", s.StatusCode, s.Response)
 }
+
+// Ref: #/components/schemas/Battle
+type Battle struct {
+	ID     string       `json:"id"`
+	Status BattleStatus `json:"status"`
+	// Increases on every change. A client that has rendered version N can skip re-rendering until it sees
+	// something higher, which is what makes polling cheap.
+	Version int `json:"version"`
+	// Name of the trainer whose turn it is. Absent while waiting and once finished.
+	Turn OptString `json:"turn"`
+	// Set when status is finished. Absent on a draw.
+	Winner OptString `json:"winner"`
+	// Always two once active; one while waiting.
+	Sides []Side `json:"sides"`
+	// What happened, oldest first. Clients animate from this rather than recomputing events from state
+	// diffs.
+	Log []BattleEvent `json:"log"`
+}
+
+// GetID returns the value of ID.
+func (s *Battle) GetID() string {
+	return s.ID
+}
+
+// GetStatus returns the value of Status.
+func (s *Battle) GetStatus() BattleStatus {
+	return s.Status
+}
+
+// GetVersion returns the value of Version.
+func (s *Battle) GetVersion() int {
+	return s.Version
+}
+
+// GetTurn returns the value of Turn.
+func (s *Battle) GetTurn() OptString {
+	return s.Turn
+}
+
+// GetWinner returns the value of Winner.
+func (s *Battle) GetWinner() OptString {
+	return s.Winner
+}
+
+// GetSides returns the value of Sides.
+func (s *Battle) GetSides() []Side {
+	return s.Sides
+}
+
+// GetLog returns the value of Log.
+func (s *Battle) GetLog() []BattleEvent {
+	return s.Log
+}
+
+// SetID sets the value of ID.
+func (s *Battle) SetID(val string) {
+	s.ID = val
+}
+
+// SetStatus sets the value of Status.
+func (s *Battle) SetStatus(val BattleStatus) {
+	s.Status = val
+}
+
+// SetVersion sets the value of Version.
+func (s *Battle) SetVersion(val int) {
+	s.Version = val
+}
+
+// SetTurn sets the value of Turn.
+func (s *Battle) SetTurn(val OptString) {
+	s.Turn = val
+}
+
+// SetWinner sets the value of Winner.
+func (s *Battle) SetWinner(val OptString) {
+	s.Winner = val
+}
+
+// SetSides sets the value of Sides.
+func (s *Battle) SetSides(val []Side) {
+	s.Sides = val
+}
+
+// SetLog sets the value of Log.
+func (s *Battle) SetLog(val []BattleEvent) {
+	s.Log = val
+}
+
+func (*Battle) createBattleRes() {}
+func (*Battle) getBattleRes()    {}
+func (*Battle) joinBattleRes()   {}
+func (*Battle) takeTurnRes()     {}
+
+// Ref: #/components/schemas/BattleEvent
+type BattleEvent struct {
+	TurnNumber int `json:"turnNumber"`
+	// Pre-rendered prose, so three clients narrate a battle identically instead of each inventing wording.
+	Text     string    `json:"text"`
+	Attacker OptString `json:"attacker"`
+	Target   OptString `json:"target"`
+	Move     OptString `json:"move"`
+	Damage   OptInt    `json:"damage"`
+	// Type multiplier applied, e.g. 2 for super effective. Clients use it to colour or animate the hit.
+	Effectiveness OptFloat64 `json:"effectiveness"`
+	Fainted       OptBool    `json:"fainted"`
+}
+
+// GetTurnNumber returns the value of TurnNumber.
+func (s *BattleEvent) GetTurnNumber() int {
+	return s.TurnNumber
+}
+
+// GetText returns the value of Text.
+func (s *BattleEvent) GetText() string {
+	return s.Text
+}
+
+// GetAttacker returns the value of Attacker.
+func (s *BattleEvent) GetAttacker() OptString {
+	return s.Attacker
+}
+
+// GetTarget returns the value of Target.
+func (s *BattleEvent) GetTarget() OptString {
+	return s.Target
+}
+
+// GetMove returns the value of Move.
+func (s *BattleEvent) GetMove() OptString {
+	return s.Move
+}
+
+// GetDamage returns the value of Damage.
+func (s *BattleEvent) GetDamage() OptInt {
+	return s.Damage
+}
+
+// GetEffectiveness returns the value of Effectiveness.
+func (s *BattleEvent) GetEffectiveness() OptFloat64 {
+	return s.Effectiveness
+}
+
+// GetFainted returns the value of Fainted.
+func (s *BattleEvent) GetFainted() OptBool {
+	return s.Fainted
+}
+
+// SetTurnNumber sets the value of TurnNumber.
+func (s *BattleEvent) SetTurnNumber(val int) {
+	s.TurnNumber = val
+}
+
+// SetText sets the value of Text.
+func (s *BattleEvent) SetText(val string) {
+	s.Text = val
+}
+
+// SetAttacker sets the value of Attacker.
+func (s *BattleEvent) SetAttacker(val OptString) {
+	s.Attacker = val
+}
+
+// SetTarget sets the value of Target.
+func (s *BattleEvent) SetTarget(val OptString) {
+	s.Target = val
+}
+
+// SetMove sets the value of Move.
+func (s *BattleEvent) SetMove(val OptString) {
+	s.Move = val
+}
+
+// SetDamage sets the value of Damage.
+func (s *BattleEvent) SetDamage(val OptInt) {
+	s.Damage = val
+}
+
+// SetEffectiveness sets the value of Effectiveness.
+func (s *BattleEvent) SetEffectiveness(val OptFloat64) {
+	s.Effectiveness = val
+}
+
+// SetFainted sets the value of Fainted.
+func (s *BattleEvent) SetFainted(val OptBool) {
+	s.Fainted = val
+}
+
+// Ref: #/components/schemas/BattlePokemon
+type BattlePokemon struct {
+	Name    string   `json:"name"`
+	Types   []string `json:"types"`
+	Hp      int      `json:"hp"`
+	MaxHp   int      `json:"maxHp"`
+	Fainted bool     `json:"fainted"`
+	Sprite  string   `json:"sprite"`
+	Moves   []Move   `json:"moves"`
+}
+
+// GetName returns the value of Name.
+func (s *BattlePokemon) GetName() string {
+	return s.Name
+}
+
+// GetTypes returns the value of Types.
+func (s *BattlePokemon) GetTypes() []string {
+	return s.Types
+}
+
+// GetHp returns the value of Hp.
+func (s *BattlePokemon) GetHp() int {
+	return s.Hp
+}
+
+// GetMaxHp returns the value of MaxHp.
+func (s *BattlePokemon) GetMaxHp() int {
+	return s.MaxHp
+}
+
+// GetFainted returns the value of Fainted.
+func (s *BattlePokemon) GetFainted() bool {
+	return s.Fainted
+}
+
+// GetSprite returns the value of Sprite.
+func (s *BattlePokemon) GetSprite() string {
+	return s.Sprite
+}
+
+// GetMoves returns the value of Moves.
+func (s *BattlePokemon) GetMoves() []Move {
+	return s.Moves
+}
+
+// SetName sets the value of Name.
+func (s *BattlePokemon) SetName(val string) {
+	s.Name = val
+}
+
+// SetTypes sets the value of Types.
+func (s *BattlePokemon) SetTypes(val []string) {
+	s.Types = val
+}
+
+// SetHp sets the value of Hp.
+func (s *BattlePokemon) SetHp(val int) {
+	s.Hp = val
+}
+
+// SetMaxHp sets the value of MaxHp.
+func (s *BattlePokemon) SetMaxHp(val int) {
+	s.MaxHp = val
+}
+
+// SetFainted sets the value of Fainted.
+func (s *BattlePokemon) SetFainted(val bool) {
+	s.Fainted = val
+}
+
+// SetSprite sets the value of Sprite.
+func (s *BattlePokemon) SetSprite(val string) {
+	s.Sprite = val
+}
+
+// SetMoves sets the value of Moves.
+func (s *BattlePokemon) SetMoves(val []Move) {
+	s.Moves = val
+}
+
+type BattleStatus string
+
+const (
+	BattleStatusWaiting  BattleStatus = "waiting"
+	BattleStatusActive   BattleStatus = "active"
+	BattleStatusFinished BattleStatus = "finished"
+)
+
+// AllValues returns all BattleStatus values.
+func (BattleStatus) AllValues() []BattleStatus {
+	return []BattleStatus{
+		BattleStatusWaiting,
+		BattleStatusActive,
+		BattleStatusFinished,
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler.
+func (s BattleStatus) MarshalText() ([]byte, error) {
+	switch s {
+	case BattleStatusWaiting:
+		return []byte(s), nil
+	case BattleStatusActive:
+		return []byte(s), nil
+	case BattleStatusFinished:
+		return []byte(s), nil
+	default:
+		return nil, errors.Errorf("invalid value: %q", s)
+	}
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *BattleStatus) UnmarshalText(data []byte) error {
+	switch BattleStatus(data) {
+	case BattleStatusWaiting:
+		*s = BattleStatusWaiting
+		return nil
+	case BattleStatusActive:
+		*s = BattleStatusActive
+		return nil
+	case BattleStatusFinished:
+		*s = BattleStatusFinished
+		return nil
+	default:
+		return errors.Errorf("invalid value: %q", data)
+	}
+}
+
+// Ref: #/components/schemas/CreateBattle
+type CreateBattle struct {
+	// Three Pokemon names.
+	Team []string `json:"team"`
+}
+
+// GetTeam returns the value of Team.
+func (s *CreateBattle) GetTeam() []string {
+	return s.Team
+}
+
+// SetTeam sets the value of Team.
+func (s *CreateBattle) SetTeam(val []string) {
+	s.Team = val
+}
+
+type CreateBattleBadRequest Error
+
+func (*CreateBattleBadRequest) createBattleRes() {}
+
+type CreateBattleUnauthorized Error
+
+func (*CreateBattleUnauthorized) createBattleRes() {}
 
 // Ref: #/components/schemas/Error
 type Error struct {
@@ -27,7 +368,9 @@ func (s *Error) SetMessage(val string) {
 	s.Message = val
 }
 
-func (*Error) getPokemonRes() {}
+func (*Error) getBattleRes()       {}
+func (*Error) getPokemonRes()      {}
+func (*Error) registerTrainerRes() {}
 
 // ErrorStatusCode wraps Error with StatusCode.
 type ErrorStatusCode struct {
@@ -130,6 +473,37 @@ func (s *Identity) SetVersion(val string) {
 	s.Version = val
 }
 
+// Ref: #/components/schemas/JoinBattle
+type JoinBattle struct {
+	Team []string `json:"team"`
+}
+
+// GetTeam returns the value of Team.
+func (s *JoinBattle) GetTeam() []string {
+	return s.Team
+}
+
+// SetTeam sets the value of Team.
+func (s *JoinBattle) SetTeam(val []string) {
+	s.Team = val
+}
+
+type JoinBattleBadRequest Error
+
+func (*JoinBattleBadRequest) joinBattleRes() {}
+
+type JoinBattleConflict Error
+
+func (*JoinBattleConflict) joinBattleRes() {}
+
+type JoinBattleNotFound Error
+
+func (*JoinBattleNotFound) joinBattleRes() {}
+
+type JoinBattleUnauthorized Error
+
+func (*JoinBattleUnauthorized) joinBattleRes() {}
+
 // Ref: #/components/schemas/Move
 type Move struct {
 	Name string `json:"name"`
@@ -166,6 +540,98 @@ func (s *Move) SetType(val string) {
 // SetPower sets the value of Power.
 func (s *Move) SetPower(val int) {
 	s.Power = val
+}
+
+// NewOptBool returns new OptBool with value set to v.
+func NewOptBool(v bool) OptBool {
+	return OptBool{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptBool is optional bool.
+type OptBool struct {
+	Value bool
+	Set   bool
+}
+
+// IsSet returns true if OptBool was set.
+func (o OptBool) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptBool) Reset() {
+	var v bool
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptBool) SetTo(v bool) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptBool) Get() (v bool, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptBool) Or(d bool) bool {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
+}
+
+// NewOptFloat64 returns new OptFloat64 with value set to v.
+func NewOptFloat64(v float64) OptFloat64 {
+	return OptFloat64{
+		Value: v,
+		Set:   true,
+	}
+}
+
+// OptFloat64 is optional float64.
+type OptFloat64 struct {
+	Value float64
+	Set   bool
+}
+
+// IsSet returns true if OptFloat64 was set.
+func (o OptFloat64) IsSet() bool { return o.Set }
+
+// Reset unsets value.
+func (o *OptFloat64) Reset() {
+	var v float64
+	o.Value = v
+	o.Set = false
+}
+
+// SetTo sets value to v.
+func (o *OptFloat64) SetTo(v float64) {
+	o.Set = true
+	o.Value = v
+}
+
+// Get returns value and boolean that denotes whether value was set.
+func (o OptFloat64) Get() (v float64, ok bool) {
+	if !o.Set {
+		return v, false
+	}
+	return o.Value, true
+}
+
+// Or returns value if set, or given parameter if does not.
+func (o OptFloat64) Or(d float64) float64 {
+	if v, ok := o.Get(); ok {
+		return v
+	}
+	return d
 }
 
 // NewOptInt returns new OptInt with value set to v.
@@ -374,6 +840,129 @@ func (s *PokemonList) SetPokemon(val []Pokemon) {
 	s.Pokemon = val
 }
 
+// Ref: #/components/schemas/RegisterTrainer
+type RegisterTrainer struct {
+	// Displayed to other trainers in the lobby.
+	Name string `json:"name"`
+}
+
+// GetName returns the value of Name.
+func (s *RegisterTrainer) GetName() string {
+	return s.Name
+}
+
+// SetName sets the value of Name.
+func (s *RegisterTrainer) SetName(val string) {
+	s.Name = val
+}
+
+// Ref: #/components/schemas/Side
+type Side struct {
+	Trainer string          `json:"trainer"`
+	Team    []BattlePokemon `json:"team"`
+}
+
+// GetTrainer returns the value of Trainer.
+func (s *Side) GetTrainer() string {
+	return s.Trainer
+}
+
+// GetTeam returns the value of Team.
+func (s *Side) GetTeam() []BattlePokemon {
+	return s.Team
+}
+
+// SetTrainer sets the value of Trainer.
+func (s *Side) SetTrainer(val string) {
+	s.Trainer = val
+}
+
+// SetTeam sets the value of Team.
+func (s *Side) SetTeam(val []BattlePokemon) {
+	s.Team = val
+}
+
+// Ref: #/components/schemas/TakeTurn
+type TakeTurn struct {
+	// Index into your own team, 0-2.
+	Attacker int `json:"attacker"`
+	// Index into that Pokemon's moves.
+	Move int `json:"move"`
+	// Index into the opponent's team, 0-2.
+	Target int `json:"target"`
+}
+
+// GetAttacker returns the value of Attacker.
+func (s *TakeTurn) GetAttacker() int {
+	return s.Attacker
+}
+
+// GetMove returns the value of Move.
+func (s *TakeTurn) GetMove() int {
+	return s.Move
+}
+
+// GetTarget returns the value of Target.
+func (s *TakeTurn) GetTarget() int {
+	return s.Target
+}
+
+// SetAttacker sets the value of Attacker.
+func (s *TakeTurn) SetAttacker(val int) {
+	s.Attacker = val
+}
+
+// SetMove sets the value of Move.
+func (s *TakeTurn) SetMove(val int) {
+	s.Move = val
+}
+
+// SetTarget sets the value of Target.
+func (s *TakeTurn) SetTarget(val int) {
+	s.Target = val
+}
+
+type TakeTurnConflict Error
+
+func (*TakeTurnConflict) takeTurnRes() {}
+
+type TakeTurnNotFound Error
+
+func (*TakeTurnNotFound) takeTurnRes() {}
+
+type TakeTurnUnauthorized Error
+
+func (*TakeTurnUnauthorized) takeTurnRes() {}
+
+// Ref: #/components/schemas/Trainer
+type Trainer struct {
+	Name string `json:"name"`
+	// Send as X-Trainer-Token. Returned once, at registration.
+	Token string `json:"token"`
+}
+
+// GetName returns the value of Name.
+func (s *Trainer) GetName() string {
+	return s.Name
+}
+
+// GetToken returns the value of Token.
+func (s *Trainer) GetToken() string {
+	return s.Token
+}
+
+// SetName sets the value of Name.
+func (s *Trainer) SetName(val string) {
+	s.Name = val
+}
+
+// SetToken sets the value of Token.
+func (s *Trainer) SetToken(val string) {
+	s.Token = val
+}
+
+func (*Trainer) registerTrainerRes() {}
+
 // Ref: #/components/schemas/TypeList
 type TypeList struct {
 	Types []TypeSummary `json:"types"`
@@ -393,6 +982,14 @@ func (s *TypeList) SetTypes(val []TypeSummary) {
 type TypeSummary struct {
 	Name  string `json:"name"`
 	Count int    `json:"count"`
+	// Types this one deals double damage to. Served here so the clients do not each carry a copy of the
+	// chart the server computes damage from - three copies is three chances to disagree with the server,
+	// and the server is what decides.
+	StrongAgainst []string `json:"strongAgainst"`
+	// Types this one deals half damage to.
+	WeakAgainst []string `json:"weakAgainst"`
+	// Types this one cannot damage at all.
+	NoEffectAgainst []string `json:"noEffectAgainst"`
 }
 
 // GetName returns the value of Name.
@@ -405,6 +1002,21 @@ func (s *TypeSummary) GetCount() int {
 	return s.Count
 }
 
+// GetStrongAgainst returns the value of StrongAgainst.
+func (s *TypeSummary) GetStrongAgainst() []string {
+	return s.StrongAgainst
+}
+
+// GetWeakAgainst returns the value of WeakAgainst.
+func (s *TypeSummary) GetWeakAgainst() []string {
+	return s.WeakAgainst
+}
+
+// GetNoEffectAgainst returns the value of NoEffectAgainst.
+func (s *TypeSummary) GetNoEffectAgainst() []string {
+	return s.NoEffectAgainst
+}
+
 // SetName sets the value of Name.
 func (s *TypeSummary) SetName(val string) {
 	s.Name = val
@@ -413,4 +1025,94 @@ func (s *TypeSummary) SetName(val string) {
 // SetCount sets the value of Count.
 func (s *TypeSummary) SetCount(val int) {
 	s.Count = val
+}
+
+// SetStrongAgainst sets the value of StrongAgainst.
+func (s *TypeSummary) SetStrongAgainst(val []string) {
+	s.StrongAgainst = val
+}
+
+// SetWeakAgainst sets the value of WeakAgainst.
+func (s *TypeSummary) SetWeakAgainst(val []string) {
+	s.WeakAgainst = val
+}
+
+// SetNoEffectAgainst sets the value of NoEffectAgainst.
+func (s *TypeSummary) SetNoEffectAgainst(val []string) {
+	s.NoEffectAgainst = val
+}
+
+// Ref: #/components/schemas/WaitingBattle
+type WaitingBattle struct {
+	BattleId string `json:"battleId"`
+	Trainer  string `json:"trainer"`
+	// Who they are bringing, so you can pick a counter.
+	Team      []string  `json:"team"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// GetBattleId returns the value of BattleId.
+func (s *WaitingBattle) GetBattleId() string {
+	return s.BattleId
+}
+
+// GetTrainer returns the value of Trainer.
+func (s *WaitingBattle) GetTrainer() string {
+	return s.Trainer
+}
+
+// GetTeam returns the value of Team.
+func (s *WaitingBattle) GetTeam() []string {
+	return s.Team
+}
+
+// GetCreatedAt returns the value of CreatedAt.
+func (s *WaitingBattle) GetCreatedAt() time.Time {
+	return s.CreatedAt
+}
+
+// SetBattleId sets the value of BattleId.
+func (s *WaitingBattle) SetBattleId(val string) {
+	s.BattleId = val
+}
+
+// SetTrainer sets the value of Trainer.
+func (s *WaitingBattle) SetTrainer(val string) {
+	s.Trainer = val
+}
+
+// SetTeam sets the value of Team.
+func (s *WaitingBattle) SetTeam(val []string) {
+	s.Team = val
+}
+
+// SetCreatedAt sets the value of CreatedAt.
+func (s *WaitingBattle) SetCreatedAt(val time.Time) {
+	s.CreatedAt = val
+}
+
+// Ref: #/components/schemas/WaitingList
+type WaitingList struct {
+	Count   int             `json:"count"`
+	Waiting []WaitingBattle `json:"waiting"`
+}
+
+// GetCount returns the value of Count.
+func (s *WaitingList) GetCount() int {
+	return s.Count
+}
+
+// GetWaiting returns the value of Waiting.
+func (s *WaitingList) GetWaiting() []WaitingBattle {
+	return s.Waiting
+}
+
+// SetCount sets the value of Count.
+func (s *WaitingList) SetCount(val int) {
+	s.Count = val
+}
+
+// SetWaiting sets the value of Waiting.
+func (s *WaitingList) SetWaiting(val []WaitingBattle) {
+	s.Waiting = val
 }
