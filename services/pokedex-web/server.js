@@ -1,5 +1,6 @@
 import Fastify, { LogController } from 'fastify'
 import { register as registerPokedex } from './pokedex.js'
+import { registerBattle } from './battle.js'
 import { collectDefaultMetrics, Counter, Histogram, register } from 'prom-client'
 
 const port = Number(process.env.PORT || '3000')
@@ -95,6 +96,11 @@ app.get('/metrics', async (_request, reply) =>
 
 // The card UI lives in pokedex.js; this file stays the template's.
 registerPokedex(app)
+
+// Battle mode. Separate module because it is the only part of this
+// service that is interactive, and keeping it apart means the card grid
+// stays a pure server render.
+registerBattle(app)
 
 // Without this, SIGTERM kills in-flight requests on every deploy.
 // Kubernetes sends SIGTERM, waits terminationGracePeriodSeconds, then
