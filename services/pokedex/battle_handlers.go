@@ -57,7 +57,13 @@ func (s service) CreateBattle(_ context.Context, req *api.CreateBattle, params a
 	if !ok {
 		return &api.CreateBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
-	team, err := newCombatants(s.dex, req.Team)
+	names := req.Team
+	if len(names) == 0 {
+		// No team given means "surprise me", which is what makes
+		// starting a battle one action in every client.
+		names = randomTeam(s.dex, s.rng)
+	}
+	team, err := newCombatants(s.dex, names)
 	if err != nil {
 		return &api.CreateBattleBadRequest{Message: err.Error()}, nil
 	}
@@ -109,7 +115,11 @@ func (s service) JoinBattle(_ context.Context, req *api.JoinBattle, params api.J
 	if b.sides[0].token == params.XTrainerToken {
 		return &api.JoinBattleConflict{Message: errAlreadyIn.Error()}, nil
 	}
-	team, err := newCombatants(s.dex, req.Team)
+	names := req.Team
+	if len(names) == 0 {
+		names = randomTeam(s.dex, s.rng)
+	}
+	team, err := newCombatants(s.dex, names)
 	if err != nil {
 		return &api.JoinBattleBadRequest{Message: err.Error()}, nil
 	}

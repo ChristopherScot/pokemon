@@ -232,11 +232,12 @@ export interface components {
             createdAt: string;
         };
         CreateBattle: {
-            /** @description Three Pokemon names. */
-            team: string[];
+            /** @description Three Pokemon names. Omit to be given a random team, which is what makes "just start a battle" one click in every client rather than three names to think of. */
+            team?: string[];
         };
         JoinBattle: {
-            team: string[];
+            /** @description Three Pokemon names. Omit for a random team. */
+            team?: string[];
         };
         TakeTurn: {
             /** @description Index into your own team, 0-2. */

@@ -151,6 +151,38 @@ func newCombatants(dex *pokedex, names []string) ([]*combatant, error) {
 	return team, nil
 }
 
+// randomTeam picks three distinct Pokemon.
+//
+// Distinct because a team of three identical Pokemon is both a worse
+// game and confusing to read: the board would show the same name three
+// times with different HP, and a target index would be the only way to
+// tell them apart.
+func randomTeam(dex *pokedex, rng *rand.Rand) []string {
+	all := dex.list("", 0)
+	if len(all) < teamSize {
+		// Cannot happen with the shipped dataset, which is why this
+		// returns what it has rather than an error: a caller cannot do
+		// anything useful with "the pokedex is too small".
+		names := make([]string, 0, len(all))
+		for _, m := range all {
+			names = append(names, m.Name)
+		}
+		return names
+	}
+
+	picked := make(map[int]bool, teamSize)
+	team := make([]string, 0, teamSize)
+	for len(team) < teamSize {
+		i := rng.Intn(len(all))
+		if picked[i] {
+			continue
+		}
+		picked[i] = true
+		team = append(team, all[i].Name)
+	}
+	return team
+}
+
 // damage resolves one attack. Returns the damage dealt and the type
 // multiplier that produced it, so the caller can narrate the hit.
 //

@@ -232,3 +232,69 @@ func TestRowsAlignWhateverTheStyling(t *testing.T) {
 		}
 	}
 }
+
+// A hit flashes and shakes its row for a few frames, and the effect
+// expires. An impact that never cleared would leave a row permanently
+// mid-shake.
+func TestImpactsFlashAndExpire(t *testing.T) {
+	bs := testBattleState(t)
+	bs.applyBattle(twoSided(1,
+		[]api.BattlePokemon{mon("bulbasaur", 100, 100, false)},
+		[]api.BattlePokemon{mon("pikachu", 100, 100, false)}))
+
+	hit := twoSided(2,
+		[]api.BattlePokemon{mon("bulbasaur", 100, 100, false)},
+		[]api.BattlePokemon{mon("pikachu", 70, 100, false)})
+	hit.Log = []api.BattleEvent{{
+		TurnNumber: 1, Text: "hit",
+		Target: api.NewOptString("pikachu"),
+		Damage: api.NewOptInt(30), Effectiveness: api.NewOptFloat64(2),
+	}}
+	bs.applyBattle(hit)
+
+	if len(bs.impacts) != 1 {
+		t.Fatalf("got %d impacts, want 1", len(bs.impacts))
+	}
+	// The flashing row must actually differ from a calm one.
+	flashing := bs.monLine(1, 0, hit.Sides[1].Team[0], false)
+	for i := 0; i < impactLife+2; i++ {
+		bs.advance()
+	}
+	if len(bs.impacts) != 0 {
+		t.Errorf("%d impacts survived past their life", len(bs.impacts))
+	}
+	if calm := bs.monLine(1, 0, hit.Sides[1].Team[0], false); calm == flashing {
+		t.Error("a flashing row renders identically to a calm one")
+	}
+}
+
+// The banner pulses when the turn becomes yours, and settles. A pulse
+// that never stopped would flicker for the rest of the battle.
+func TestBannerPulsesWhenTheTurnArrives(t *testing.T) {
+	bs := testBattleState(t)
+	theirs := twoSided(1, nil, nil)
+	theirs.Turn = api.NewOptString("gary")
+	theirs.Sides = []api.Side{
+		{Trainer: "ash", Team: []api.BattlePokemon{mon("a", 10, 10, false)}},
+		{Trainer: "gary", Team: []api.BattlePokemon{mon("b", 10, 10, false)}},
+	}
+	bs.applyBattle(theirs)
+	if bs.bannerPulse != 0 {
+		t.Fatal("pulsing while it is not our turn")
+	}
+
+	mine := twoSided(2,
+		[]api.BattlePokemon{mon("a", 10, 10, false)},
+		[]api.BattlePokemon{mon("b", 10, 10, false)})
+	bs.applyBattle(mine)
+	if bs.bannerPulse == 0 {
+		t.Error("the turn arrived and the banner did not pulse")
+	}
+
+	for i := 0; i < 40; i++ {
+		bs.advance()
+	}
+	if bs.bannerPulse != 0 {
+		t.Errorf("banner still pulsing after 40 frames: %d", bs.bannerPulse)
+	}
+}

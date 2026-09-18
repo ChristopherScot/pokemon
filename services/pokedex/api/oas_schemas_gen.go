@@ -331,7 +331,8 @@ func (s *BattleStatus) UnmarshalText(data []byte) error {
 
 // Ref: #/components/schemas/CreateBattle
 type CreateBattle struct {
-	// Three Pokemon names.
+	// Three Pokemon names. Omit to be given a random team, which is what makes "just start a battle" one
+	// click in every client rather than three names to think of.
 	Team []string `json:"team"`
 }
 
@@ -475,6 +476,7 @@ func (s *Identity) SetVersion(val string) {
 
 // Ref: #/components/schemas/JoinBattle
 type JoinBattle struct {
+	// Three Pokemon names. Omit for a random team.
 	Team []string `json:"team"`
 }
 

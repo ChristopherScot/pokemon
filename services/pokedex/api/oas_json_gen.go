@@ -715,12 +715,14 @@ func (s *CreateBattle) Encode(e *jx.Encoder) {
 // encodeFields encodes fields.
 func (s *CreateBattle) encodeFields(e *jx.Encoder) {
 	{
-		e.FieldStart("team")
-		e.ArrStart()
-		for _, elem := range s.Team {
-			e.Str(elem)
+		if s.Team != nil {
+			e.FieldStart("team")
+			e.ArrStart()
+			for _, elem := range s.Team {
+				e.Str(elem)
+			}
+			e.ArrEnd()
 		}
-		e.ArrEnd()
 	}
 }
 
@@ -733,12 +735,10 @@ func (s *CreateBattle) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode CreateBattle to nil")
 	}
-	var requiredBitSet [1]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
 		case "team":
-			requiredBitSet[0] |= 1 << 0
 			if err := func() error {
 				s.Team = make([]string, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -763,38 +763,6 @@ func (s *CreateBattle) Decode(d *jx.Decoder) error {
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "decode CreateBattle")
-	}
-	// Validate required fields.
-	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
-		0b00000001,
-	} {
-		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
-			// Mask only required fields and check equality to mask using XOR.
-			//
-			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
-			// Bits of fields which would be set are actually bits of missed fields.
-			missed := bits.OnesCount8(result)
-			for bitN := 0; bitN < missed; bitN++ {
-				bitIdx := bits.TrailingZeros8(result)
-				fieldIdx := i*8 + bitIdx
-				var name string
-				if fieldIdx < len(jsonFieldsNameOfCreateBattle) {
-					name = jsonFieldsNameOfCreateBattle[fieldIdx]
-				} else {
-					name = strconv.Itoa(fieldIdx)
-				}
-				failures = append(failures, validate.FieldError{
-					Name:  name,
-					Error: validate.ErrFieldRequired,
-				})
-				// Reset bit.
-				result &^= 1 << bitIdx
-			}
-		}
-	}
-	if len(failures) > 0 {
-		return &validate.Error{Fields: failures}
 	}
 
 	return nil
@@ -1240,12 +1208,14 @@ func (s *JoinBattle) Encode(e *jx.Encoder) {
 // encodeFields encodes fields.
 func (s *JoinBattle) encodeFields(e *jx.Encoder) {
 	{
-		e.FieldStart("team")
-		e.ArrStart()
-		for _, elem := range s.Team {
-			e.Str(elem)
+		if s.Team != nil {
+			e.FieldStart("team")
+			e.ArrStart()
+			for _, elem := range s.Team {
+				e.Str(elem)
+			}
+			e.ArrEnd()
 		}
-		e.ArrEnd()
 	}
 }
 
@@ -1258,12 +1228,10 @@ func (s *JoinBattle) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode JoinBattle to nil")
 	}
-	var requiredBitSet [1]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
 		case "team":
-			requiredBitSet[0] |= 1 << 0
 			if err := func() error {
 				s.Team = make([]string, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -1288,38 +1256,6 @@ func (s *JoinBattle) Decode(d *jx.Decoder) error {
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "decode JoinBattle")
-	}
-	// Validate required fields.
-	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
-		0b00000001,
-	} {
-		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
-			// Mask only required fields and check equality to mask using XOR.
-			//
-			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
-			// Bits of fields which would be set are actually bits of missed fields.
-			missed := bits.OnesCount8(result)
-			for bitN := 0; bitN < missed; bitN++ {
-				bitIdx := bits.TrailingZeros8(result)
-				fieldIdx := i*8 + bitIdx
-				var name string
-				if fieldIdx < len(jsonFieldsNameOfJoinBattle) {
-					name = jsonFieldsNameOfJoinBattle[fieldIdx]
-				} else {
-					name = strconv.Itoa(fieldIdx)
-				}
-				failures = append(failures, validate.FieldError{
-					Name:  name,
-					Error: validate.ErrFieldRequired,
-				})
-				// Reset bit.
-				result &^= 1 << bitIdx
-			}
-		}
-	}
-	if len(failures) > 0 {
-		return &validate.Error{Fields: failures}
 	}
 
 	return nil

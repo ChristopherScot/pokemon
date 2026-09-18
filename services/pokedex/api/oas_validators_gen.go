@@ -173,7 +173,7 @@ func (s *CreateBattle) Validate() error {
 	var failures []validate.FieldError
 	if err := func() error {
 		if s.Team == nil {
-			return errors.New("nil is invalid value")
+			return nil // optional
 		}
 		if err := (validate.Array{
 			MinLength:    3,
@@ -236,7 +236,7 @@ func (s *JoinBattle) Validate() error {
 	var failures []validate.FieldError
 	if err := func() error {
 		if s.Team == nil {
-			return errors.New("nil is invalid value")
+			return nil // optional
 		}
 		if err := (validate.Array{
 			MinLength:    3,

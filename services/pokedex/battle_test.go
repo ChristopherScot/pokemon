@@ -392,3 +392,54 @@ func TestDamageRoundingAtTheEdges(t *testing.T) {
 		}
 	}
 }
+
+// A random team is three DISTINCT Pokemon. Three of the same would show
+// one name three times on the board, with a target index the only way to
+// tell them apart.
+func TestRandomTeamIsThreeDistinctPokemon(t *testing.T) {
+	s := testService(t)
+	for seed := int64(1); seed <= 25; seed++ {
+		team := randomTeam(s.dex, rngFor(seed))
+		if len(team) != teamSize {
+			t.Fatalf("seed %d: got %d pokemon, want %d", seed, len(team), teamSize)
+		}
+		seen := map[string]bool{}
+		for _, n := range team {
+			if seen[n] {
+				t.Errorf("seed %d: %s appears twice in %v", seed, n, team)
+			}
+			seen[n] = true
+			if _, ok := s.dex.get(n); !ok {
+				t.Errorf("seed %d: %q is not in the pokedex", seed, n)
+			}
+		}
+	}
+}
+
+// Omitting a team is how "just start a battle" works in every client, so
+// it has to produce a playable side rather than an empty one.
+func TestCreateWithNoTeamPicksOne(t *testing.T) {
+	s := testService(t)
+	tok, err := s.battles.registerTrainer("ash")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.CreateBattle(t.Context(), &api.CreateBattle{},
+		api.CreateBattleParams{XTrainerToken: tok})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok := res.(*api.Battle)
+	if !ok {
+		t.Fatalf("got %#v, want a battle", res)
+	}
+	if n := len(b.Sides[0].Team); n != teamSize {
+		t.Fatalf("random team has %d pokemon, want %d", n, teamSize)
+	}
+	for _, p := range b.Sides[0].Team {
+		if p.MaxHp <= 0 || p.Hp != p.MaxHp {
+			t.Errorf("%s started at %d/%d", p.Name, p.Hp, p.MaxHp)
+		}
+	}
+}

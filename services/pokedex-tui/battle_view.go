@@ -30,6 +30,21 @@ var (
 	weakStyle  = lipgloss.NewStyle().Faint(true)
 )
 
+// impactStyle is the colour a bar flashes when it is hit, by how much
+// the type chart mattered.
+func impactStyle(effect float64) lipgloss.Style {
+	switch {
+	case effect >= 2:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true)
+	case effect == 0:
+		return dimStyle
+	case effect < 1:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	default:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	}
+}
+
 // hpStyleFor colours a bar by how much is left, so a player reads danger
 // without doing arithmetic.
 func hpStyleFor(hp, max int) lipgloss.Style {
@@ -94,9 +109,23 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 		badges = append(badges, typeBadge(t))
 	}
 
-	line := fmt.Sprintf("%s %s %s %s",
+	bar := hpBar(shown, p.MaxHp, 14)
+
+	// A hit shakes its row and flashes the bar. The shake is a leading
+	// space that comes and goes, which is the only "motion" a terminal
+	// row has - and it reads as a jolt rather than a redraw because it
+	// lasts a handful of frames.
+	lead := ""
+	if im, ok := bs.impacts[k]; ok {
+		if im.life%4 < 2 {
+			lead = " "
+		}
+		bar = impactStyle(im.effect).Render(strings.Repeat("━", 14))
+	}
+
+	line := lead + fmt.Sprintf("%s %s %s %s",
 		name,
-		hpBar(shown, p.MaxHp, 14),
+		bar,
 		hpCol.Render(fmt.Sprintf("%d/%d", shown, p.MaxHp)),
 		strings.Join(badges, " "))
 
@@ -201,6 +230,12 @@ func (bs *battleState) banner(b *api.Battle) string {
 		return dimStyle.Render("a draw")
 	case api.BattleStatusActive:
 		if bs.client.MyTurn(b) {
+			// Pulsing for the first few frames after the turn arrives,
+			// so a player who looked away sees it change rather than
+			// having to notice a static line.
+			if bs.bannerPulse > 0 && bs.bannerPulse%6 < 3 {
+				return bannerYou.Reverse(true).Render(" your turn ")
+			}
 			return bannerYou.Render("your turn")
 		}
 		return dimStyle.Render(fmt.Sprintf("waiting on %s…", b.Turn.Value))

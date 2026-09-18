@@ -62,6 +62,13 @@ type battleState struct {
 	// floats are damage numbers rising off a Pokemon. They expire.
 	floats []damageFloat
 
+	// impacts are the shake-and-flash on a row that was just hit.
+	impacts map[slot]*impact
+
+	// banner pulses for a few frames when the turn changes, so a player
+	// who looked away notices it is their move.
+	bannerPulse int
+
 	// Cursor state for choosing a move.
 	pickAttacker int
 	pickMove     int
@@ -93,7 +100,23 @@ type damageFloat struct {
 	life int
 }
 
-const floatLife = 24
+// impact is a hit landing: the row shakes and flashes for a few frames.
+// Separate from the float because it decays faster - the number should
+// still be readable after the row has settled.
+type impact struct {
+	slot   slot
+	effect float64
+	life   int
+}
+
+const (
+	floatLife  = 24
+	impactLife = 7
+
+	// A KO gets its own, longer flash, because it is the moment worth
+	// noticing in a battle.
+	faintLife = 14
+)
 
 // tick schedules the next animation frame.
 func tick() tea.Cmd {
@@ -154,15 +177,30 @@ func (bs *battleState) applyBattle(b *api.Battle) {
 				continue
 			}
 			if k, found := bs.findSlot(target); found {
+				eff := ev.Effectiveness.Or(1)
 				bs.floats = append(bs.floats, damageFloat{
 					slot:   k,
 					amount: dmg,
-					effect: ev.Effectiveness.Or(1),
+					effect: eff,
 					life:   floatLife,
 				})
+				if bs.impacts == nil {
+					bs.impacts = map[slot]*impact{}
+				}
+				life := impactLife
+				if ev.Fainted.Or(false) {
+					life = faintLife
+				}
+				bs.impacts[k] = &impact{slot: k, effect: eff, life: life}
 			}
 		}
 	}
+	// A turn arriving is worth announcing: the banner pulses so someone
+	// who looked away sees it change rather than having to read it.
+	if prev != nil && bs.client.MyTurn(b) && !bs.client.MyTurn(prev) {
+		bs.bannerPulse = 18
+	}
+
 	bs.seen = b.Version
 	bs.clampCursors()
 }
@@ -210,6 +248,19 @@ func (bs *battleState) advance() bool {
 				}
 			}
 		}
+	}
+
+	for k, im := range bs.impacts {
+		im.life--
+		if im.life <= 0 {
+			delete(bs.impacts, k)
+		}
+		moving = true
+	}
+
+	if bs.bannerPulse > 0 {
+		bs.bannerPulse--
+		moving = true
 	}
 
 	live := bs.floats[:0]
