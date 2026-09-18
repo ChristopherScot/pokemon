@@ -1,4 +1,8 @@
-v0.1.0
+v0.1.1
+
+v0.1.1 Fix self-update, which asked GitHub for a repository named after
+       the service rather than the one holding its releases, and so 404'd
+       against a release that existed.
 
 v0.1.0 Browse the Pokedex in the terminal: a filterable list of all 100
        Pokemon with types, height, weight and moves, read from the same
