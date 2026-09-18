@@ -10,7 +10,7 @@
 // clients behaving the same way is the point - a Node service and a Go
 // service calling the same API should fail the same way.
 //
-//   import createClient from '@christopherscot/pokedex-client'
+//   import createClient from '@ChristopherScot/pokedex-client'
 //   const client = createClient({ baseUrl: 'https://pokedex' })
 //   const { data, error } = await client.GET('/')
 import createFetchClient from 'openapi-fetch'
