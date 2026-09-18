@@ -40,6 +40,11 @@ func rootCmd() *cobra.Command {
 		SilenceUsage: true,
 	}
 	root.AddCommand(updateCmd(), versionCmd(), pokemonCmd(), showCmd(), typesCmd())
+	// Battle mode: register once, then open or join, then attack per
+	// turn. A CLI exits between commands, so the trainer token is stored
+	// and `watch` is what makes a turn-based game playable this way.
+	root.AddCommand(registerCmd(), lobbyCmd(), openCmd(), joinCmd(),
+		showBattleCmd(), watchCmd(), attackCmd())
 
 	// Cobra builds its own `completion` command during Execute, so it does
 	// not exist yet here and cannot be extended in place. Force it to be
