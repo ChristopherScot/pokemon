@@ -22,7 +22,7 @@ func testModel(t *testing.T) model {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return newModel(c)
+	return newModel(c, "http://127.0.0.1:0")
 }
 
 func loaded(t *testing.T) model {

@@ -93,7 +93,7 @@ func run(apiURL string) error {
 	// Alt-screen is set on the View, in model.go, not here - in
 	// bubbletea v2 it is a property of what is rendered rather than a
 	// program option, so the model decides it each frame.
-	_, err = tea.NewProgram(newModel(c)).Run()
+	_, err = tea.NewProgram(newModel(c, apiURL)).Run()
 	return err
 }
 

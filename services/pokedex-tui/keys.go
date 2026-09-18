@@ -1,0 +1,238 @@
+package main
+
+// Per-screen key handling. One function per screen, dispatched from
+// handleKey, so a binding that means one thing while browsing and
+// another mid-battle is written once in each place rather than guarded
+// by a chain of conditions.
+
+import (
+	"context"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/christopherscot/pokemon/services/pokedex/api"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
+)
+
+// shortCtx bounds a request. Battle actions are interactive: one that
+// has not answered in a few seconds should say so rather than hang.
+func shortCtx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 10*time.Second)
+}
+
+func (m model) browseKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q":
+		return m, tea.Quit
+	case "b":
+		// Battle mode needs a trainer; say so rather than opening a
+		// lobby that cannot do anything.
+		if m.bc == nil {
+			m.status = "no trainer registered — run `pokedex-cli register <name>` first"
+			return m, nil
+		}
+		m.screen = screenLobby
+		m.status = ""
+		return m, fetchLobby(m.bc)
+	}
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+func (m model) lobbyKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q":
+		return m, tea.Quit
+	case "esc":
+		m.screen = screenBrowse
+		m.status = ""
+		return m, nil
+	case "r":
+		return m, fetchLobby(m.bc)
+	case "up", "k":
+		if m.lobbyIdx > 0 {
+			m.lobbyIdx--
+		}
+		return m, nil
+	case "down", "j":
+		if m.lobby != nil && m.lobbyIdx < len(m.lobby.Waiting)-1 {
+			m.lobbyIdx++
+		}
+		return m, nil
+	case "n":
+		// Open a new battle: pick a team first.
+		m.screen = screenTeam
+		m.joining = ""
+		m.team = nil
+		m.status = ""
+		return m, nil
+	case "enter":
+		if m.lobby == nil || len(m.lobby.Waiting) == 0 {
+			return m, nil
+		}
+		m.screen = screenTeam
+		m.joining = m.lobby.Waiting[m.lobbyIdx].BattleId
+		m.team = nil
+		m.status = ""
+		return m, nil
+	}
+	return m, nil
+}
+
+// teamKey picks three Pokemon from the browse list, reusing the list the
+// player already knows rather than inventing a second picker.
+func (m model) teamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.screen = screenLobby
+		m.team = nil
+		m.status = ""
+		return m, nil
+	case "backspace":
+		if n := len(m.team); n > 0 {
+			m.team = m.team[:n-1]
+		}
+		return m, nil
+	case "enter":
+		if it, ok := m.list.SelectedItem().(item); ok && len(m.team) < 3 {
+			m.team = append(m.team, it.p.Name)
+		}
+		if len(m.team) == 3 {
+			return m, m.startBattle()
+		}
+		return m, nil
+	}
+	// Everything else drives the list, so filtering works while picking.
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+// startBattle opens or joins, depending on how the team screen was
+// reached.
+func (m model) startBattle() tea.Cmd {
+	team := append([]string(nil), m.team...)
+	id, bc := m.joining, m.bc
+	return func() tea.Msg {
+		ctx, cancel := shortCtx()
+		defer cancel()
+		var (
+			b   *api.Battle
+			err error
+		)
+		if id == "" {
+			b, err = bc.Create(ctx, team)
+		} else {
+			b, err = bc.Join(ctx, id, team)
+		}
+		return startedMsg{battle: b, err: err}
+	}
+}
+
+// startedMsg is the result of opening or joining.
+type startedMsg struct {
+	battle *api.Battle
+	err    error
+}
+
+func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	bs := m.battle
+	if bs == nil {
+		m.screen = screenBrowse
+		return m, nil
+	}
+	switch msg.String() {
+	case "q":
+		return m, tea.Quit
+	case "esc":
+		// Leaving the screen does not forfeit: the battle stays open and
+		// can be rejoined from the lobby.
+		m.screen = screenLobby
+		m.battle = nil
+		return m, fetchLobby(m.bc)
+	}
+
+	// Nothing below changes anything unless it is this player's move.
+	if bs.battle == nil || !m.bc.MyTurn(bs.battle) {
+		return m, nil
+	}
+	mine, theirs, ok := m.bc.SideFor(bs.battle)
+	if !ok {
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "tab":
+		bs.focus = (bs.focus + 1) % 3
+	case "shift+tab":
+		bs.focus = (bs.focus + 2) % 3
+	case "up", "k":
+		switch bs.focus {
+		case focusAttacker:
+			bs.pickAttacker = prevAlive(mine.Team, bs.pickAttacker)
+			bs.pickMove = 0
+		case focusTarget:
+			bs.pickTarget = prevAlive(theirs.Team, bs.pickTarget)
+		}
+	case "down", "j":
+		switch bs.focus {
+		case focusAttacker:
+			bs.pickAttacker = nextAlive(mine.Team, bs.pickAttacker)
+			bs.pickMove = 0
+		case focusTarget:
+			bs.pickTarget = nextAlive(theirs.Team, bs.pickTarget)
+		}
+	case "left", "h":
+		if bs.pickMove > 0 {
+			bs.pickMove--
+		}
+	case "right", "l":
+		if n := len(mine.Team[bs.pickAttacker].Moves); bs.pickMove < n-1 {
+			bs.pickMove++
+		}
+	case "enter":
+		return m, m.attack()
+	}
+	return m, nil
+}
+
+// attack sends the chosen move. A rejection is shown rather than
+// swallowed: a 409 means the state moved on, and the player should see
+// why their turn did not happen.
+func (m model) attack() tea.Cmd {
+	bs := m.battle
+	bc := m.bc
+	id, a, mv, t := bs.id, bs.pickAttacker, bs.pickMove, bs.pickTarget
+	return func() tea.Msg {
+		ctx, cancel := shortCtx()
+		defer cancel()
+		b, err := bc.Attack(ctx, id, a, mv, t)
+		return battleMsg{battle: b, err: err}
+	}
+}
+
+// nextAlive and prevAlive skip fainted Pokemon, so the cursor never
+// lands somewhere that cannot act.
+func nextAlive(team []api.BattlePokemon, i int) int {
+	for step := 1; step <= len(team); step++ {
+		j := (i + step) % len(team)
+		if !team[j].Fainted {
+			return j
+		}
+	}
+	return i
+}
+
+func prevAlive(team []api.BattlePokemon, i int) int {
+	for step := 1; step <= len(team); step++ {
+		j := (i - step + len(team)*2) % len(team)
+		if !team[j].Fainted {
+			return j
+		}
+	}
+	return i
+}
+
+var _ = battleclient.PollInterval

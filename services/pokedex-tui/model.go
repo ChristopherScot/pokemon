@@ -26,6 +26,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 // listWidth is how much of the window the list takes; the detail pane
@@ -61,6 +62,30 @@ type model struct {
 	err     error
 
 	width, height int
+
+	// Which screen is showing. Update and View dispatch on this, as the
+	// upstream `views` example does: one model and per-screen handlers,
+	// rather than nested Programs.
+	screen screen
+
+	// Battle mode. nil until a trainer is registered, because everything
+	// here needs a token.
+	bc      *battleclient.Client
+	trainer string
+
+	lobby    *api.WaitingList
+	lobbyIdx int
+
+	battle *battleState
+
+	// team is the three names picked for the next battle, in order.
+	team []string
+
+	// joining is the battle id being joined, empty when opening a new one.
+	joining string
+
+	// status is a transient line: an error from an action, or a hint.
+	status string
 }
 
 // newDelegate builds the row renderer for a light or dark terminal.
@@ -70,7 +95,7 @@ func newDelegate(isDark bool) list.DefaultDelegate {
 	return d
 }
 
-func newModel(c *api.Client) model {
+func newModel(c *api.Client, apiBase string) model {
 	// Zero size, as the upstream list examples do. Bubble Tea reads the
 	// terminal size at startup and delivers a WindowSizeMsg BEFORE the
 	// first render, so the real dimensions always arrive before anything
@@ -90,7 +115,17 @@ func newModel(c *api.Client) model {
 		}
 	}
 
-	return model{list: l, client: c, loading: true}
+	m := model{list: l, client: c, loading: true}
+	// A stored identity means battle mode is available immediately;
+	// without one the b key explains how to register.
+	if id, err := battleclient.LoadIdentity(); err == nil {
+		id.API = apiBase
+		if bc, err := battleclient.New(id); err == nil {
+			m.bc = bc
+			m.trainer = id.Name
+		}
+	}
+	return m
 }
 
 // Init kicks off the fetch. Returning a Cmd rather than calling the API
@@ -150,21 +185,96 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, nil
 
+	// Animation and battle polling only matter on the battle screen, but
+	// the messages arrive wherever they were scheduled - so they are
+	// handled before the per-screen dispatch rather than inside it.
+	case frameMsg:
+		if m.battle == nil {
+			return m, nil
+		}
+		if m.battle.advance() {
+			return m, tick()
+		}
+		return m, nil
+
+	case battleMsg:
+		if m.battle == nil {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.battle.err = msg.err
+			return m, pollBattle(m.bc, m.battle.id)
+		}
+		m.battle.err = nil
+		start := msg.battle.Version > m.battle.seen
+		m.battle.applyBattle(msg.battle)
+		cmds := []tea.Cmd{pollBattle(m.bc, m.battle.id)}
+		if start {
+			cmds = append(cmds, tick())
+		}
+		return m, tea.Batch(cmds...)
+
+	case startedMsg:
+		if msg.err != nil {
+			// Back to the lobby with the reason, rather than a battle
+			// screen with nothing in it.
+			m.screen = screenLobby
+			m.status = msg.err.Error()
+			return m, fetchLobby(m.bc)
+		}
+		bs := &battleState{client: m.bc, id: msg.battle.ID, shown: map[slot]int{}}
+		bs.applyBattle(msg.battle)
+		m.battle = bs
+		m.screen = screenBattle
+		m.status = ""
+		return m, tea.Batch(pollBattle(m.bc, bs.id), tick())
+
+	case lobbyMsg:
+		if msg.err != nil {
+			m.status = msg.err.Error()
+			return m, nil
+		}
+		m.lobby = msg.list
+		if m.lobbyIdx >= len(msg.list.Waiting) {
+			m.lobbyIdx = 0
+		}
+		return m, nil
+
 	case tea.KeyPressMsg:
 		// While the filter is open every key belongs to it - including
 		// "q". Without this check, typing a name containing q quits.
 		if m.list.FilterState() == list.Filtering {
 			break
 		}
-		switch msg.String() {
-		case "q", "ctrl+c":
+		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		return m.handleKey(msg)
 	}
 
+	// Only the browse screen's list consumes stray messages; on other
+	// screens forwarding them would scroll a list nobody can see.
+	if m.screen != screenBrowse {
+		return m, nil
+	}
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return m, cmd
+}
+
+// handleKey dispatches on the active screen, which is the pattern the
+// upstream views example uses.
+func (m model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch m.screen {
+	case screenLobby:
+		return m.lobbyKey(msg)
+	case screenTeam:
+		return m.teamKey(msg)
+	case screenBattle:
+		return m.battleKey(msg)
+	default:
+		return m.browseKey(msg)
+	}
 }
 
 var (
@@ -268,6 +378,31 @@ func (m model) detail() string {
 }
 
 func (m model) View() tea.View {
+	var content string
+	switch m.screen {
+	case screenLobby:
+		content = m.lobbyView()
+	case screenTeam:
+		content = m.teamView()
+	case screenBattle:
+		content = m.battle.view(m.width, m.height)
+	default:
+		content = m.browseView()
+	}
+
+	if m.status != "" {
+		content += "\n" + statusStyle.Render("  "+m.status)
+	}
+
+	v := tea.NewView(content)
+	// Draw on the terminal's alternate buffer, so the shell's scrollback
+	// is untouched and comes back when the program exits.
+	v.AltScreen = true
+	return v
+}
+
+// browseView is the original two-pane Pokedex.
+func (m model) browseView() string {
 	var body string
 	switch {
 	case m.err != nil:
@@ -285,10 +420,11 @@ func (m model) View() tea.View {
 	// and without this the detail pane would slide left and right as the
 	// selection changed.
 	left := listStyle.Width(listWidth).Render(m.list.View())
+	joined := lipgloss.JoinHorizontal(lipgloss.Top, left, body)
 
-	v := tea.NewView(lipgloss.JoinHorizontal(lipgloss.Top, left, body))
-	// Draw on the terminal's alternate buffer, so the shell's scrollback
-	// is untouched and comes back when the program exits.
-	v.AltScreen = true
-	return v
+	hint := "  b battle"
+	if m.bc != nil {
+		hint = fmt.Sprintf("  b battle as %s", m.trainer)
+	}
+	return joined + "\n" + labelStyle.Render(hint)
 }
