@@ -157,6 +157,37 @@ func newCombatants(dex *pokedex, names []string) ([]*combatant, error) {
 // game and confusing to read: the board would show the same name three
 // times with different HP, and a target index would be the only way to
 // tell them apart.
+// fillTeam completes a partial selection with random Pokemon.
+//
+// A client offering "pick the ones you care about" sends one or two
+// names, and the rest are the server's to choose - which is what makes
+// the empty slots in the web UI mean something rather than being a
+// validation error waiting to happen.
+func fillTeam(dex *pokedex, chosen []string, rng *rand.Rand) []string {
+	if len(chosen) >= teamSize {
+		return chosen
+	}
+	// Not already on the team: a random fill that duplicates a pick
+	// gives two of the same Pokemon with different HP, which reads as a
+	// bug rather than a roster.
+	taken := make(map[string]bool, len(chosen))
+	for _, n := range chosen {
+		taken[strings.ToLower(strings.TrimSpace(n))] = true
+	}
+
+	out := append([]string(nil), chosen...)
+	all := dex.list("", 0)
+	for len(out) < teamSize && len(taken) < len(all) {
+		pick := all[rng.Intn(len(all))]
+		if taken[pick.Name] {
+			continue
+		}
+		taken[pick.Name] = true
+		out = append(out, pick.Name)
+	}
+	return out
+}
+
 func randomTeam(dex *pokedex, rng *rand.Rand) []string {
 	all := dex.list("", 0)
 	if len(all) < teamSize {

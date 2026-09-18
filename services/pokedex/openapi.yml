@@ -7,7 +7,7 @@ info:
   title: pokedex
   # Bump this when the API changes. The generated client reports it in
   # X-Client-Version, so one version covers the API and its clients.
-  version: 0.3.0
+  version: 0.4.0
   description: pokedex, owned by me-myself-and-i.
 
 paths:
@@ -448,25 +448,26 @@ components:
       properties:
         team:
           type: array
-          minItems: 3
           maxItems: 3
           items:
             type: string
           description: >
-            Three Pokemon names. Omit to be given a random team, which
-            is what makes "just start a battle" one click in every
-            client rather than three names to think of.
+            Up to three Pokemon names. Anything you leave out is chosen
+            at random, so a client can offer "pick the ones you care
+            about" rather than all-or-nothing - and omitting the field
+            entirely is a full random team, which makes "just start a
+            battle" one click.
 
     JoinBattle:
       type: object
       properties:
         team:
           type: array
-          minItems: 3
           maxItems: 3
           items:
             type: string
-          description: Three Pokemon names. Omit for a random team.
+          description: >
+            Up to three Pokemon names; anything left out is random.
 
     TakeTurn:
       type: object

@@ -8,7 +8,31 @@
 // The API decides everything. This file renders state and posts intents,
 // exactly as the CLI and TUI do.
 
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import createClient, { exponentialRetry, noRetry } from '@christopherscot/pokedex-client'
+
+// The wire types, from the generated client's schema. Importing them
+// rather than restating them is the point of generating a client: a
+// field that changes in openapi.yml breaks this file at typecheck
+// rather than at runtime.
+import type { components } from '@christopherscot/pokedex-client'
+
+type Battle = components['schemas']['Battle']
+type WaitingBattle = components['schemas']['WaitingBattle']
+type BattleEvent = components['schemas']['BattleEvent']
+type BattlePokemon = components['schemas']['BattlePokemon']
+
+// The trainer identity kept in a cookie: a public name and the token
+// that authorises this trainer's moves.
+type Trainer = { name: string; token: string }
+
+// What each route reads off a request. Fastify takes these as generics
+// so request.body and request.params are typed rather than unknown -
+// which is what stops a route reading a field the client never sends.
+type IdParam = { id: string }
+type TeamBody = { team?: string[] }
+type NameBody = { name?: string }
+type TurnBody = { attacker: number; move: number; target: number }
 
 const baseUrl = process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local'
 // exponentialRetry spends about 3.4s across five attempts before giving
@@ -30,13 +54,13 @@ export const TYPE_COLOURS = {
   steel: '#60a1b8', fairy: '#ef70ef',
 }
 
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
-  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-))
+const esc = (s: unknown): string =>
+  String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 
 // The battle page. Everything below the initial render is done by the
 // inline script, which polls /battle/:id/state and swaps the board.
-function battlePage({ id, trainer }) {
+function battlePage({ id, trainer }: { id: string; trainer: string }) {
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -283,7 +307,7 @@ poll()
 </body></html>`
 }
 
-export function registerBattle(app) {
+export function registerBattle(app: FastifyInstance) {
   // One place where an unreachable API becomes a 502.
   //
   // openapi-fetch returns `error` for an HTTP error response but THROWS
@@ -291,7 +315,12 @@ export function registerBattle(app) {
   // otherwise 500 whenever the pokedex is down - which reads as a bug
   // here rather than a dependency being unavailable. Wrapping each call
   // in its own try/catch is six chances to forget one.
-  const reachable = (handler) => async (request, reply) => {
+  // Generic over the request, so a route's Params and Body types survive
+  // the wrapper. Typed as FastifyRequest it would erase them, and every
+  // request.params inside a wrapped handler goes back to unknown.
+  const reachable =
+    <Req extends FastifyRequest>(handler: (request: Req, reply: FastifyReply) => Promise<unknown>) =>
+    async (request: Req, reply: FastifyReply) => {
     try {
       return await handler(request, reply)
     } catch (err) {
@@ -303,7 +332,7 @@ export function registerBattle(app) {
   // The trainer is kept in a cookie so the browser behaves like the CLI:
   // register once, then play. Not auth - it is the same token model the
   // API uses, which stops one player moving another's Pokemon.
-  const readTrainer = (request) => {
+  const readTrainer = (request: FastifyRequest): Trainer | null => {
     const raw = request.headers.cookie || ''
     const m = /(?:^|;\s*)trainer=([^;]+)/.exec(raw)
     if (!m) return null
@@ -336,7 +365,7 @@ export function registerBattle(app) {
     return reply.type('text/html').send(lobbyPage({ me, waiting }))
   })
 
-  app.post('/battle/register', reachable(async (request, reply) => {
+  app.post<{ Body: NameBody }>('/battle/register', reachable(async (request, reply) => {
     const name = String((request.body || {}).name || '').trim()
     if (!name) return reply.code(400).send({ message: 'name is required' })
     const { data, error } = await api.POST('/trainers', { body: { name } })
@@ -349,7 +378,7 @@ export function registerBattle(app) {
     return { name: data.name }
   }))
 
-  app.post('/battle/open', reachable(async (request, reply) => {
+  app.post<{ Body: TeamBody }>('/battle/open', reachable(async (request, reply) => {
     const me = readTrainer(request)
     if (!me) return reply.code(401).send({ message: 'register first' })
     const { data, error } = await api.POST('/battles', {
@@ -360,7 +389,7 @@ export function registerBattle(app) {
     return { id: data.id }
   }))
 
-  app.post('/battle/:id/join', reachable(async (request, reply) => {
+  app.post<{ Params: IdParam; Body: TeamBody }>('/battle/:id/join', reachable(async (request, reply) => {
     const me = readTrainer(request)
     if (!me) return reply.code(401).send({ message: 'register first' })
     const { data, error } = await api.POST('/battles/{id}/join', {
@@ -371,7 +400,7 @@ export function registerBattle(app) {
     return { id: data.id }
   }))
 
-  app.get('/battle/:id', async (request, reply) => {
+  app.get<{ Params: IdParam }>('/battle/:id', async (request, reply) => {
     const me = readTrainer(request)
     if (!me) return reply.redirect('/battle')
     return reply.type('text/html').send(battlePage({ id: request.params.id, trainer: me.name }))
@@ -379,7 +408,7 @@ export function registerBattle(app) {
 
   // The poll endpoint. Proxied rather than called from the browser so
   // the API stays on the cluster network and the page needs no CORS.
-  app.get('/battle/:id/state', reachable(async (request, reply) => {
+  app.get<{ Params: IdParam }>('/battle/:id/state', reachable(async (request, reply) => {
     const { data, error } = await api.GET('/battles/{id}', {
       params: { path: { id: request.params.id } },
     })
@@ -387,7 +416,7 @@ export function registerBattle(app) {
     return data
   }))
 
-  app.post('/battle/:id/turn', reachable(async (request, reply) => {
+  app.post<{ Params: IdParam; Body: TurnBody }>('/battle/:id/turn', reachable(async (request, reply) => {
     const me = readTrainer(request)
     if (!me) return reply.code(401).send({ message: 'register first' })
     const { attacker, move, target } = request.body || {}
@@ -402,7 +431,7 @@ export function registerBattle(app) {
 
 // lobbyPage lists open battles and, when there is no trainer yet, asks
 // for a name first.
-function lobbyPage({ me, waiting }) {
+function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: WaitingBattle[] }) {
   const rows = waiting.length === 0
     ? '<p class="sub">nobody is waiting. open one below and share the link.</p>'
     : waiting.map((w) => `<div class="row">

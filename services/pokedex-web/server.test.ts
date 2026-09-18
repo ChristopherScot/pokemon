@@ -1,7 +1,7 @@
 import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { app } from './server.js'
+import { app } from './server.ts'
 
 // app.inject() drives the real routes and hooks without binding a port,
 // so these are fast and need no cleanup between cases.
@@ -37,7 +37,8 @@ test('metrics are exposed in Prometheus format', async () => {
   const res = await app.inject({ method: 'GET', url: '/metrics' })
 
   assert.equal(res.statusCode, 200)
-  assert.match(res.headers['content-type'], /text\/plain/)
+  // String(), because a header can be absent and strict mode says so.
+  assert.match(String(res.headers['content-type']), /text\/plain/)
   // The counter the deployment's scrape annotation exists to collect.
   assert.match(res.body, /http_requests_total\{[^}]*route="\/"/)
   // prom-client's process and heap metrics.
@@ -91,12 +92,14 @@ test('every battle route reports 502 when the API is unreachable', async () => {
   // ungarded route is enough to page someone at 3am for a dependency
   // being down.
   const cookie = 'trainer=' + encodeURIComponent(JSON.stringify({ name: 'x', token: 't' }))
+  // `as const` so method narrows to Fastify's HTTPMethods rather than
+  // widening to string, which its inject() signature rejects.
   for (const [method, url] of [
     ['GET', '/battle/abc/state'],
     ['POST', '/battle/open'],
     ['POST', '/battle/abc/join'],
     ['POST', '/battle/abc/turn'],
-  ]) {
+  ] as const) {
     const res = await app.inject({ method, url, headers: { cookie }, payload: {} })
     assert.equal(res.statusCode, 502, `${method} ${url} should be 502, got ${res.statusCode}`)
   }

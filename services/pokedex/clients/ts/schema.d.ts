@@ -232,11 +232,11 @@ export interface components {
             createdAt: string;
         };
         CreateBattle: {
-            /** @description Three Pokemon names. Omit to be given a random team, which is what makes "just start a battle" one click in every client rather than three names to think of. */
+            /** @description Up to three Pokemon names. Anything you leave out is chosen at random, so a client can offer "pick the ones you care about" rather than all-or-nothing - and omitting the field entirely is a full random team, which makes "just start a battle" one click. */
             team?: string[];
         };
         JoinBattle: {
-            /** @description Three Pokemon names. Omit for a random team. */
+            /** @description Up to three Pokemon names; anything left out is random. */
             team?: string[];
         };
         TakeTurn: {

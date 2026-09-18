@@ -176,8 +176,8 @@ func (s *CreateBattle) Validate() error {
 			return nil // optional
 		}
 		if err := (validate.Array{
-			MinLength:    3,
-			MinLengthSet: true,
+			MinLength:    0,
+			MinLengthSet: false,
 			MaxLength:    3,
 			MaxLengthSet: true,
 		}).ValidateLength(len(s.Team)); err != nil {
@@ -239,8 +239,8 @@ func (s *JoinBattle) Validate() error {
 			return nil // optional
 		}
 		if err := (validate.Array{
-			MinLength:    3,
-			MinLengthSet: true,
+			MinLength:    0,
+			MinLengthSet: false,
 			MaxLength:    3,
 			MaxLengthSet: true,
 		}).ValidateLength(len(s.Team)); err != nil {

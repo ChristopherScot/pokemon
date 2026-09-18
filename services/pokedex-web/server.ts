@@ -1,9 +1,21 @@
+// TypeScript, run directly: Node strips the types at load time, so
+// there is no build step, no bundler and no dist/ - the container still
+// runs `node server.ts` and the distroless image needs nothing extra.
+//
+// Stripping is not checking. `npm run typecheck` is what actually
+// verifies these types, and CI runs it before the tests.
+//
+// Few annotations below, deliberately: Fastify ships its own types and
+// infers request, reply and hook parameters from the route it is
+// attached to. Spelling them out adds nothing a reader does not get from
+// hovering, and gives the next person something to keep in sync.
 import Fastify, { LogController } from 'fastify'
-import { register as registerPokedex } from './pokedex.js'
-import { registerBattle } from './battle.js'
+
+import { register as registerPokedex } from './pokedex.ts'
+import { registerBattle } from './battle.ts'
 import { collectDefaultMetrics, Counter, Histogram, register } from 'prom-client'
 
-const port = Number(process.env.PORT || '3000')
+const port: number = Number(process.env.PORT || '3000')
 
 // Matches what go-service's slog emits, so one Loki query works against
 // either runtime: an ISO-8601 `time`, an uppercase `level` name rather
@@ -24,13 +36,13 @@ const app = Fastify({
     },
     timestamp: () => `,"time":"${new Date().toISOString()}"`,
     formatters: {
-      level: (label) => ({ level: label.toUpperCase() }),
+      level: (label: string) => ({ level: label.toUpperCase() }),
     },
     // Fastify's own listening lines are silenced by returning an empty
     // message from listenTextResolver; drop those here so they do not
     // appear as blank entries.
     hooks: {
-      logMethod(args, method) {
+      logMethod(this: unknown, args: unknown[], method: (...a: unknown[]) => void) {
         if (args[0] === '') return
         return method.apply(this, args)
       },
@@ -94,7 +106,7 @@ app.get('/healthz', async (_request, reply) => reply.type('text/plain').send('ok
 app.get('/metrics', async (_request, reply) =>
   reply.type(register.contentType).send(await register.metrics()))
 
-// The card UI lives in pokedex.js; this file stays the template's.
+// The card UI lives in pokedex.ts; this file stays the template's.
 registerPokedex(app)
 
 // Battle mode. Separate module because it is the only part of this
@@ -106,7 +118,7 @@ registerBattle(app)
 // Kubernetes sends SIGTERM, waits terminationGracePeriodSeconds, then
 // SIGKILLs; draining inside that window is what makes a rollout invisible
 // to callers.
-for (const sig of ['SIGTERM', 'SIGINT']) {
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, async () => {
     app.log.info('shutting down')
     await app.close()
@@ -118,7 +130,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
 // hooks without binding a port.
 export { app }
 
-async function start() {
+async function start(): Promise<void> {
   try {
     // Fastify logs a listening line itself, unconditionally and once per
     // bound address - `0.0.0.0` expands to every interface, so that is
@@ -134,8 +146,16 @@ async function start() {
   }
 }
 
-// Importing this file from a test must not start a server. argv[1] is the
-// entrypoint Node was given, so this is false under the test runner.
-if (process.argv[1]?.endsWith('server.js')) {
+// Importing this file from a test must not start a server. argv[1] is
+// the entrypoint Node was given, so this is false under the test runner.
+//
+// Both extensions, because there are two of them: `node server.ts`
+// locally and `node server.js` in the image, where Vite has bundled
+// this file. Checking only the source extension makes the bundle start
+// nothing, exit 0, and log absolutely nothing - which looks like a
+// container that ran and stopped rather than a guard that did not
+// match.
+const entry = process.argv[1] ?? ''
+if (entry.endsWith('server.ts') || entry.endsWith('server.js')) {
   await start()
 }
