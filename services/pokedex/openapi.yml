@@ -6,8 +6,8 @@ openapi: 3.0.3
 info:
   title: pokedex
   # Bump this when the API changes. The generated client reports it in
-  # X-Client-Version, so one version covers the API and its clients.
-  version: 0.6.0
+  # Client-Version, so one version covers the API and its clients.
+  version: 0.7.0
   description: pokedex, owned by me-myself-and-i.
 
 paths:
@@ -101,6 +101,91 @@ paths:
                 $ref: '#/components/schemas/Pokemon'
         '404':
           description: No Pokemon by that name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /pokemon/{name}/moves:
+    get:
+      operationId: listPokemonMoves
+      summary: Every move this Pokemon can learn.
+      description: >-
+        The full learnable set, which runs to 86 moves for Bulbasaur and
+        167 for Mewtwo. This is why it is its own endpoint: putting it on
+        the Pokemon object would dominate every list response. The six a
+        Pokemon brings to a battle are on the Pokemon itself.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Lowercase name, e.g. "pikachu".
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The moves.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoveList'
+        '404':
+          description: No Pokemon by that name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /moves:
+    get:
+      operationId: listMoves
+      summary: Every move in the Pokedex.
+      responses:
+        '200':
+          description: The moves.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoveList'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /moves/{name}:
+    get:
+      operationId: getMove
+      summary: One move by name.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Lowercase, hyphenated name, e.g. "vine-whip".
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The move.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Move'
+        '404':
+          description: No move by that name.
           content:
             application/json:
               schema:
@@ -629,13 +714,27 @@ components:
 
     Pokemon:
       type: object
-      required: [id, name, types, height, weight, sprite, moves]
+      required: [id, name, types, height, weight, sprite, moves, description, genus]
       properties:
         id:
           type: integer
           description: National Pokedex number.
         name:
           type: string
+        description:
+          type: string
+          description: >-
+            The Pokedex entry, from the most recent game that has one.
+            Flattened to a single line; the games break it for their own
+            text box.
+        genus:
+          type: string
+          description: The one-line label the games give it, e.g. "Seed Pokemon".
+        habitat:
+          type: string
+          description: >-
+            Where it is found, e.g. "grassland". Empty for species the
+            games never placed.
         types:
           type: array
           items:
@@ -650,14 +749,28 @@ components:
         sprite:
           type: string
           description: Absolute URL to the front-facing sprite.
+        artwork:
+          type: string
+          description: >-
+            Absolute URL to the official artwork, which is several
+            hundred pixels where sprite is 96.
+        evolvesFrom:
+          type: string
+          description: Name of the Pokemon this evolves from; empty if it is a base form.
+        legendary:
+          type: boolean
+          description: True for legendary and mythical Pokemon.
         moves:
           type: array
           items:
             $ref: '#/components/schemas/Move'
+          description: >-
+            The moves this Pokemon brings to a battle. Not everything it
+            could learn - see GET /pokemon/{name}/moves for that.
 
     Move:
       type: object
-      required: [name, type, power]
+      required: [name, type, power, description, effect, pp, damageClass]
       properties:
         name:
           type: string
@@ -666,6 +779,41 @@ components:
         power:
           type: integer
           description: Base power; 0 for status moves that deal no damage.
+        description:
+          type: string
+          description: >-
+            How the move looks, in the games' own words. Flattened to a
+            single line.
+        effect:
+          type: string
+          description: >-
+            What the move does mechanically, where description says how
+            it looks.
+        accuracy:
+          type: integer
+          description: >-
+            Percent chance to hit. Omitted for moves that cannot miss,
+            which is not the same as 100.
+        pp:
+          type: integer
+          description: How many times it can be used.
+        damageClass:
+          type: string
+          description: >-
+            "physical", "special" or "status". Physical moves read
+            attack and defense, special ones the special stats, and
+            status moves deal no damage.
+
+    MoveList:
+      type: object
+      required: [count, moves]
+      properties:
+        count:
+          type: integer
+        moves:
+          type: array
+          items:
+            $ref: '#/components/schemas/Move'
 
     PokemonList:
       type: object

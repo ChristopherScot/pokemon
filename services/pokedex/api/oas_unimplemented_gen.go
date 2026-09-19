@@ -42,6 +42,15 @@ func (UnimplementedHandler) GetHealthz(ctx context.Context) (r *Health, _ error)
 	return r, ht.ErrNotImplemented
 }
 
+// GetMove implements getMove operation.
+//
+// One move by name.
+//
+// GET /moves/{name}
+func (UnimplementedHandler) GetMove(ctx context.Context, params GetMoveParams) (r GetMoveRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetPokemon implements getPokemon operation.
 //
 // One Pokemon by name.
@@ -69,12 +78,32 @@ func (UnimplementedHandler) JoinBattle(ctx context.Context, req *JoinBattle, par
 	return r, ht.ErrNotImplemented
 }
 
+// ListMoves implements listMoves operation.
+//
+// Every move in the Pokedex.
+//
+// GET /moves
+func (UnimplementedHandler) ListMoves(ctx context.Context) (r *MoveList, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // ListPokemon implements listPokemon operation.
 //
 // List Pokemon, optionally filtered by type.
 //
 // GET /pokemon
 func (UnimplementedHandler) ListPokemon(ctx context.Context, params ListPokemonParams) (r *PokemonList, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
+// ListPokemonMoves implements listPokemonMoves operation.
+//
+// The full learnable set, which runs to 86 moves for Bulbasaur and 167 for Mewtwo. This is why it is
+// its own endpoint: putting it on the Pokemon object would dominate every list response. The six a
+// Pokemon brings to a battle are on the Pokemon itself.
+//
+// GET /pokemon/{name}/moves
+func (UnimplementedHandler) ListPokemonMoves(ctx context.Context, params ListPokemonMovesParams) (r ListPokemonMovesRes, _ error) {
 	return r, ht.ErrNotImplemented
 }
 
