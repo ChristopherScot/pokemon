@@ -407,9 +407,11 @@ func (s *Error) SetMessage(val string) {
 	s.Message = val
 }
 
-func (*Error) getBattleRes()       {}
-func (*Error) getPokemonRes()      {}
-func (*Error) registerTrainerRes() {}
+func (*Error) getBattleRes()        {}
+func (*Error) getMoveRes()          {}
+func (*Error) getPokemonRes()       {}
+func (*Error) listPokemonMovesRes() {}
+func (*Error) registerTrainerRes()  {}
 
 // ErrorStatusCode wraps Error with StatusCode.
 type ErrorStatusCode struct {
@@ -550,6 +552,17 @@ type Move struct {
 	Type string `json:"type"`
 	// Base power; 0 for status moves that deal no damage.
 	Power int `json:"power"`
+	// How the move looks, in the games' own words. Flattened to a single line.
+	Description string `json:"description"`
+	// What the move does mechanically, where description says how it looks.
+	Effect string `json:"effect"`
+	// Percent chance to hit. Omitted for moves that cannot miss, which is not the same as 100.
+	Accuracy OptInt `json:"accuracy"`
+	// How many times it can be used.
+	Pp int `json:"pp"`
+	// "physical", "special" or "status". Physical moves read attack and defense, special ones the special
+	// stats, and status moves deal no damage.
+	DamageClass string `json:"damageClass"`
 }
 
 // GetName returns the value of Name.
@@ -567,6 +580,31 @@ func (s *Move) GetPower() int {
 	return s.Power
 }
 
+// GetDescription returns the value of Description.
+func (s *Move) GetDescription() string {
+	return s.Description
+}
+
+// GetEffect returns the value of Effect.
+func (s *Move) GetEffect() string {
+	return s.Effect
+}
+
+// GetAccuracy returns the value of Accuracy.
+func (s *Move) GetAccuracy() OptInt {
+	return s.Accuracy
+}
+
+// GetPp returns the value of Pp.
+func (s *Move) GetPp() int {
+	return s.Pp
+}
+
+// GetDamageClass returns the value of DamageClass.
+func (s *Move) GetDamageClass() string {
+	return s.DamageClass
+}
+
 // SetName sets the value of Name.
 func (s *Move) SetName(val string) {
 	s.Name = val
@@ -581,6 +619,61 @@ func (s *Move) SetType(val string) {
 func (s *Move) SetPower(val int) {
 	s.Power = val
 }
+
+// SetDescription sets the value of Description.
+func (s *Move) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetEffect sets the value of Effect.
+func (s *Move) SetEffect(val string) {
+	s.Effect = val
+}
+
+// SetAccuracy sets the value of Accuracy.
+func (s *Move) SetAccuracy(val OptInt) {
+	s.Accuracy = val
+}
+
+// SetPp sets the value of Pp.
+func (s *Move) SetPp(val int) {
+	s.Pp = val
+}
+
+// SetDamageClass sets the value of DamageClass.
+func (s *Move) SetDamageClass(val string) {
+	s.DamageClass = val
+}
+
+func (*Move) getMoveRes() {}
+
+// Ref: #/components/schemas/MoveList
+type MoveList struct {
+	Count int    `json:"count"`
+	Moves []Move `json:"moves"`
+}
+
+// GetCount returns the value of Count.
+func (s *MoveList) GetCount() int {
+	return s.Count
+}
+
+// GetMoves returns the value of Moves.
+func (s *MoveList) GetMoves() []Move {
+	return s.Moves
+}
+
+// SetCount sets the value of Count.
+func (s *MoveList) SetCount(val int) {
+	s.Count = val
+}
+
+// SetMoves sets the value of Moves.
+func (s *MoveList) SetMoves(val []Move) {
+	s.Moves = val
+}
+
+func (*MoveList) listPokemonMovesRes() {}
 
 // NewOptBool returns new OptBool with value set to v.
 func NewOptBool(v bool) OptBool {
@@ -817,6 +910,13 @@ type Pokemon struct {
 	// National Pokedex number.
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+	// The Pokedex entry, from the most recent game that has one. Flattened to a single line; the games
+	// break it for their own text box.
+	Description string `json:"description"`
+	// The one-line label the games give it, e.g. "Seed Pokemon".
+	Genus string `json:"genus"`
+	// Where it is found, e.g. "grassland". Empty for species the games never placed.
+	Habitat OptString `json:"habitat"`
 	// One or two types, e.g. ["grass", "poison"].
 	Types []string `json:"types"`
 	// Decimetres, as the upstream Pokedex reports it.
@@ -825,7 +925,15 @@ type Pokemon struct {
 	Weight int `json:"weight"`
 	// Absolute URL to the front-facing sprite.
 	Sprite string `json:"sprite"`
-	Moves  []Move `json:"moves"`
+	// Absolute URL to the official artwork, which is several hundred pixels where sprite is 96.
+	Artwork OptString `json:"artwork"`
+	// Name of the Pokemon this evolves from; empty if it is a base form.
+	EvolvesFrom OptString `json:"evolvesFrom"`
+	// True for legendary and mythical Pokemon.
+	Legendary OptBool `json:"legendary"`
+	// The moves this Pokemon brings to a battle. Not everything it could learn - see GET
+	// /pokemon/{name}/moves for that.
+	Moves []Move `json:"moves"`
 }
 
 // GetID returns the value of ID.
@@ -836,6 +944,21 @@ func (s *Pokemon) GetID() int {
 // GetName returns the value of Name.
 func (s *Pokemon) GetName() string {
 	return s.Name
+}
+
+// GetDescription returns the value of Description.
+func (s *Pokemon) GetDescription() string {
+	return s.Description
+}
+
+// GetGenus returns the value of Genus.
+func (s *Pokemon) GetGenus() string {
+	return s.Genus
+}
+
+// GetHabitat returns the value of Habitat.
+func (s *Pokemon) GetHabitat() OptString {
+	return s.Habitat
 }
 
 // GetTypes returns the value of Types.
@@ -858,6 +981,21 @@ func (s *Pokemon) GetSprite() string {
 	return s.Sprite
 }
 
+// GetArtwork returns the value of Artwork.
+func (s *Pokemon) GetArtwork() OptString {
+	return s.Artwork
+}
+
+// GetEvolvesFrom returns the value of EvolvesFrom.
+func (s *Pokemon) GetEvolvesFrom() OptString {
+	return s.EvolvesFrom
+}
+
+// GetLegendary returns the value of Legendary.
+func (s *Pokemon) GetLegendary() OptBool {
+	return s.Legendary
+}
+
 // GetMoves returns the value of Moves.
 func (s *Pokemon) GetMoves() []Move {
 	return s.Moves
@@ -871,6 +1009,21 @@ func (s *Pokemon) SetID(val int) {
 // SetName sets the value of Name.
 func (s *Pokemon) SetName(val string) {
 	s.Name = val
+}
+
+// SetDescription sets the value of Description.
+func (s *Pokemon) SetDescription(val string) {
+	s.Description = val
+}
+
+// SetGenus sets the value of Genus.
+func (s *Pokemon) SetGenus(val string) {
+	s.Genus = val
+}
+
+// SetHabitat sets the value of Habitat.
+func (s *Pokemon) SetHabitat(val OptString) {
+	s.Habitat = val
 }
 
 // SetTypes sets the value of Types.
@@ -891,6 +1044,21 @@ func (s *Pokemon) SetWeight(val int) {
 // SetSprite sets the value of Sprite.
 func (s *Pokemon) SetSprite(val string) {
 	s.Sprite = val
+}
+
+// SetArtwork sets the value of Artwork.
+func (s *Pokemon) SetArtwork(val OptString) {
+	s.Artwork = val
+}
+
+// SetEvolvesFrom sets the value of EvolvesFrom.
+func (s *Pokemon) SetEvolvesFrom(val OptString) {
+	s.EvolvesFrom = val
+}
+
+// SetLegendary sets the value of Legendary.
+func (s *Pokemon) SetLegendary(val OptBool) {
+	s.Legendary = val
 }
 
 // SetMoves sets the value of Moves.

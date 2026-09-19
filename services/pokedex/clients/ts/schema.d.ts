@@ -72,6 +72,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/pokemon/{name}/moves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every move this Pokemon can learn.
+         * @description The full learnable set, which runs to 86 moves for Bulbasaur and 167 for Mewtwo. This is why it is its own endpoint: putting it on the Pokemon object would dominate every list response. The six a Pokemon brings to a battle are on the Pokemon itself.
+         */
+        get: operations["listPokemonMoves"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/moves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every move in the Pokedex. */
+        get: operations["listMoves"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/moves/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One move by name. */
+        get: operations["getMove"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/types": {
         parameters: {
             query?: never;
@@ -311,6 +365,12 @@ export interface components {
             /** @description National Pokedex number. */
             id: number;
             name: string;
+            /** @description The Pokedex entry, from the most recent game that has one. Flattened to a single line; the games break it for their own text box. */
+            description: string;
+            /** @description The one-line label the games give it, e.g. "Seed Pokemon". */
+            genus: string;
+            /** @description Where it is found, e.g. "grassland". Empty for species the games never placed. */
+            habitat?: string;
             /** @description One or two types, e.g. ["grass", "poison"]. */
             types: string[];
             /** @description Decimetres, as the upstream Pokedex reports it. */
@@ -319,6 +379,13 @@ export interface components {
             weight: number;
             /** @description Absolute URL to the front-facing sprite. */
             sprite: string;
+            /** @description Absolute URL to the official artwork, which is several hundred pixels where sprite is 96. */
+            artwork?: string;
+            /** @description Name of the Pokemon this evolves from; empty if it is a base form. */
+            evolvesFrom?: string;
+            /** @description True for legendary and mythical Pokemon. */
+            legendary?: boolean;
+            /** @description The moves this Pokemon brings to a battle. Not everything it could learn - see GET /pokemon/{name}/moves for that. */
             moves: components["schemas"]["Move"][];
         };
         Move: {
@@ -326,6 +393,20 @@ export interface components {
             type: string;
             /** @description Base power; 0 for status moves that deal no damage. */
             power: number;
+            /** @description How the move looks, in the games' own words. Flattened to a single line. */
+            description: string;
+            /** @description What the move does mechanically, where description says how it looks. */
+            effect: string;
+            /** @description Percent chance to hit. Omitted for moves that cannot miss, which is not the same as 100. */
+            accuracy?: number;
+            /** @description How many times it can be used. */
+            pp: number;
+            /** @description "physical", "special" or "status". Physical moves read attack and defense, special ones the special stats, and status moves deal no damage. */
+            damageClass: string;
+        };
+        MoveList: {
+            count: number;
+            moves: components["schemas"]["Move"][];
         };
         PokemonList: {
             count: number;
@@ -473,6 +554,117 @@ export interface operations {
                 };
             };
             /** @description No Pokemon by that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unexpected error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listPokemonMoves: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Lowercase name, e.g. "pikachu". */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The moves. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoveList"];
+                };
+            };
+            /** @description No Pokemon by that name. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Unexpected error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMoves: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The moves. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoveList"];
+                };
+            };
+            /** @description Unexpected error. */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Lowercase, hyphenated name, e.g. "vine-whip". */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The move. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Move"];
+                };
+            };
+            /** @description No move by that name. */
             404: {
                 headers: {
                     [name: string]: unknown;

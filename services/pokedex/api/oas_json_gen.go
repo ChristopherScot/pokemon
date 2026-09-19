@@ -1499,12 +1499,39 @@ func (s *Move) encodeFields(e *jx.Encoder) {
 		e.FieldStart("power")
 		e.Int(s.Power)
 	}
+	{
+		e.FieldStart("description")
+		e.Str(s.Description)
+	}
+	{
+		e.FieldStart("effect")
+		e.Str(s.Effect)
+	}
+	{
+		if s.Accuracy.Set {
+			e.FieldStart("accuracy")
+			s.Accuracy.Encode(e)
+		}
+	}
+	{
+		e.FieldStart("pp")
+		e.Int(s.Pp)
+	}
+	{
+		e.FieldStart("damageClass")
+		e.Str(s.DamageClass)
+	}
 }
 
-var jsonFieldsNameOfMove = [3]string{
+var jsonFieldsNameOfMove = [8]string{
 	0: "name",
 	1: "type",
 	2: "power",
+	3: "description",
+	4: "effect",
+	5: "accuracy",
+	6: "pp",
+	7: "damageClass",
 }
 
 // Decode decodes Move from json.
@@ -1552,6 +1579,64 @@ func (s *Move) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"power\"")
 			}
+		case "description":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Str()
+				s.Description = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"description\"")
+			}
+		case "effect":
+			requiredBitSet[0] |= 1 << 4
+			if err := func() error {
+				v, err := d.Str()
+				s.Effect = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"effect\"")
+			}
+		case "accuracy":
+			if err := func() error {
+				s.Accuracy.Reset()
+				if err := s.Accuracy.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"accuracy\"")
+			}
+		case "pp":
+			requiredBitSet[0] |= 1 << 6
+			if err := func() error {
+				v, err := d.Int()
+				s.Pp = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"pp\"")
+			}
+		case "damageClass":
+			requiredBitSet[0] |= 1 << 7
+			if err := func() error {
+				v, err := d.Str()
+				s.DamageClass = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"damageClass\"")
+			}
 		default:
 			return d.Skip()
 		}
@@ -1562,7 +1647,7 @@ func (s *Move) Decode(d *jx.Decoder) error {
 	// Validate required fields.
 	var failures []validate.FieldError
 	for i, mask := range [1]uint8{
-		0b00000111,
+		0b11011111,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.
@@ -1604,6 +1689,129 @@ func (s *Move) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements stdjson.Unmarshaler.
 func (s *Move) UnmarshalJSON(data []byte) error {
+	d := jx.DecodeBytes(data)
+	return s.Decode(d)
+}
+
+// Encode implements json.Marshaler.
+func (s *MoveList) Encode(e *jx.Encoder) {
+	e.ObjStart()
+	s.encodeFields(e)
+	e.ObjEnd()
+}
+
+// encodeFields encodes fields.
+func (s *MoveList) encodeFields(e *jx.Encoder) {
+	{
+		e.FieldStart("count")
+		e.Int(s.Count)
+	}
+	{
+		e.FieldStart("moves")
+		e.ArrStart()
+		for _, elem := range s.Moves {
+			elem.Encode(e)
+		}
+		e.ArrEnd()
+	}
+}
+
+var jsonFieldsNameOfMoveList = [2]string{
+	0: "count",
+	1: "moves",
+}
+
+// Decode decodes MoveList from json.
+func (s *MoveList) Decode(d *jx.Decoder) error {
+	if s == nil {
+		return errors.New("invalid: unable to decode MoveList to nil")
+	}
+	var requiredBitSet [1]uint8
+
+	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
+		switch string(k) {
+		case "count":
+			requiredBitSet[0] |= 1 << 0
+			if err := func() error {
+				v, err := d.Int()
+				s.Count = int(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"count\"")
+			}
+		case "moves":
+			requiredBitSet[0] |= 1 << 1
+			if err := func() error {
+				s.Moves = make([]Move, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem Move
+					if err := elem.Decode(d); err != nil {
+						return err
+					}
+					s.Moves = append(s.Moves, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"moves\"")
+			}
+		default:
+			return d.Skip()
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "decode MoveList")
+	}
+	// Validate required fields.
+	var failures []validate.FieldError
+	for i, mask := range [1]uint8{
+		0b00000011,
+	} {
+		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
+			// Mask only required fields and check equality to mask using XOR.
+			//
+			// If XOR result is not zero, result is not equal to expected, so some fields are missed.
+			// Bits of fields which would be set are actually bits of missed fields.
+			missed := bits.OnesCount8(result)
+			for bitN := 0; bitN < missed; bitN++ {
+				bitIdx := bits.TrailingZeros8(result)
+				fieldIdx := i*8 + bitIdx
+				var name string
+				if fieldIdx < len(jsonFieldsNameOfMoveList) {
+					name = jsonFieldsNameOfMoveList[fieldIdx]
+				} else {
+					name = strconv.Itoa(fieldIdx)
+				}
+				failures = append(failures, validate.FieldError{
+					Name:  name,
+					Error: validate.ErrFieldRequired,
+				})
+				// Reset bit.
+				result &^= 1 << bitIdx
+			}
+		}
+	}
+	if len(failures) > 0 {
+		return &validate.Error{Fields: failures}
+	}
+
+	return nil
+}
+
+// MarshalJSON implements stdjson.Marshaler.
+func (s *MoveList) MarshalJSON() ([]byte, error) {
+	e := jx.Encoder{}
+	s.Encode(&e)
+	return e.Bytes(), nil
+}
+
+// UnmarshalJSON implements stdjson.Unmarshaler.
+func (s *MoveList) UnmarshalJSON(data []byte) error {
 	d := jx.DecodeBytes(data)
 	return s.Decode(d)
 }
@@ -1799,6 +2007,20 @@ func (s *Pokemon) encodeFields(e *jx.Encoder) {
 		e.Str(s.Name)
 	}
 	{
+		e.FieldStart("description")
+		e.Str(s.Description)
+	}
+	{
+		e.FieldStart("genus")
+		e.Str(s.Genus)
+	}
+	{
+		if s.Habitat.Set {
+			e.FieldStart("habitat")
+			s.Habitat.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("types")
 		e.ArrStart()
 		for _, elem := range s.Types {
@@ -1819,6 +2041,24 @@ func (s *Pokemon) encodeFields(e *jx.Encoder) {
 		e.Str(s.Sprite)
 	}
 	{
+		if s.Artwork.Set {
+			e.FieldStart("artwork")
+			s.Artwork.Encode(e)
+		}
+	}
+	{
+		if s.EvolvesFrom.Set {
+			e.FieldStart("evolvesFrom")
+			s.EvolvesFrom.Encode(e)
+		}
+	}
+	{
+		if s.Legendary.Set {
+			e.FieldStart("legendary")
+			s.Legendary.Encode(e)
+		}
+	}
+	{
 		e.FieldStart("moves")
 		e.ArrStart()
 		for _, elem := range s.Moves {
@@ -1828,14 +2068,20 @@ func (s *Pokemon) encodeFields(e *jx.Encoder) {
 	}
 }
 
-var jsonFieldsNameOfPokemon = [7]string{
-	0: "id",
-	1: "name",
-	2: "types",
-	3: "height",
-	4: "weight",
-	5: "sprite",
-	6: "moves",
+var jsonFieldsNameOfPokemon = [13]string{
+	0:  "id",
+	1:  "name",
+	2:  "description",
+	3:  "genus",
+	4:  "habitat",
+	5:  "types",
+	6:  "height",
+	7:  "weight",
+	8:  "sprite",
+	9:  "artwork",
+	10: "evolvesFrom",
+	11: "legendary",
+	12: "moves",
 }
 
 // Decode decodes Pokemon from json.
@@ -1843,7 +2089,7 @@ func (s *Pokemon) Decode(d *jx.Decoder) error {
 	if s == nil {
 		return errors.New("invalid: unable to decode Pokemon to nil")
 	}
-	var requiredBitSet [1]uint8
+	var requiredBitSet [2]uint8
 
 	if err := d.ObjBytes(func(d *jx.Decoder, k []byte) error {
 		switch string(k) {
@@ -1871,8 +2117,42 @@ func (s *Pokemon) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"name\"")
 			}
-		case "types":
+		case "description":
 			requiredBitSet[0] |= 1 << 2
+			if err := func() error {
+				v, err := d.Str()
+				s.Description = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"description\"")
+			}
+		case "genus":
+			requiredBitSet[0] |= 1 << 3
+			if err := func() error {
+				v, err := d.Str()
+				s.Genus = string(v)
+				if err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"genus\"")
+			}
+		case "habitat":
+			if err := func() error {
+				s.Habitat.Reset()
+				if err := s.Habitat.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"habitat\"")
+			}
+		case "types":
+			requiredBitSet[0] |= 1 << 5
 			if err := func() error {
 				s.Types = make([]string, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -1892,7 +2172,7 @@ func (s *Pokemon) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"types\"")
 			}
 		case "height":
-			requiredBitSet[0] |= 1 << 3
+			requiredBitSet[0] |= 1 << 6
 			if err := func() error {
 				v, err := d.Int()
 				s.Height = int(v)
@@ -1904,7 +2184,7 @@ func (s *Pokemon) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"height\"")
 			}
 		case "weight":
-			requiredBitSet[0] |= 1 << 4
+			requiredBitSet[0] |= 1 << 7
 			if err := func() error {
 				v, err := d.Int()
 				s.Weight = int(v)
@@ -1916,7 +2196,7 @@ func (s *Pokemon) Decode(d *jx.Decoder) error {
 				return errors.Wrap(err, "decode field \"weight\"")
 			}
 		case "sprite":
-			requiredBitSet[0] |= 1 << 5
+			requiredBitSet[1] |= 1 << 0
 			if err := func() error {
 				v, err := d.Str()
 				s.Sprite = string(v)
@@ -1927,8 +2207,38 @@ func (s *Pokemon) Decode(d *jx.Decoder) error {
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"sprite\"")
 			}
+		case "artwork":
+			if err := func() error {
+				s.Artwork.Reset()
+				if err := s.Artwork.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"artwork\"")
+			}
+		case "evolvesFrom":
+			if err := func() error {
+				s.EvolvesFrom.Reset()
+				if err := s.EvolvesFrom.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"evolvesFrom\"")
+			}
+		case "legendary":
+			if err := func() error {
+				s.Legendary.Reset()
+				if err := s.Legendary.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"legendary\"")
+			}
 		case "moves":
-			requiredBitSet[0] |= 1 << 6
+			requiredBitSet[1] |= 1 << 4
 			if err := func() error {
 				s.Moves = make([]Move, 0)
 				if err := d.Arr(func(d *jx.Decoder) error {
@@ -1954,8 +2264,9 @@ func (s *Pokemon) Decode(d *jx.Decoder) error {
 	}
 	// Validate required fields.
 	var failures []validate.FieldError
-	for i, mask := range [1]uint8{
-		0b01111111,
+	for i, mask := range [2]uint8{
+		0b11101111,
+		0b00010001,
 	} {
 		if result := (requiredBitSet[i] & mask) ^ mask; result != 0 {
 			// Mask only required fields and check equality to mask using XOR.

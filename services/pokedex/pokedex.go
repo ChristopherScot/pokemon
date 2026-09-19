@@ -25,6 +25,29 @@ import (
 //go:embed pokedex.json
 var pokedexJSON []byte
 
+// dataset mirrors pokedex.json's top level.
+//
+// Moves live in one catalogue rather than inlined per Pokemon: tackle
+// is known by dozens of them, and a copy of its description in each
+// would be dozens of places for the text to drift.
+type dataset struct {
+	Pokemon []entry     `json:"pokemon"`
+	Moves   []moveEntry `json:"moves"`
+}
+
+// moveEntry mirrors one record in that catalogue.
+type moveEntry struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Power       int    `json:"power"`
+	Description string `json:"description"`
+	Effect      string `json:"effect"`
+	// Nil for a move that cannot miss, which is not the same as 100.
+	Accuracy    *int   `json:"accuracy"`
+	PP          int    `json:"pp"`
+	DamageClass string `json:"damageClass"`
+}
+
 // entry mirrors pokedex.json. It is deliberately separate from
 // api.Pokemon: the generated type is the API contract, and decoding
 // straight into it would make a spec change a silent data-format change.
@@ -42,15 +65,24 @@ type entry struct {
 	// The rest of the battle stats, same source and same reason: a
 	// damage formula needs attack and defense, and stat-changing moves
 	// need something to change.
-	BaseAttack  int    `json:"baseAttack"`
-	BaseDefense int    `json:"baseDefense"`
-	BaseSpeed   int    `json:"baseSpeed"`
+	BaseAttack  int `json:"baseAttack"`
+	BaseDefense int `json:"baseDefense"`
+	BaseSpeed   int `json:"baseSpeed"`
+	// The Pokedex entry and the games' one-line label, e.g. "Seed
+	// Pokemon". Descriptive only; nothing in a battle reads them.
+	Description string `json:"description"`
+	Genus       string `json:"genus"`
+	Habitat     string `json:"habitat"`
 	Sprite      string `json:"sprite"`
-	Moves       []struct {
-		Name  string `json:"name"`
-		Type  string `json:"type"`
-		Power int    `json:"power"`
-	} `json:"moves"`
+	Artwork     string `json:"artwork"`
+	EvolvesFrom string `json:"evolvesFrom"`
+	Legendary   bool   `json:"legendary"`
+	// Move names, resolved against the catalogue. The six it brings to
+	// a battle.
+	Moves []string `json:"moves"`
+	// Everything it can learn - 86 for Bulbasaur - served by its own
+	// endpoint rather than on every Pokemon in a list response.
+	LearnableMoves []string `json:"learnableMoves"`
 }
 
 // pokedex is the loaded dataset, indexed for the two lookups the API
@@ -58,6 +90,15 @@ type entry struct {
 type pokedex struct {
 	ordered []api.Pokemon
 	byName  map[string]api.Pokemon
+
+	// The move catalogue: every move any Pokemon here can learn, in
+	// name order, plus an index for single lookups.
+	moves      []api.Move
+	moveByName map[string]api.Move
+	// Learnable move names per Pokemon, resolved on demand rather than
+	// held as []api.Move per Pokemon - 100 Pokemon averaging 100 moves
+	// would be 10,000 copies of records the catalogue already holds.
+	learnable map[string][]string
 
 	// Battle stats by dex number. Not on api.Pokemon: a client is shown
 	// the HP a battle computes from these, not the inputs.
@@ -70,12 +111,16 @@ type pokedex struct {
 // exit non-zero: a pod that crashloops with a clear message is easier to
 // diagnose than one that panics inside an init function.
 func loadPokedex() (*pokedex, error) {
-	var raw []entry
-	if err := json.Unmarshal(pokedexJSON, &raw); err != nil {
+	var doc dataset
+	if err := json.Unmarshal(pokedexJSON, &doc); err != nil {
 		return nil, fmt.Errorf("decoding embedded pokedex: %w", err)
 	}
+	raw := doc.Pokemon
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("embedded pokedex is empty")
+	}
+	if len(doc.Moves) == 0 {
+		return nil, fmt.Errorf("embedded pokedex has no move catalogue")
 	}
 
 	p := &pokedex{
@@ -86,6 +131,29 @@ func loadPokedex() (*pokedex, error) {
 		// in the API would expose an input to a calculation the server
 		// owns, and invite a client to redo it differently.
 		stats: make(map[int]baseStats, len(raw)),
+
+		moves:      make([]api.Move, 0, len(doc.Moves)),
+		moveByName: make(map[string]api.Move, len(doc.Moves)),
+		learnable:  make(map[string][]string, len(raw)),
+	}
+
+	// The catalogue first: a Pokemon's moves are names, and resolving
+	// them needs this populated.
+	for _, m := range doc.Moves {
+		mv := api.Move{
+			Name:        m.Name,
+			Type:        m.Type,
+			Power:       m.Power,
+			Description: m.Description,
+			Effect:      m.Effect,
+			Pp:          m.PP,
+			DamageClass: m.DamageClass,
+		}
+		if m.Accuracy != nil {
+			mv.Accuracy = api.NewOptInt(*m.Accuracy)
+		}
+		p.moves = append(p.moves, mv)
+		p.moveByName[m.Name] = mv
 	}
 	for _, e := range raw {
 		// A missing baseHp decodes to 0, which would give every Pokemon
@@ -102,24 +170,78 @@ func loadPokedex() (*pokedex, error) {
 			speed:   e.BaseSpeed,
 		}
 
+		// A name with no catalogue entry means the data was built by
+		// something that did not keep the two in step. Refusing to
+		// start beats serving a Pokemon whose moves are blank.
 		moves := make([]api.Move, 0, len(e.Moves))
-		for _, m := range e.Moves {
-			moves = append(moves, api.Move{Name: m.Name, Type: m.Type, Power: m.Power})
+		for _, name := range e.Moves {
+			mv, ok := p.moveByName[name]
+			if !ok {
+				return nil, fmt.Errorf("pokedex entry %q lists move %q, which is not in the catalogue", e.Name, name)
+			}
+			moves = append(moves, mv)
 		}
+		p.learnable[strings.ToLower(e.Name)] = e.LearnableMoves
+
 		mon := api.Pokemon{
-			ID:     e.ID,
-			Name:   e.Name,
-			Types:  e.Types,
-			Height: e.Height,
-			Weight: e.Weight,
-			Sprite: e.Sprite,
-			Moves:  moves,
+			ID:          e.ID,
+			Name:        e.Name,
+			Description: e.Description,
+			Genus:       e.Genus,
+			Types:       e.Types,
+			Height:      e.Height,
+			Weight:      e.Weight,
+			Sprite:      e.Sprite,
+			Moves:       moves,
+		}
+		// Optional fields: empty means the upstream Pokedex has none,
+		// and an absent key reads better than an empty string.
+		if e.Habitat != "" {
+			mon.Habitat = api.NewOptString(e.Habitat)
+		}
+		if e.Artwork != "" {
+			mon.Artwork = api.NewOptString(e.Artwork)
+		}
+		if e.EvolvesFrom != "" {
+			mon.EvolvesFrom = api.NewOptString(e.EvolvesFrom)
+		}
+		if e.Legendary {
+			mon.Legendary = api.NewOptBool(true)
 		}
 		p.ordered = append(p.ordered, mon)
 		p.byName[strings.ToLower(mon.Name)] = mon
 	}
 	sort.Slice(p.ordered, func(i, j int) bool { return p.ordered[i].ID < p.ordered[j].ID })
 	return p, nil
+}
+
+// allMoves returns the whole catalogue, in name order.
+func (p *pokedex) allMoves() []api.Move { return p.moves }
+
+// move looks up one move by its hyphenated name.
+func (p *pokedex) move(name string) (api.Move, bool) {
+	mv, ok := p.moveByName[strings.ToLower(strings.TrimSpace(name))]
+	return mv, ok
+}
+
+// learnableFor resolves a Pokemon's full learnable set against the
+// catalogue, in the order the upstream Pokedex lists them.
+//
+// The second return distinguishes "no such Pokemon" from "a Pokemon
+// that learns nothing", which the handler needs to choose between 404
+// and an empty list.
+func (p *pokedex) learnableFor(name string) ([]api.Move, bool) {
+	names, ok := p.learnable[strings.ToLower(strings.TrimSpace(name))]
+	if !ok {
+		return nil, false
+	}
+	out := make([]api.Move, 0, len(names))
+	for _, n := range names {
+		if mv, ok := p.moveByName[n]; ok {
+			out = append(out, mv)
+		}
+	}
+	return out, true
 }
 
 // list returns Pokemon in Pokedex order, optionally filtered by type and

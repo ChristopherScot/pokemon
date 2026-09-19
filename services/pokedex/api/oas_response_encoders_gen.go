@@ -97,6 +97,37 @@ func encodeGetHealthzResponse(response *Health, w http.ResponseWriter) error {
 	return nil
 }
 
+func encodeGetMoveResponse(response GetMoveRes, w http.ResponseWriter) error {
+	switch response := response.(type) {
+	case *Move:
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(200)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *Error:
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(404)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
+}
+
 func encodeGetPokemonResponse(response GetPokemonRes, w http.ResponseWriter) error {
 	switch response := response.(type) {
 	case *Pokemon:
@@ -208,6 +239,19 @@ func encodeJoinBattleResponse(response JoinBattleRes, w http.ResponseWriter) err
 	}
 }
 
+func encodeListMovesResponse(response *MoveList, w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(200)
+
+	e := new(jx.Encoder)
+	response.Encode(e)
+	if _, err := e.WriteTo(w); err != nil {
+		return errors.Wrap(err, "write")
+	}
+
+	return nil
+}
+
 func encodeListPokemonResponse(response *PokemonList, w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(200)
@@ -219,6 +263,37 @@ func encodeListPokemonResponse(response *PokemonList, w http.ResponseWriter) err
 	}
 
 	return nil
+}
+
+func encodeListPokemonMovesResponse(response ListPokemonMovesRes, w http.ResponseWriter) error {
+	switch response := response.(type) {
+	case *MoveList:
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(200)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	case *Error:
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(404)
+
+		e := new(jx.Encoder)
+		response.Encode(e)
+		if _, err := e.WriteTo(w); err != nil {
+			return errors.Wrap(err, "write")
+		}
+
+		return nil
+
+	default:
+		return errors.Errorf("unexpected response type: %T", response)
+	}
 }
 
 func encodeListTypesResponse(response *TypeList, w http.ResponseWriter) error {

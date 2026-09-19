@@ -9,12 +9,20 @@ type GetBattleRes interface {
 	getBattleRes()
 }
 
+type GetMoveRes interface {
+	getMoveRes()
+}
+
 type GetPokemonRes interface {
 	getPokemonRes()
 }
 
 type JoinBattleRes interface {
 	joinBattleRes()
+}
+
+type ListPokemonMovesRes interface {
+	listPokemonMovesRes()
 }
 
 type RegisterTrainerRes interface {

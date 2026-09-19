@@ -37,7 +37,7 @@ import (
 // ClientVersion is sent on every request as Client-Version, so a
 // server can see which client versions are still calling it before
 // changing something they depend on. It tracks the spec's info.version.
-const ClientVersion = "0.6.0"
+const ClientVersion = "0.7.0"
 
 // ClientVersionHeader names the header carrying ClientVersion.
 //

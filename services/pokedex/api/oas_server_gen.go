@@ -28,6 +28,12 @@ type Handler interface {
 	//
 	// GET /healthz
 	GetHealthz(ctx context.Context) (*Health, error)
+	// GetMove implements getMove operation.
+	//
+	// One move by name.
+	//
+	// GET /moves/{name}
+	GetMove(ctx context.Context, params GetMoveParams) (GetMoveRes, error)
 	// GetPokemon implements getPokemon operation.
 	//
 	// One Pokemon by name.
@@ -46,12 +52,26 @@ type Handler interface {
 	//
 	// POST /battles/{id}/join
 	JoinBattle(ctx context.Context, req *JoinBattle, params JoinBattleParams) (JoinBattleRes, error)
+	// ListMoves implements listMoves operation.
+	//
+	// Every move in the Pokedex.
+	//
+	// GET /moves
+	ListMoves(ctx context.Context) (*MoveList, error)
 	// ListPokemon implements listPokemon operation.
 	//
 	// List Pokemon, optionally filtered by type.
 	//
 	// GET /pokemon
 	ListPokemon(ctx context.Context, params ListPokemonParams) (*PokemonList, error)
+	// ListPokemonMoves implements listPokemonMoves operation.
+	//
+	// The full learnable set, which runs to 86 moves for Bulbasaur and 167 for Mewtwo. This is why it is
+	// its own endpoint: putting it on the Pokemon object would dominate every list response. The six a
+	// Pokemon brings to a battle are on the Pokemon itself.
+	//
+	// GET /pokemon/{name}/moves
+	ListPokemonMoves(ctx context.Context, params ListPokemonMovesParams) (ListPokemonMovesRes, error)
 	// ListTypes implements listTypes operation.
 	//
 	// Every type present in the Pokedex, with a count.

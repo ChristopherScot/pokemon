@@ -113,6 +113,35 @@ func (s service) GetPokemon(_ context.Context, params api.GetPokemonParams) (api
 	return &mon, nil
 }
 
+// ListPokemonMoves returns everything a Pokemon can learn.
+//
+// Its own endpoint rather than a field: Bulbasaur learns 86 moves and
+// Mewtwo 167, so putting the full records on api.Pokemon would make
+// every list response an order of magnitude larger for a field most
+// callers do not read.
+func (s service) ListPokemonMoves(_ context.Context, params api.ListPokemonMovesParams) (api.ListPokemonMovesRes, error) {
+	moves, ok := s.dex.learnableFor(params.Name)
+	if !ok {
+		return &api.Error{Message: "no pokemon named " + params.Name}, nil
+	}
+	return &api.MoveList{Count: len(moves), Moves: moves}, nil
+}
+
+// ListMoves returns the whole move catalogue.
+func (s service) ListMoves(context.Context) (*api.MoveList, error) {
+	moves := s.dex.allMoves()
+	return &api.MoveList{Count: len(moves), Moves: moves}, nil
+}
+
+// GetMove returns one move by its hyphenated name, or the spec's 404.
+func (s service) GetMove(_ context.Context, params api.GetMoveParams) (api.GetMoveRes, error) {
+	mv, ok := s.dex.move(params.Name)
+	if !ok {
+		return &api.Error{Message: "no move named " + params.Name}, nil
+	}
+	return &mv, nil
+}
+
 // ListTypes reports every type in the Pokedex with a count, so a client
 // can build a filter UI without downloading all 100 Pokemon first.
 func (s service) ListTypes(context.Context) (*api.TypeList, error) {
