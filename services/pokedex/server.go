@@ -26,12 +26,15 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ogen-go/ogen/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -206,21 +209,64 @@ func observe(req middleware.Request, next middleware.Next) (middleware.Response,
 // the spec because it is the platform's endpoint rather than this
 // service's API.
 func handler() (http.Handler, error) {
-	// Loaded here rather than in a package-level var: a bad dataset
-	// should fail startup with a message main can print, not panic during
-	// package init where the error has nowhere to go.
-	dex, err := loadPokedex()
-	if err != nil {
-		return nil, err
-	}
 	// Seeded from the clock: battles should not replay identically
 	// across restarts. Tests construct the service directly with a fixed
 	// seed instead.
-	seed := time.Now().UnixNano()
+	rngSeed := time.Now().UnixNano()
+
+	// DATABASE_URL decides where state lives.
+	//
+	// Set, which is how the Deployment runs: migrate, seed the
+	// reference data, and serve from Postgres. State survives a
+	// restart and several replicas agree about it.
+	//
+	// Unset, which is how `go run .` and the tests run: the embedded
+	// file and a map behind a mutex. No database to stand up to work
+	// on the battle logic, and the behaviour is the same for one
+	// replica.
+	var (
+		dex   *pokedex
+		store store
+		err   error
+	)
+	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+		var pool *pgxpool.Pool
+		// Bounded: a database that never answers should fail startup
+		// with a message, not hang the pod until the kubelet gives up.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		pool, err = pgxpool.New(ctx, dsn)
+		if err != nil {
+			return nil, fmt.Errorf("connecting to the database: %w", err)
+		}
+		if err = migrate(ctx, pool); err != nil {
+			return nil, fmt.Errorf("migrating: %w", err)
+		}
+		if err = seed(ctx, pool); err != nil {
+			return nil, fmt.Errorf("seeding: %w", err)
+		}
+		if dex, err = loadPokedexFromDB(ctx, pool); err != nil {
+			return nil, fmt.Errorf("loading the pokedex: %w", err)
+		}
+		store = newPGStore(pool, rngSeed)
+		slog.Info("state is in postgres")
+	} else {
+		// Loaded here rather than in a package-level var: a bad
+		// dataset should fail startup with a message main can print,
+		// not panic during package init where the error has nowhere
+		// to go.
+		if dex, err = loadPokedex(); err != nil {
+			return nil, err
+		}
+		store = newMemStore(rngSeed)
+		slog.Info("state is in memory; set DATABASE_URL to use postgres")
+	}
+
 	svc := service{
 		dex:     dex,
-		battles: newMemStore(seed),
-		rng:     rngFor(seed),
+		battles: store,
+		rng:     rngFor(rngSeed),
 	}
 
 	srv, err := api.NewServer(svc, api.WithMiddleware(observe))
