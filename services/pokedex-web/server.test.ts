@@ -317,64 +317,69 @@ test('every request reports the UI version', async () => {
   }
 })
 
-// Joining from the battle page used to POST no body at all, which the
-// server reads as "no preference" and fills randomly. Landing on a
-// battle link someone sent you therefore gave you three Pokemon you did
-// not choose, with nothing on screen suggesting you had a say.
-test('the battle page offers a team input when the battle is joinable', async () => {
-  const { battlePage } = await import('./battle.ts')
-  const page = battlePage({ id: 'abc123', trainer: 'ash' })
-  // Match the INPUT, not any mention of the id: the script below also
-  // names it, so a bare includes() passes even with the input removed.
-  assert.match(page, /<input id="join-team"/, 'the join form should have a team input')
-})
-
-test('joining from the battle page sends the chosen team', async () => {
+// Joining used to give you no say in your team at all: the request
+// carried no body, so the server filled it randomly and nothing on
+// screen suggested otherwise. The first fix put a text box here, which
+// was better but still meant typing three names from memory - the card
+// grid that shows you what you are choosing between was wired only to
+// "open a battle", never to joining one.
+//
+// So the requirement these pin is: a joinable battle must offer a route
+// to the real picker, and it must carry the battle id so the picker
+// knows what it is joining.
+test('a joinable battle links to the team picker', async () => {
   const { battlePage } = await import('./battle.ts')
   const page = battlePage({ id: 'abc123', trainer: 'ash' })
   const open = page.match(/<script[^>]*>/)!
   const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
 
+  // The join panel is built by render(), not sent in the HTML, so the
+  // page string never contains it. Run the real thing.
   const board = { innerHTML: '', className: '', scrollTop: 0 }
-  const input = { value: 'pikachu, onix, gengar' }
-  const joinBtn: Record<string, unknown> = { disabled: false, textContent: '' }
-  const els: Record<string, unknown> = {
-    board, log: board, 'join-team': input, 'join-battle': joinBtn,
+  const stub = {
+    innerHTML: '', textContent: '', className: '', scrollTop: 0, scrollHeight: 0,
+    addEventListener: () => {}, querySelectorAll: () => [],
+    classList: { add: () => {}, remove: () => {} },
   }
-  let sentBody: string | undefined
-
   const sandbox = {
     document: {
-      getElementById: (id: string) => els[id] ?? null,
+      getElementById: (id: string) => (id === 'board' ? board : stub),
       addEventListener: () => {},
       querySelectorAll: () => [],
     },
     location: { pathname: '/battle/abc123', reload: () => {} },
-    fetch: async (_u: string, init?: { body?: string }) => {
-      if (init?.body) sentBody = init.body
-      return { ok: true, status: 200, json: async () => ({ version: 1, sides: [], log: [] }) }
-    },
+    fetch: async () => ({ ok: true, status: 200, json: async () => ({ version: 1, sides: [], log: [] }) }),
     setTimeout: () => 0,
     setInterval: () => 0,
     requestAnimationFrame: () => 0,
     console,
   }
+  const run = new Function(...Object.keys(sandbox), script + '\n;return { render };')
+  const { render } = run(...Object.values(sandbox)) as { render: (b: unknown) => void }
 
-  const run = new Function(
-    ...Object.keys(sandbox),
-    script + '\n;return { render };',
-  ) as (...a: unknown[]) => { render: (b: unknown) => void }
-
-  const { render } = run(...Object.values(sandbox))
-  // A waiting battle with one side is joinable, so render wires the button.
+  // One side and still waiting: joinable.
   render({
     id: 'abc123', status: 'waiting', version: 1, turn: null, log: [],
     sides: [{ trainer: 'misty', team: [{ name: 'staryu', hp: 10, maxHp: 10, types: ['water'], moves: [], fainted: false }] }],
   })
 
-  await (joinBtn.onclick as () => Promise<void>)()
-  assert.ok(sentBody, 'the join should send a body')
-  assert.deepEqual(JSON.parse(sentBody!).team, ['pikachu', 'onix', 'gengar'])
+  assert.match(
+    board.innerHTML,
+    /href="\/\?join=abc123"/,
+    'the join panel should link to the pokedex picker for THIS battle',
+  )
+})
+
+test('the lobby sends you to the picker rather than a text box', async () => {
+  const { lobbyPage } = await import('./battle.ts')
+  const page = lobbyPage({
+    me: { name: 'ash', token: 't' },
+    waiting: [{ battleId: 'xyz789', trainer: 'misty', team: ['staryu'] }] as never,
+  })
+  assert.match(page, /href="\/\?join=xyz789"/, 'each waiting battle should link to the picker')
+  // The old comma-separated input is gone; leaving it would be two
+  // different ways to do the same thing, disagreeing about which wins.
+  assert.doesNotMatch(page, /id="team"/, 'the typed-team input should be gone')
 })
 
 // The lobby rendered once and never changed, so a battle opened after
@@ -601,4 +606,226 @@ test('the pokedex links to the battle lobby', async () => {
   const { page } = await import('./pokedex.ts')
   const html = page({ pokemon: [], types: [], active: '' })
   assert.match(html, /href="\/battle"/, 'the pokedex must offer a way into the lobby')
+})
+
+// Picking a team must work the same way whether you are opening a
+// battle or joining one.
+//
+// It did not. The card grid - the only screen that shows you what you
+// are choosing between - was wired only to "Ready to battle", which
+// OPENS a battle. Everyone joining one got a bare text box and had to
+// type three names from memory. So the first player to create a battle
+// had a real interface and every opponent had a spelling test.
+test('the pokedex picker joins the battle named in ?join', async () => {
+  const { page } = await import('./pokedex.ts')
+  const html = page({ pokemon: [], types: [], active: '', join: 'abc123' })
+
+  assert.match(html, /id="ready"[^>]*data-join="abc123"/, 'the button should carry the battle id')
+  assert.match(html, />Join battle</, 'and say it is joining, not opening')
+  assert.match(html, /Pick your team/, 'the heading should say what this screen is for')
+})
+
+test('without ?join the picker still opens a new battle', async () => {
+  const { page } = await import('./pokedex.ts')
+  const html = page({ pokemon: [], types: [], active: '' })
+  assert.match(html, />Ready to battle</)
+  assert.match(html, /id="ready"[^>]*data-join=""/, 'no battle id means open a new one')
+})
+
+// Filtering mid-join must not silently turn a join into an open. The
+// type links are the main way to find a Pokemon, so losing the id here
+// would drop you back to creating a battle without saying so.
+test('type filters keep the battle you are joining', async () => {
+  const { page } = await import('./pokedex.ts')
+  const html = page({
+    pokemon: [],
+    types: [{ name: 'water', count: 3 }] as never,
+    active: '',
+    join: 'abc123',
+  })
+  assert.match(html, /href="\/\?type=water&join=abc123"/, 'a filter link should carry the join id')
+  assert.match(html, /href="\/\?join=abc123"[^>]*>all</, 'and so should "all"')
+})
+
+// Runs the pokedex page's real script and presses Ready.
+//
+// This is the assertion that matters: the button must POST to
+// /battle/<id>/join, not /battle/open. Getting that wrong would look
+// completely normal - you would pick a team, press join, and quietly
+// create a SECOND battle while the one you meant to join kept waiting.
+async function pressReady(join: string, picked: string[] = []) {
+  const { page } = await import('./pokedex.ts')
+  const html = page({ pokemon: [], types: [], active: '', join })
+  const open = html.match(/<script[^>]*>/)!
+  const script = html.slice(open.index! + open[0].length, html.lastIndexOf('</script>'))
+
+  const ready: Record<string, unknown> = {
+    dataset: { join }, disabled: false, textContent: '',
+    addEventListener(_e: string, fn: () => Promise<void>) { (ready as never as {fire: unknown}).fire = fn },
+  }
+  const stub = () => ({
+    classList: { add: () => {}, remove: () => {}, toggle: () => {} },
+    addEventListener: () => {}, innerHTML: '', textContent: '', hidden: true,
+    style: {}, dataset: {}, focus: () => {}, showModal: () => {}, close: () => {}, value: '',
+    getBoundingClientRect: () => ({ height: 86, top: 0, bottom: 86 }),
+    querySelector: () => null, querySelectorAll: () => [],
+  })
+  const store: Record<string, string> = {}
+  if (picked.length) {
+    store['pokedex.team'] = JSON.stringify(picked.map((n) => ({ name: n, sprite: '' })))
+  }
+
+  const calls: Array<{ url: string; body: string }> = []
+  const sandbox = {
+    document: {
+      getElementById: (id: string) => (id === 'ready' ? ready : stub()),
+      querySelector: () => stub(),
+      querySelectorAll: () => [],
+      addEventListener: () => {},
+      body: stub(),
+      documentElement: { style: { setProperty: () => {} } },
+    },
+    sessionStorage: {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v },
+      removeItem: (k: string) => { delete store[k] },
+    },
+    location: { href: '', pathname: '/' },
+    fetch: async (url: string, init?: { body?: string }) => {
+      calls.push({ url, body: init?.body ?? '' })
+      return { ok: true, status: 200, json: async () => ({ id: 'newly-opened' }) }
+    },
+    ResizeObserver: class { observe() {} disconnect() {} },
+    alert: () => {},
+    setTimeout: () => 0,
+    console,
+  }
+  const run = new Function(...Object.keys(sandbox), script)
+  run(...Object.values(sandbox))
+  await ((ready as never as { fire: () => Promise<void> }).fire)()
+  return { calls, location: sandbox.location }
+}
+
+test('pressing Join posts to the battle being joined, not to open', async () => {
+  const { calls, location } = await pressReady('abc123', ['pikachu'])
+  const post = calls.find((c) => c.url.includes('/battle/'))
+  assert.ok(post, 'Ready should have called the API')
+  assert.equal(post!.url, '/battle/abc123/join', 'it must JOIN, not open a second battle')
+  assert.deepEqual(JSON.parse(post!.body).team, ['pikachu'], 'and carry the picked team')
+  assert.equal(location.href, '/battle/abc123', 'then land on the battle that was joined')
+})
+
+test('pressing Ready with no join id still opens a battle', async () => {
+  const { calls, location } = await pressReady('', ['pikachu'])
+  const post = calls.find((c) => c.url.includes('/battle/'))
+  assert.equal(post!.url, '/battle/open')
+  assert.equal(location.href, '/battle/newly-opened', 'and lands on the new battle')
+})
+
+// The attack button ends your turn; the move buttons above only change
+// a selection. They looked identical - same grey, same size, in an
+// identical row directly below - so the thing that fires read as a
+// fifth move.
+test('the attack button is visually distinct from the move buttons', async () => {
+  const { battlePage } = await import('./battle.ts')
+  const page = battlePage({ id: 'abc123', trainer: 'ash' })
+  const open = page.match(/<script[^>]*>/)!
+  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+
+  const board = {
+    innerHTML: '', className: '', scrollTop: 0,
+    querySelectorAll: () => [], querySelector: () => null,
+  }
+  const stub = {
+    innerHTML: '', textContent: '', className: '', scrollTop: 0, scrollHeight: 0,
+    addEventListener: () => {}, querySelectorAll: () => [], querySelector: () => null,
+    classList: { add: () => {}, remove: () => {} },
+  }
+  const sandbox = {
+    document: {
+      getElementById: (id: string) => (id === 'board' ? board : stub),
+      addEventListener: () => {},
+      querySelectorAll: () => [],
+    },
+    location: { pathname: '/battle/abc123', reload: () => {} },
+    fetch: async () => ({ ok: true, status: 200, json: async () => ({ version: 1, sides: [], log: [] }) }),
+    setTimeout: () => 0,
+    setInterval: () => 0,
+    requestAnimationFrame: () => 0,
+    console,
+  }
+  const run = new Function(...Object.keys(sandbox), script + '\n;return { render };')
+  const { render } = run(...Object.values(sandbox)) as { render: (b: unknown) => void }
+
+  const mon = (name: string) => ({
+    name, hp: 20, maxHp: 20, types: ['normal'], fainted: false,
+    moves: [{ name: 'tackle', power: 40 }, { name: 'growl', power: 0 }],
+  })
+  render({
+    id: 'abc123', status: 'active', version: 1, turn: 'ash', log: [],
+    sides: [
+      { trainer: 'ash', active: 0, team: [mon('pikachu')] },
+      { trainer: 'misty', active: 0, team: [mon('staryu')] },
+    ],
+  })
+
+  // Its own container, not a second row of .moves - that separation is
+  // what stops it reading as another choice.
+  assert.match(board.innerHTML, /<div class="commit">/, 'attack should sit in its own commit row')
+  assert.match(
+    board.innerHTML,
+    /<div class="commit">\s*<button id="go"/,
+    'and the attack button should be the thing inside it',
+  )
+  // The style backs it up: red, and pushed to the right.
+  assert.match(page, /\.commit\s*\{[^}]*justify-content:flex-end/, 'commit row aligns right')
+  assert.match(page, /\.commit button\s*\{[^}]*background:#b42318/, 'attack is red')
+})
+
+// Trainers live in the API's memory, so every deploy invalidates every
+// token while the browser's cookie survives. The lobby then said
+// "you are Chris" from the cookie's NAME while every action answered
+// 401 "register first" because of its TOKEN - and the register form
+// was hidden precisely because a cookie was present. No way out but
+// clearing site data.
+test('the lobby can always re-register, even with a trainer cookie', async () => {
+  const { lobbyPage } = await import('./battle.ts')
+  const page = lobbyPage({ me: { name: 'chris', token: 'stale' }, waiting: [] as never })
+  assert.match(page, /id="reg-row"/, 'the register form must be in the markup')
+  assert.match(page, /id="rename"/, 'and something must reveal it')
+})
+
+// A 401 means the cookie's token is dead and the server has already
+// cleared it, so reloading shows the register form. Alerting and
+// stopping left the user staring at a name they could not use.
+test('a stale trainer reloads into the register form rather than alerting', async () => {
+  const { lobbyPage } = await import('./battle.ts')
+  const page = lobbyPage({ me: { name: 'chris', token: 'stale' }, waiting: [] as never })
+  const open = page.match(/<script[^>]*>/)!
+  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+
+  let reloaded = false
+  let alerted = ''
+  const els: Record<string, unknown> = {
+    open: { addEventListener(_e: string, fn: () => Promise<void>) { (els.open as {fire?: unknown}).fire = fn } },
+  }
+  const sandbox = {
+    document: {
+      getElementById: (id: string) => els[id] ?? null,
+      addEventListener: () => {},
+      querySelectorAll: () => [],
+      hidden: false,
+    },
+    location: { pathname: '/battle', href: '', reload: () => { reloaded = true } },
+    fetch: async () => ({ ok: false, status: 401, json: async () => ({ message: 'register first' }) }),
+    setTimeout: () => 0,
+    alert: (m: string) => { alerted = m },
+    console,
+  }
+  const run = new Function(...Object.keys(sandbox), script + '\n;return {};')
+  run(...Object.values(sandbox))
+
+  await ((els.open as { fire: () => Promise<void> }).fire)()
+  assert.equal(reloaded, true, 'a 401 should reload into the register form')
+  assert.equal(alerted, '', 'and not dead-end in an alert')
 })

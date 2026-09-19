@@ -206,6 +206,22 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
   button:hover:not(:disabled) { background:#2f3547; border-color:#4a5268; }
   button:disabled { opacity:.35; cursor:not-allowed; }
   button.sel { background:#3b3170; border-color:#6d5ae0; }
+  /* A link styled as a button. Navigating to the picker is a link, and
+     a <button> inside an <a> is invalid HTML. */
+  .btn { font:inherit; border-radius:8px; padding:5px 10px; text-decoration:none;
+         font-weight:600; color:#12141c; background:#a78bfa; border:1px solid #a78bfa;
+         text-align:center; transition:background .15s; }
+  .btn:hover { background:#b9a3fb; }
+  /* The commit, kept apart from the choosing.
+     The move buttons above are a multiple-choice: neutral, one of many,
+     and pressing one only changes a selection. This ends the turn. It
+     was the same grey as the moves in an identical row directly below,
+     so the thing that fires looked like a fifth move. */
+  .commit { display:flex; justify-content:flex-end; margin-top:14px;
+            padding-top:12px; border-top:1px solid #2c3040; }
+  .commit button { background:#b42318; border-color:#d0362a; color:#fff;
+                   font-weight:600; padding:9px 20px; min-height:44px; }
+  .commit button:hover:not(:disabled) { background:#d0362a; border-color:#e8574a; }
   .pick { margin-top:14px; padding:14px; background:var(--card); border-radius:10px; }
   .pick.hidden { display:none; }
   /* Victory: the whole board gets a brief glow rather than a modal
@@ -228,6 +244,11 @@ ${PRELUDE}
 const ID = ${JSON.stringify(id)}
 const ME = ${JSON.stringify(trainer)}
 const COLOURS = ${JSON.stringify(TYPE_COLOURS)}
+
+// Remember the battle we are in, so the pokedex can offer a way back.
+// Set on arrival rather than only when joining, because landing here
+// from a link someone sent is the same situation.
+try { sessionStorage.setItem('pokedex.battle', ID) } catch {}
 
 let seen = -1
 let picked = { attacker: 0, move: 0, target: 0 }
@@ -288,11 +309,9 @@ function renderSpectator(b) {
     // battle URL someone sent you gave you three Pokemon you did not
     // choose, with nothing on screen suggesting you had a say.
     html += '<div class="pick"><div class="moves" style="flex-direction:column;gap:8px">' +
-      '<input id="join-team" placeholder="charizard, blastoise, venusaur" ' +
-      'style="width:100%;padding:8px;border-radius:6px;border:1px solid #2c3040;' +
-      'background:var(--bg);color:var(--fg)">' +
-      '<div class="sub" style="margin:0">three pokemon, comma separated - leave blank for a random team</div>' +
-      '<button id="join-battle">join as ' + esc(ME) + '</button>' +
+      '<a class="btn" href="/?join=' + encodeURIComponent(ID) + '">pick your team \u2192</a>' +
+      '<div class="sub" style="margin:0">or join straight away and take a random team</div>' +
+      '<button id="join-battle">join as ' + esc(ME) + ' with a random team</button>' +
       '</div></div>'
   }
 
@@ -307,14 +326,12 @@ function renderSpectator(b) {
   if (join) {
     join.onclick = async () => {
       join.disabled = true
-      const input = document.getElementById('join-team')
-      const picked = input
-        ? input.value.split(',').map((s) => s.trim()).filter(Boolean)
-        : []
+      // Empty body: the server fills a random team. Choosing one is
+      // the link above, which goes to the pokedex picker.
       const res = await fetch(location.pathname + '/join', {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...V },
-        body: JSON.stringify({ team: picked }),
+        body: JSON.stringify({}),
       })
       if (res.ok) { location.reload(); return }
       // 401 means this trainer no longer exists - the server has already
@@ -380,7 +397,7 @@ function render(b) {
         '<button data-move="' + i + '"' + (picked.move === i ? ' class="sel"' : '') + '>' +
         esc(m.name) + (m.power ? ' <span style="opacity:.6">' + m.power + '</span>' : ' <span style="opacity:.6">—</span>') +
         '</button>').join('') +
-      '</div><div class="moves" style="margin-top:10px">' +
+      '</div><div class="commit">' +
       '<button id="go">attack ' + esc(theirs.team[picked.target].name) + '</button>' +
       '</div></div>'
   }
@@ -721,7 +738,7 @@ export function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: Waitin
     : waiting.map((w) => `<div class="row">
          <div><strong>${esc(w.trainer)}</strong>
          <div class="sub" style="margin:0">${w.team.map(esc).join(', ')}</div></div>
-         <button data-join="${esc(w.battleId)}">join</button></div>`).join('')
+         <a class="btn" href="/?join=${encodeURIComponent(w.battleId)}">join</a></div>`).join('')
 
   return `<!doctype html>
 <html lang="en"><head>
@@ -743,27 +760,48 @@ export function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: Waitin
                   border-radius:8px; padding:7px 12px; }
   button { cursor:pointer; transition:background .15s; }
   button:hover { background:#2f3547; }
+  /* An anchor styled as a button: navigating to the picker is a link,
+     and a <button> wrapped in an <a> is invalid HTML that screen
+     readers announce wrongly. */
+  .btn { font:inherit; background:#a78bfa; border:1px solid #a78bfa;
+         border-radius:8px; padding:7px 12px; text-decoration:none;
+         font-weight:600; color:#12141c; transition:background .15s; }
+  .btn:hover { background:#b9a3fb; }
   .team { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
 </style></head>
 <body>
   <h1>Battle lobby</h1>
   <p class="sub">${me ? 'you are <strong>' + esc(me.name) + '</strong>' : 'pick a trainer name to start'} ·
-    <a href="/">back to the pokedex</a></p>
+    <a href="/">back to the pokedex</a>${me ? ' · <a href="#" id="rename">not you?</a>' : ''}</p>
 
-  ${me ? '' : `<div class="row"><input id="name" placeholder="trainer name" maxlength="32">
-    <button id="reg">register</button></div>`}
+  <!-- Always in the markup, hidden when there is already a trainer.
+       Trainers live in server memory, so a deploy invalidates every
+       token while the cookie survives - the page then says "you are
+       <name>" and every action answers "register first", with the only
+       form that could fix it hidden because a cookie was present. -->
+  <div class="row" id="reg-row"${me ? ' hidden' : ''}><input id="name" placeholder="trainer name" maxlength="32">
+    <button id="reg">register</button></div>
 
   ${me ? `<div class="row"><div><strong>your team</strong>
-      <div class="sub" style="margin:0">three pokemon, comma separated - used when you
-        open a battle OR join one below. leave blank for a random team.</div></div></div>
-    <div class="row"><input id="team" style="flex:1" placeholder="charizard, blastoise, venusaur">
-      <button id="open">open</button></div>` : ''}
+      <div class="sub" style="margin:0">pick from the pokedex, or start straight away
+        and get a random team.</div></div></div>
+    <div class="row"><a class="btn" href="/">pick a team &rarr;</a>
+      <button id="open">open with a random team</button></div>` : ''}
 
   <h2 style="font-size:14px;color:var(--dim);margin:22px 0 8px">waiting</h2>
   <div id="waiting">${rows}</div>
 
 <script type="module">
 ${PRELUDE}
+// Reveal the register form for someone whose identity went stale, or
+// who simply wants a different name.
+const rename = document.getElementById('rename')
+if (rename) rename.addEventListener('click', (ev) => {
+  ev.preventDefault()
+  const row = document.getElementById('reg-row')
+  if (row) { row.hidden = false; document.getElementById('name').focus() }
+})
+
 const reg = document.getElementById('reg')
 if (reg) reg.addEventListener('click', async () => {
   const name = document.getElementById('name').value.trim()
@@ -774,30 +812,24 @@ if (reg) reg.addEventListener('click', async () => {
   else alert((await res.json()).message || 'that name is taken')
 })
 
-const team = () => document.getElementById('team').value.split(',').map(s => s.trim()).filter(Boolean)
-
+// No team in the body: this button is explicitly "open with a random
+// team". Choosing one happens in the pokedex, the only screen that can
+// show you what you are choosing between.
 const open = document.getElementById('open')
 if (open) open.addEventListener('click', async () => {
   const res = await fetch('/battle/open', {
-    method:'POST', headers:{'content-type':'application/json', ...V}, body:JSON.stringify({team: team()}) })
+    method:'POST', headers:{'content-type':'application/json', ...V}, body:JSON.stringify({}) })
   const body = await res.json()
-  if (res.ok) location.href = '/battle/' + body.id
-  else alert(body.message || 'could not open that battle')
-})
-
-// Delegated, not bound per button: the waiting list is replaced by the
-// poll below, and handlers attached to the old elements would go with
-// it - so the first refresh would leave every join button dead.
-document.addEventListener('click', async (ev) => {
-  const el = ev.target.closest('[data-join]')
-  if (!el) return
-  const t = document.getElementById('team')
-  const res = await fetch('/battle/' + el.dataset.join + '/join', {
-    method:'POST', headers:{'content-type':'application/json', ...V},
-    body: JSON.stringify({team: t ? team() : []}) })
-  const body = await res.json()
-  if (res.ok) location.href = '/battle/' + el.dataset.join
-  else alert(body.message || 'could not join')
+  if (res.ok) { location.href = '/battle/' + body.id; return }
+  // A 401 here means the token in the cookie is one the API no longer
+  // knows - the server restarted and lost its trainers, which happens
+  // on every deploy. The server has already cleared the cookie, so a
+  // reload brings back the register form. Alerting "register first"
+  // and stopping was a dead end: the page still said "you are <name>"
+  // from the same cookie, and the form to register again was hidden
+  // precisely because a cookie was present.
+  if (res.status === 401) { location.reload(); return }
+  alert(body.message || 'could not open that battle')
 })
 
 // Keep the waiting list current.
@@ -818,7 +850,7 @@ function renderWaiting(list) {
     : list.map((w) => '<div class="row">' +
         '<div><strong>' + esc(w.trainer) + '</strong>' +
         '<div class="sub" style="margin:0">' + w.team.map(esc).join(', ') + '</div></div>' +
-        '<button data-join="' + esc(w.battleId) + '">join</button></div>').join('')
+        '<a class="btn" href="/?join=' + encodeURIComponent(w.battleId) + '">join</a></div>').join('')
 }
 
 let lobbyMisses = 0
