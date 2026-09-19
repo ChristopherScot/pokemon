@@ -118,19 +118,22 @@ func TestPGBattleSurvivesANewStore(t *testing.T) {
 	if !ok {
 		t.Fatalf("battle %s not found by a second store", b.id)
 	}
-	if got.status != b.status || len(got.sides) != len(b.sides) {
+	// Asserted on the API view, which is what get() now returns: the
+	// store converts under its own lock so nothing reachable from it
+	// escapes.
+	if string(got.Status) != b.status || len(got.Sides) != len(b.sides) {
 		t.Errorf("read back status %q with %d sides, want %q with %d",
-			got.status, len(got.sides), b.status, len(b.sides))
+			got.Status, len(got.Sides), b.status, len(b.sides))
 	}
-	if got.sides[0].trainer != "Ash" {
-		t.Errorf("side 0 trainer %q, want Ash", got.sides[0].trainer)
+	if got.Sides[0].Trainer != "Ash" {
+		t.Errorf("side 0 trainer %q, want Ash", got.Sides[0].Trainer)
 	}
-	if len(got.sides[0].team) != len(b.sides[0].team) {
-		t.Errorf("team of %d, want %d", len(got.sides[0].team), len(b.sides[0].team))
+	if len(got.Sides[0].Team) != len(b.sides[0].team) {
+		t.Errorf("team of %d, want %d", len(got.Sides[0].Team), len(b.sides[0].team))
 	}
 	// HP round-trips through JSONB rather than being recomputed.
-	if got.sides[0].team[0].hp != b.sides[0].team[0].hp {
-		t.Errorf("hp %d, want %d", got.sides[0].team[0].hp, b.sides[0].team[0].hp)
+	if got.Sides[0].Team[0].Hp != b.sides[0].team[0].hp {
+		t.Errorf("hp %d, want %d", got.Sides[0].Team[0].Hp, b.sides[0].team[0].hp)
 	}
 }
 
@@ -178,15 +181,15 @@ func TestPGConcurrentUpdatesAllLand(t *testing.T) {
 	if !ok {
 		t.Fatal("battle disappeared")
 	}
-	if len(got.log) != writers {
+	if len(got.Log) != writers {
 		t.Errorf("log has %d events after %d concurrent writers, want %d - "+
-			"a write was lost", len(got.log), writers, writers)
+			"a write was lost", len(got.Log), writers, writers)
 	}
 	// version moves once per successful update, which is what clients
 	// poll on.
-	if got.version < writers {
+	if got.Version < writers {
 		t.Errorf("version is %d after %d updates, want at least %d",
-			got.version, writers, writers)
+			got.Version, writers, writers)
 	}
 }
 
@@ -212,7 +215,7 @@ func TestPGUpdatePropagatesClosureError(t *testing.T) {
 	}
 
 	got, _ := store.get(b.id)
-	if got.status == "finished" {
+	if string(got.Status) == "finished" {
 		t.Error("the mutation was committed despite the closure failing")
 	}
 }
@@ -236,7 +239,7 @@ func TestPGWaitingLists(t *testing.T) {
 	store.create(b)
 
 	waiting := store.waiting()
-	if len(waiting) != 1 || waiting[0].id != b.id {
+	if len(waiting) != 1 || waiting[0].BattleId != b.id {
 		t.Fatalf("waiting() returned %d battles, want the one just created", len(waiting))
 	}
 

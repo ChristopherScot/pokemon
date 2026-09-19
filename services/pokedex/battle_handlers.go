@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
@@ -34,20 +35,7 @@ func (s service) RegisterTrainer(_ context.Context, req *api.RegisterTrainer) (a
 // ListWaitingTrainers is the lobby: who is looking for a battle.
 func (s service) ListWaitingTrainers(context.Context) (*api.WaitingList, error) {
 	open := s.battles.waiting()
-	out := &api.WaitingList{Count: len(open)}
-	for _, b := range open {
-		side := b.sides[0]
-		w := api.WaitingBattle{
-			BattleId:  b.id,
-			Trainer:   side.trainer,
-			CreatedAt: b.created,
-		}
-		for _, c := range side.team {
-			w.Team = append(w.Team, c.mon.Name)
-		}
-		out.Waiting = append(out.Waiting, w)
-	}
-	return out, nil
+	return &api.WaitingList{Count: len(open), Waiting: open}, nil
 }
 
 // CreateBattle opens an invitation. The battle sits in `waiting` until
@@ -93,7 +81,7 @@ func (s service) GetBattle(_ context.Context, params api.GetBattleParams) (api.G
 	if !ok {
 		return &api.Error{Message: "no such battle"}, nil
 	}
-	return b.toAPI(), nil
+	return b, nil
 }
 
 // JoinBattle fills the second side and starts play.
@@ -195,6 +183,38 @@ func (s service) TakeTurn(_ context.Context, req *api.TakeTurn, params api.TakeT
 	}
 }
 
+// lockedRand is a *rand.Rand every handler can reach.
+//
+// One generator is shared by every request, and *rand.Rand is not safe
+// for concurrent use: two simultaneous turns race on its internal
+// state, which the race detector reports inside rngSource.Uint64.
+//
+// The obvious fix - switch to math/rand/v2's top-level functions, as
+// the Postgres store's retry jitter already does - would cost the
+// seeding, and seeding is why this field exists: a test seeds it and
+// gets the same battle twice. So the generator stays and gains a lock.
+//
+// Only the two methods the engine actually calls are exposed, so the
+// unguarded ones cannot be reached by accident.
+type lockedRand struct {
+	mu sync.Mutex
+	r  *rand.Rand
+}
+
+func (l *lockedRand) Intn(n int) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.r.Intn(n)
+}
+
+func (l *lockedRand) Float64() float64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.r.Float64()
+}
+
 // rngFor keeps damage rolls deterministic in tests while staying
 // unpredictable in production.
-func rngFor(seed int64) *rand.Rand { return rand.New(rand.NewSource(seed)) }
+func rngFor(seed int64) *lockedRand {
+	return &lockedRand{r: rand.New(rand.NewSource(seed))}
+}

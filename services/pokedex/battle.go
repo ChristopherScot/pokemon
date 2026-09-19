@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -189,7 +190,18 @@ func newCombatants(dex *pokedex, names []string) ([]*combatant, error) {
 // names, and the rest are the server's to choose - which is what makes
 // the empty slots in the web UI mean something rather than being a
 // validation error waiting to happen.
-func fillTeam(dex *pokedex, chosen []string, rng *rand.Rand) []string {
+// roller is the randomness the battle engine needs: two methods, and
+// no opinion about whether they are guarded.
+//
+// Named as an interface so the engine does not require a *rand.Rand.
+// The service shares one generator across concurrent handlers and must
+// wrap it in a lock; a test wants a bare seeded one. Both satisfy this.
+type roller interface {
+	Intn(n int) int
+	Float64() float64
+}
+
+func fillTeam(dex *pokedex, chosen []string, rng roller) []string {
 	if len(chosen) >= teamSize {
 		return chosen
 	}
@@ -214,7 +226,7 @@ func fillTeam(dex *pokedex, chosen []string, rng *rand.Rand) []string {
 	return out
 }
 
-func randomTeam(dex *pokedex, rng *rand.Rand) []string {
+func randomTeam(dex *pokedex, rng roller) []string {
 	all := dex.list("", 0)
 	if len(all) < teamSize {
 		// Cannot happen with the shipped dataset, which is why this
@@ -245,7 +257,7 @@ func randomTeam(dex *pokedex, rng *rand.Rand) []string {
 //
 // rng is passed in so tests are deterministic: the engine never reaches
 // for a package-level source.
-func damage(attacker, defender *combatant, move api.Move, rng *rand.Rand) (int, float64) {
+func damage(attacker, defender *combatant, move api.Move, rng roller) (int, float64) {
 	mult := multiplier(move.Type, defender.mon.Types)
 	if mult == 0 || move.Power == 0 {
 		return 0, mult
@@ -284,8 +296,19 @@ func damage(attacker, defender *combatant, move api.Move, rng *rand.Rand) (int, 
 // design one.
 type store interface {
 	create(*battle)
-	get(id string) (*battle, bool)
-	waiting() []*battle
+	// get and waiting return CONVERTED values, not *battle.
+	//
+	// They used to hand the pointer back and release the lock, and the
+	// handler then walked sides, log and every combatant outside it
+	// while another request mutated exactly those fields. The mutex was
+	// protecting the map, not the battle the map points at - the race
+	// detector reports writes to combatant.hp and battle.turn against
+	// reads from toAPI().
+	//
+	// Converting inside the lock is the fix that keeps the lock's
+	// meaning honest: nothing reachable from the store escapes it.
+	get(id string) (*api.Battle, bool)
+	waiting() []api.WaitingBattle
 	trainerByToken(token string) (string, bool)
 	registerTrainer(name string) (string, error)
 
@@ -394,7 +417,27 @@ func (m *memStore) create(b *battle) {
 	m.battles[b.id] = b
 }
 
-func (m *memStore) get(id string) (*battle, bool) {
+func (m *memStore) get(id string) (*api.Battle, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b, ok := m.battles[id]
+	if !ok {
+		return nil, false
+	}
+	// Converted here, under the lock, so the caller never holds a
+	// reference into live battle state.
+	return b.toAPI(), true
+}
+
+// rawForTest returns the live *battle, for tests that need to set up a
+// state the public API cannot reach - a Pokemon at exactly 1 HP, a side
+// already fainted.
+//
+// NOT on the store interface: handing a live pointer out is the bug
+// get() was changed to stop doing, and this exists only because a test
+// is single-goroutine by construction. Production code must go through
+// get() or update().
+func (m *memStore) rawForTest(id string) (*battle, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	b, ok := m.battles[id]
@@ -423,24 +466,42 @@ func (m *memStore) update(id string, fn func(*battle) error) error {
 
 // waiting lists open invitations, newest first, so a lobby shows the
 // freshest at the top.
-func (m *memStore) waiting() []*battle {
+func (m *memStore) waiting() []api.WaitingBattle {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sweepLocked()
-	var out []*battle
+
+	// Built under the lock. Returning []*battle let the handler read
+	// each one's sides and team after the lock was released, which is
+	// the same escape get() had.
+	var out []api.WaitingBattle
 	for _, b := range m.battles {
 		if b.status == "waiting" {
-			out = append(out, b)
+			out = append(out, b.toWaiting())
 		}
 	}
-	for i := 0; i < len(out); i++ {
-		for j := i + 1; j < len(out); j++ {
-			if out[j].created.After(out[i].created) {
-				out[i], out[j] = out[j], out[i]
-			}
-		}
-	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
 	return out
+}
+
+// toWaiting is the lobby's view of a battle: who is waiting and with
+// what. Separate from toAPI because a lobby needs neither the log nor
+// the opponent's side, and building the whole battle to throw most of
+// it away made the lobby quadratic in team size for no reason.
+//
+// Callers hold the store's lock.
+func (b *battle) toWaiting() api.WaitingBattle {
+	w := api.WaitingBattle{
+		BattleId:  b.id,
+		Trainer:   b.sides[0].trainer,
+		CreatedAt: b.created,
+	}
+	for _, c := range b.sides[0].team {
+		w.Team = append(w.Team, c.mon.Name)
+	}
+	return w
 }
 
 // sweepLocked drops battles nobody has touched within the TTL. Called on
@@ -459,7 +520,7 @@ const idAlphabet = "abcdefghijkmnopqrstuvwxyz23456789"
 
 // randomID avoids 0/1/l to keep an id readable aloud, which matters when
 // one player reads a battle id to another.
-func randomID(rng *rand.Rand, n int) string {
+func randomID(rng roller, n int) string {
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = idAlphabet[rng.Intn(len(idAlphabet))]
@@ -471,7 +532,7 @@ func randomID(rng *rand.Rand, n int) string {
 //
 // Every illegal case is an error rather than a silent no-op: a client
 // bug that sends the wrong index should be visible, not look like lag.
-func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng *rand.Rand) error {
+func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng roller) error {
 	if b.status == "finished" {
 		return errBattleOver
 	}
@@ -690,7 +751,7 @@ func (b *battle) toAPI() *api.Battle {
 //
 // Every one in the dataset does what it does in the games; a move with
 // no entry says it had no effect, which is honest rather than silent.
-func (b *battle) resolveStatus(attacker, target *combatant, move api.Move, rng *rand.Rand) {
+func (b *battle) resolveStatus(attacker, target *combatant, move api.Move, rng roller) {
 	eff, known := statusMoves[move.Name]
 	say := func(format string, a ...any) {
 		b.log = append(b.log, api.BattleEvent{

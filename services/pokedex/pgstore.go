@@ -205,7 +205,11 @@ func (p *pgStore) create(b *battle) {
 	_ = tx.Commit(ctx)
 }
 
-func (p *pgStore) get(id string) (*battle, bool) {
+// get converts before returning, matching memStore. The pgStore path
+// builds a fresh *battle per call so nothing is shared, but the
+// interface is the same either way and a caller should not have to know
+// which implementation it is talking to.
+func (p *pgStore) get(id string) (*api.Battle, bool) {
 	ctx := context.Background()
 	row, err := dbgen.New(p.pool).GetBattle(ctx, id)
 	if err != nil {
@@ -217,7 +221,7 @@ func (p *pgStore) get(id string) (*battle, bool) {
 	if err != nil {
 		return nil, false
 	}
-	return b, true
+	return b.toAPI(), true
 }
 
 // update is the one that matters. See the interface comment in
@@ -322,7 +326,7 @@ func (p *pgStore) attemptUpdate(ctx context.Context, id string, fn func(*battle)
 	return tx.Commit(ctx)
 }
 
-func (p *pgStore) waiting() []*battle {
+func (p *pgStore) waiting() []api.WaitingBattle {
 	ctx := context.Background()
 	q := dbgen.New(p.pool)
 	_ = q.SweepBattles(ctx, pgTime(time.Now().Add(-battleTTL)))
@@ -331,7 +335,7 @@ func (p *pgStore) waiting() []*battle {
 	if err != nil {
 		return nil
 	}
-	out := make([]*battle, 0, len(rows))
+	out := make([]api.WaitingBattle, 0, len(rows))
 	for _, row := range rows {
 		b, err := fromRow(row.ID, row.Status, int(row.Version), int(row.Turn),
 			int(row.TurnNumber), row.Winner,
@@ -340,7 +344,7 @@ func (p *pgStore) waiting() []*battle {
 			// One unreadable row should not empty the lobby.
 			continue
 		}
-		out = append(out, b)
+		out = append(out, b.toWaiting())
 	}
 	return out
 }

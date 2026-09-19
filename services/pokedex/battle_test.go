@@ -55,7 +55,7 @@ func activeBattle(t *testing.T, s service) (*battle, string, string) {
 		t.Fatal(err)
 	}
 
-	stored, _ := s.battles.get(bt.ID)
+	stored, _ := s.battles.(*memStore).rawForTest(bt.ID)
 	return stored, a, b
 }
 

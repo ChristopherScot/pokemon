@@ -28,7 +28,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -74,7 +73,7 @@ type service struct {
 
 	// One source for damage rolls, so a test can seed it and get the
 	// same battle twice.
-	rng *rand.Rand
+	rng *lockedRand
 }
 
 func (service) GetHealthz(context.Context) (*api.Health, error) {
