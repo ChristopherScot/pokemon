@@ -125,6 +125,24 @@ function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: TypeSumma
             outline:none; transition:border-color .15s; }
   #search:focus { border-color:#6d5ae0; }
   #search::placeholder { color:#5b6272; }
+  /* Downloads. Hidden until the script confirms an asset exists, so a
+     release that has not happened shows nothing rather than a dead
+     link - see the fetch below. */
+  #downloads { margin:48px auto 8px; max-width:640px; padding:24px;
+               border:1px solid #2a3040; border-radius:14px; background:var(--card); }
+  #downloads h2 { margin:0 0 4px; font-size:16px; }
+  #downloads .sub { margin:0 0 16px; }
+  .dl-row { display:flex; flex-wrap:wrap; gap:12px; }
+  .dl { display:flex; align-items:center; gap:10px; flex:1 1 200px;
+        padding:12px 14px; border:1px solid #333a4d; border-radius:10px;
+        background:#161926; color:var(--fg); text-decoration:none; }
+  .dl:hover { border-color:#4b5573; background:#1a1e2d; }
+  .dl svg { flex:0 0 auto; width:22px; height:22px; }
+  .dl-name { font-weight:600; }
+  .dl-meta { color:var(--dim); font-size:12px; }
+  .dl-other { margin:16px 0 0; font-size:13px; }
+  .dl-other a { color:var(--dim); }
+
   /* A card hidden by search is out of the layout, so the grid closes up
      rather than leaving holes. */
   .card.hidden { display:none; }
@@ -260,6 +278,13 @@ function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: TypeSumma
   ${pokemon.length
       ? `<div class="grid">${pokemon.map(card).join('')}</div>`
       : `<p class="empty">No pokemon of that type.</p>`}
+
+  <footer id="downloads" hidden>
+    <h2>Play from your terminal</h2>
+    <p class="sub" id="dl-platform"></p>
+    <div class="dl-row" id="dl-row"></div>
+    <p class="dl-other"><a href="https://github.com/ChristopherScot/pokemon/releases/latest" target="_blank" rel="noopener">All downloads &amp; other platforms</a></p>
+  </footer>
 
 <script type="module">
 // Pin the filters directly below the topbar, whatever height it is.
@@ -449,6 +474,132 @@ document.getElementById('name-form').addEventListener('submit', async (e) => {
 })
 
 render()
+
+// Downloads for the terminal clients, matched to the visitor's machine.
+//
+// Asked of GitHub from the BROWSER rather than from this server. The
+// server cannot reach api.github.com at all - its NetworkPolicy allows
+// DNS and the pokedex API and nothing else - and routing it through
+// here would mean a proxy endpoint, a cache, and a second thing to go
+// stale. The visitor's browser already has internet access.
+//
+// The whole block stays hidden unless a matching asset actually
+// exists. pokedex-cli has a release workflow but has never had its
+// VERSION bumped, so it has no assets at all; rendering a link to one
+// would be a 404 dressed as a download. Listing what the API reports
+// means the CLI appears by itself the day it first releases, with no
+// change here.
+const RELEASES = 'https://api.github.com/repos/ChristopherScot/pokemon/releases/latest'
+
+const TOOLS = [
+  {
+    prefix: 'pokedex-tui',
+    name: 'Pokedex TUI',
+    blurb: 'Browse and battle in a full-screen terminal app',
+    // Inline SVG rather than an icon font or an image: no extra
+    // request, no flash of a missing glyph, and it inherits the text
+    // colour. A terminal window.
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 9l3 3-3 3M12 15h5"/></svg>',
+  },
+  {
+    prefix: 'pokedex-cli',
+    name: 'Pokedex CLI',
+    blurb: 'One-shot lookups and scripting',
+    // A chevron prompt.
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l5 6-5 6M12 18h8"/></svg>',
+  },
+]
+
+// What the asset names call this machine.
+//
+// Three signals, because no single one is both accurate and widely
+// supported:
+//
+//   - userAgentData.getHighEntropyValues() reports the architecture
+//     honestly, including "arm" on an Apple Silicon Mac. Chromium
+//     only, and asynchronous.
+//   - The WebGL renderer names the GPU, and an Apple Silicon Mac says
+//     "Apple". Works in Safari, where the first does not exist, but
+//     returns nothing in a headless browser and can be blocked for
+//     fingerprinting.
+//   - The userAgent string, which on macOS says "Intel" whatever the
+//     machine is - so it is the last resort, not the first.
+//
+// Getting it wrong offers an amd64 build to an arm64 Mac. That runs
+// under Rosetta rather than failing, so the cost of a wrong guess is
+// a slower binary, not a broken one - which is why this guesses at
+// all instead of making everyone read a list.
+async function detectPlatform() {
+  const ua = navigator.userAgent
+  const data = navigator.userAgentData
+  const hint = data?.platform || ''
+  const os = /Mac|Darwin/i.test(hint + ua) ? 'darwin'
+    : /Linux|X11/i.test(hint + ua) && !/Android/i.test(ua) ? 'linux'
+    : ''
+  if (!os) return null
+
+  let arch = ''
+  try {
+    const high = await data?.getHighEntropyValues(['architecture'])
+    if (high?.architecture) arch = high.architecture === 'arm' ? 'arm64' : 'amd64'
+  } catch {
+    // Not Chromium, or the call was refused. Fall through.
+  }
+  if (!arch) {
+    try {
+      const gl = document.createElement('canvas').getContext('webgl')
+      const dbg = gl?.getExtension('WEBGL_debug_renderer_info')
+      const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : ''
+      if (/Apple [GM]/.test(renderer)) arch = 'arm64'
+    } catch {
+      // Canvas blocked. Fall through.
+    }
+  }
+  if (!arch) arch = /aarch64|arm64/i.test(ua) ? 'arm64' : 'amd64'
+
+  return {
+    os,
+    arch,
+    label: (os === 'darwin' ? 'macOS' : 'Linux') + ' \u00b7 ' +
+      (arch === 'arm64' ? (os === 'darwin' ? 'Apple Silicon' : 'ARM64') : 'Intel / AMD'),
+  }
+}
+
+async function showDownloads() {
+  const plat = await detectPlatform()
+  if (!plat) return
+
+  let release
+  try {
+    const res = await fetch(RELEASES, { headers: { Accept: 'application/vnd.github+json' } })
+    if (!res.ok) return
+    release = await res.json()
+  } catch {
+    // Offline, rate limited, or blocked. The section stays hidden
+    // rather than showing an error nobody can act on.
+    return
+  }
+
+  const want = '_' + plat.os + '_' + plat.arch + '.tar.gz'
+  const links = TOOLS
+    .map((tool) => {
+      const asset = (release.assets || []).find((a) => a.name === tool.prefix + want)
+      return asset ? { tool, asset } : null
+    })
+    .filter(Boolean)
+  if (!links.length) return
+
+  document.getElementById('dl-platform').textContent =
+    release.tag_name + ' for ' + plat.label
+  document.getElementById('dl-row').innerHTML = links.map(({ tool, asset }) =>
+    '<a class="dl" href="' + asset.browser_download_url + '" download>' +
+    tool.icon +
+    '<span><span class="dl-name">' + tool.name + '</span><br>' +
+    '<span class="dl-meta">' + tool.blurb + '</span></span></a>').join('')
+  document.getElementById('downloads').hidden = false
+}
+
+showDownloads()
 </script>
 </body></html>`
 }
