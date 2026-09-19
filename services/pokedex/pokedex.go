@@ -68,6 +68,12 @@ type entry struct {
 	BaseAttack  int `json:"baseAttack"`
 	BaseDefense int `json:"baseDefense"`
 	BaseSpeed   int `json:"baseSpeed"`
+	// The special split. Present in the data and in the schema, but
+	// nothing reads them yet: the damage formula does not distinguish
+	// physical from special, and teaching it to is a change to
+	// battle.go rather than to the data.
+	BaseSpecialAttack  int `json:"baseSpecialAttack"`
+	BaseSpecialDefense int `json:"baseSpecialDefense"`
 	// The Pokedex entry and the games' one-line label, e.g. "Seed
 	// Pokemon". Descriptive only; nothing in a battle reads them.
 	Description string `json:"description"`
