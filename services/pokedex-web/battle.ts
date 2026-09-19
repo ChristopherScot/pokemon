@@ -58,6 +58,24 @@ const esc = (s: unknown): string =>
   String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 
+// UI_VERSION is the version of the code that runs IN THE BROWSER, bumped
+// by hand when a change to it matters.
+//
+// Separate from the service's build and from the API version, because
+// neither describes what a given tab is running: the script is inlined
+// into the page, so a tab holds whatever was current when it loaded and
+// keeps running it until something reloads it. A tab loaded before the
+// poll fix polled a deleted battle once a second for thirteen hours -
+// some 46,000 requests - and no deploy could reach it.
+//
+// Reported as Client-Version on every request the page makes, so the
+// server can see which code a caller is running, and so minVersion in
+// config.yaml can refuse one that is doing harm.
+//
+// Bare, with no leading v: this is what the generated clients send, and
+// the server adds the v before comparing.
+export const UI_VERSION = '0.3.0'
+
 // The battle page. Everything below the initial render is done by the
 // inline script, which polls /battle/:id/state and swaps the board.
 // Exported so a test can run the real browser code rather than assert
@@ -161,7 +179,13 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
 <script type="module">
 const ID = ${JSON.stringify(id)}
 const ME = ${JSON.stringify(trainer)}
+const UI_VERSION = ${JSON.stringify(UI_VERSION)}
 const COLOURS = ${JSON.stringify(TYPE_COLOURS)}
+
+// Sent on every request this page makes, so the server knows which
+// browser code is calling it. A tab that predates this sends nothing,
+// which the server reads as "unknown" rather than guessing.
+const V = { 'Client-Version': UI_VERSION }
 
 let seen = -1
 let picked = { attacker: 0, move: 0, target: 0 }
@@ -389,7 +413,7 @@ async function attack() {
   if (go) { go.disabled = true; go.textContent = 'attacking…' }
   const res = await fetch('/battle/' + ID + '/turn', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...V },
     body: JSON.stringify(picked),
   })
   if (!res.ok) {
@@ -422,13 +446,38 @@ async function attack() {
 const MAX_MISSES = 5
 let misses = 0
 
+// Statuses that mean "stop asking", as opposed to "try again".
+//
+// 410 is the server refusing this client: it is below minVersion, and
+// retrying cannot help because the code in this tab will not change on
+// its own. 501 and 505 are the same shape - the server will not do
+// this, ever - and anything else is treated as transient.
+//
+// Without this list an unexpected status fell through to the retry at
+// the bottom, so a 500 or an nginx 502 mid-rollout polled forever just
+// as a 404 used to.
+const TERMINAL = new Set([410, 501, 505])
+
+function stop(message) {
+  const board = document.getElementById('board')
+  if (board) {
+    board.innerHTML = '<div class="banner over">' + message + '</div>' +
+      '<div class="pick"><div class="moves">' +
+      '<a href="/battle"><button>back to the lobby</button></a>' +
+      '</div></div>'
+  }
+}
+
 async function poll() {
   try {
-    const res = await fetch('/battle/' + ID + '/state')
+    const res = await fetch('/battle/' + ID + '/state', { headers: V })
     if (res.ok) {
       misses = 0
       const b = await res.json()
       if (b.version !== seen) { seen = b.version; render(b) }
+    } else if (TERMINAL.has(res.status)) {
+      stop('this page is out of date \u2014 reload to carry on')
+      return
     } else if (res.status === 404) {
       if (++misses >= MAX_MISSES) {
         const board = document.getElementById('board')
@@ -648,7 +697,7 @@ if (reg) reg.addEventListener('click', async () => {
   const name = document.getElementById('name').value.trim()
   if (!name) return
   const res = await fetch('/battle/register', {
-    method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({name}) })
+    method:'POST', headers:{'content-type':'application/json', ...V}, body:JSON.stringify({name}) })
   if (res.ok) location.reload()
   else alert((await res.json()).message || 'that name is taken')
 })
@@ -658,7 +707,7 @@ const team = () => document.getElementById('team').value.split(',').map(s => s.t
 const open = document.getElementById('open')
 if (open) open.addEventListener('click', async () => {
   const res = await fetch('/battle/open', {
-    method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({team: team()}) })
+    method:'POST', headers:{'content-type':'application/json', ...V}, body:JSON.stringify({team: team()}) })
   const body = await res.json()
   if (res.ok) location.href = '/battle/' + body.id
   else alert(body.message || 'could not open that battle')
@@ -667,7 +716,7 @@ if (open) open.addEventListener('click', async () => {
 document.querySelectorAll('[data-join]').forEach((el) => el.addEventListener('click', async () => {
   const t = document.getElementById('team')
   const res = await fetch('/battle/' + el.dataset.join + '/join', {
-    method:'POST', headers:{'content-type':'application/json'},
+    method:'POST', headers:{'content-type':'application/json', ...V},
     body: JSON.stringify({team: t ? team() : []}) })
   const body = await res.json()
   if (res.ok) location.href = '/battle/' + el.dataset.join

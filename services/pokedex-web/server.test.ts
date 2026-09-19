@@ -237,3 +237,81 @@ test('polling stops once the battle is gone', async () => {
   assert.match(board.innerHTML, /this battle is over/,
     'the player is left on a spinner with no explanation')
 })
+
+// Drives the REAL poll() out of the page, so these assert on the code a
+// browser runs rather than on a copy of it.
+async function pollHarness(responses: Array<{ ok: boolean; status: number }>) {
+  const { battlePage } = await import('./battle.ts')
+  const page = battlePage({ id: 'abc123', trainer: 'ash' })
+  const open = page.match(/<script[^>]*>/)!
+  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+
+  const board = { innerHTML: 'loading…', className: '', scrollTop: 0 }
+  const els: Record<string, unknown> = { board, log: board }
+  const sent: Array<Record<string, string>> = []
+  let reschedules = 0
+  let i = 0
+
+  const sandbox = {
+    document: {
+      getElementById: (id: string) => els[id] ?? null,
+      addEventListener: () => {},
+    },
+    location: { pathname: '/battle/abc123', reload: () => {} },
+    fetch: async (_url: string, init?: { headers?: Record<string, string> }) => {
+      sent.push(init?.headers ?? {})
+      const r = responses[Math.min(i++, responses.length - 1)]
+      return { ...r, json: async () => ({ version: 1, sides: [], log: [] }) }
+    },
+    setTimeout: (fn: () => void) => { reschedules++; return 0 },
+    setInterval: () => 0,
+    requestAnimationFrame: () => 0,
+    console,
+  }
+
+  const run = new Function(
+    ...Object.keys(sandbox),
+    script + '\n;return { poll };',
+  ) as (...a: unknown[]) => { poll: () => Promise<void> }
+
+  const { poll } = run(...Object.values(sandbox))
+  // The script calls poll() itself on load, so let that settle and
+  // count only what the explicit call below does.
+  await new Promise((r) => setImmediate(r))
+  sent.length = 0
+  reschedules = 0
+  i = 0
+
+  await poll()
+  return { sent, reschedules, board }
+}
+
+// The bug this closes: anything that was not 200 or 404 fell through to
+// the retry at the bottom, so a 500 - or an nginx 502 mid-rollout, or a
+// 410 telling this client it is too old - polled once a second forever.
+test('poll stops on a terminal status instead of retrying forever', async () => {
+  for (const status of [410, 501, 505]) {
+    const { reschedules, board } = await pollHarness([{ ok: false, status }])
+    assert.equal(reschedules, 0, `a ${status} should stop the poll, not reschedule it`)
+    assert.match(board.innerHTML, /out of date/, `a ${status} should say why it stopped`)
+  }
+})
+
+// A transient failure still retries: a dropped request or a pod
+// restarting mid-rollout must not kill a live battle.
+test('poll retries a transient failure', async () => {
+  const { reschedules } = await pollHarness([{ ok: false, status: 503 }])
+  assert.equal(reschedules, 1, 'a 503 is transient and should be retried')
+})
+
+// Without a version the server cannot tell which browser code is
+// calling, which is what made the stuck tab impossible to identify or
+// refuse.
+test('every request reports the UI version', async () => {
+  const { UI_VERSION } = await import('./battle.ts')
+  const { sent } = await pollHarness([{ ok: true, status: 200 }])
+  assert.ok(sent.length > 0, 'the poll should have made a request')
+  for (const headers of sent) {
+    assert.equal(headers['Client-Version'], UI_VERSION)
+  }
+})
