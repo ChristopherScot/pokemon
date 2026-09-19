@@ -177,49 +177,6 @@ func (m model) teamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// startBattle opens or joins, depending on how the team screen was
-// reached.
-func (m model) startBattle() tea.Cmd {
-	team := append([]string(nil), m.team...)
-	id, bc := m.joining, m.bc
-	return func() tea.Msg {
-		ctx, cancel := shortCtx()
-		defer cancel()
-		var (
-			b   *api.Battle
-			err error
-		)
-		if id == "" {
-			b, err = bc.Create(ctx, team)
-		} else {
-			b, err = bc.Join(ctx, id, team)
-		}
-		return startedMsg{battle: b, err: err}
-	}
-}
-
-// resumeBattle walks back into a battle already in progress.
-//
-// It reuses startedMsg, because "here is the battle you are now on" is
-// the same event however it was reached - opened, joined, or returned
-// to. The lobby cannot offer this: it lists only WAITING battles, and
-// the one you walked out of is active.
-func (m model) resumeBattle() tea.Cmd {
-	id, bc := m.lastBattle, m.bc
-	return func() tea.Msg {
-		ctx, cancel := shortCtx()
-		defer cancel()
-		b, err := bc.Get(ctx, id)
-		return startedMsg{battle: b, err: err}
-	}
-}
-
-// startedMsg is the result of opening or joining.
-type startedMsg struct {
-	battle *api.Battle
-	err    error
-}
-
 func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	bs := m.battle
 	if bs == nil {
@@ -279,21 +236,6 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.attack()
 	}
 	return m, nil
-}
-
-// attack sends the chosen move. A rejection is shown rather than
-// swallowed: a 409 means the state moved on, and the player should see
-// why their turn did not happen.
-func (m model) attack() tea.Cmd {
-	bs := m.battle
-	bc := m.bc
-	id, a, mv, t := bs.id, bs.pickAttacker, bs.pickMove, bs.pickTarget
-	return func() tea.Msg {
-		ctx, cancel := shortCtx()
-		defer cancel()
-		b, err := bc.Attack(ctx, id, a, mv, t)
-		return battleMsg{battle: b, err: err}
-	}
 }
 
 // nextAlive and prevAlive skip fainted Pokemon, so the cursor never
