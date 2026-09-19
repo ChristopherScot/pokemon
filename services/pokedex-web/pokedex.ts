@@ -489,7 +489,14 @@ render()
 // would be a 404 dressed as a download. Listing what the API reports
 // means the CLI appears by itself the day it first releases, with no
 // change here.
-const RELEASES = 'https://api.github.com/repos/ChristopherScot/pokemon/releases/latest'
+// The releases LIST, not /latest.
+//
+// Each tool releases under its own version into one shared tag
+// namespace, so no single release ever carries both: the TUI is on
+// v0.1.1 and the CLI on v0.1.2. Asking for /latest returns whichever
+// tool released most recently and hides the other. Walking the list
+// newest-first finds the current release of each independently.
+const RELEASES = 'https://api.github.com/repos/ChristopherScot/pokemon/releases?per_page=30'
 
 const TOOLS = [
   {
@@ -569,33 +576,43 @@ async function showDownloads() {
   const plat = await detectPlatform()
   if (!plat) return
 
-  let release
+  let releases
   try {
     const res = await fetch(RELEASES, { headers: { Accept: 'application/vnd.github+json' } })
     if (!res.ok) return
-    release = await res.json()
+    releases = await res.json()
   } catch {
     // Offline, rate limited, or blocked. The section stays hidden
     // rather than showing an error nobody can act on.
     return
   }
+  if (!Array.isArray(releases)) return
 
+  // Newest first, so the first release carrying a tool's asset is its
+  // current one. A draft or prerelease is skipped rather than offered.
   const want = '_' + plat.os + '_' + plat.arch + '.tar.gz'
-  const links = TOOLS
-    .map((tool) => {
+  const links = []
+  for (const tool of TOOLS) {
+    for (const release of releases) {
+      if (release.draft || release.prerelease) continue
       const asset = (release.assets || []).find((a) => a.name === tool.prefix + want)
-      return asset ? { tool, asset } : null
-    })
-    .filter(Boolean)
+      if (asset) {
+        links.push({ tool, asset, tag: release.tag_name })
+        break
+      }
+    }
+  }
   if (!links.length) return
 
-  document.getElementById('dl-platform').textContent =
-    release.tag_name + ' for ' + plat.label
-  document.getElementById('dl-row').innerHTML = links.map(({ tool, asset }) =>
+  // Each tool carries its own version, because they are not released
+  // together - one line naming a single version would be wrong for
+  // whichever tool is not on it.
+  document.getElementById('dl-platform').textContent = 'for ' + plat.label
+  document.getElementById('dl-row').innerHTML = links.map(({ tool, asset, tag }) =>
     '<a class="dl" href="' + asset.browser_download_url + '" download>' +
     tool.icon +
     '<span><span class="dl-name">' + tool.name + '</span><br>' +
-    '<span class="dl-meta">' + tool.blurb + '</span></span></a>').join('')
+    '<span class="dl-meta">' + tool.blurb + ' \u00b7 ' + tag + '</span></span></a>').join('')
   document.getElementById('downloads').hidden = false
 }
 
