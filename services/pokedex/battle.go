@@ -10,6 +10,7 @@ package main
 // interface is what keeps the swap to a real store from being a rewrite.
 
 import (
+	crand "crypto/rand"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -302,6 +303,45 @@ func newMemStore(seed int64) *memStore {
 	}
 }
 
+// newToken mints a trainer token.
+//
+// crypto/rand, not the store's math/rand. randomID draws from a
+// generator seeded with time.Now().UnixNano() at startup, so anyone who
+// knows roughly when the process started can reproduce the whole token
+// stream in order - the first token, the second, all of them. That did
+// not matter while this ran on the LAN and the worst outcome was moving
+// someone else's Pokemon. It matters on a public address, where the
+// cost of getting it right is these fifteen lines.
+//
+// Battle IDs stay on math/rand deliberately: they are shared aloud
+// between players, the alphabet skips 0/1/l to keep them readable, and
+// knowing one grants nothing - the token is what authorises a move.
+func newToken() string {
+	// Rejection sampling, not modulo. 256 is not a multiple of 33, so
+	// b[i]%33 would favour the first 25 characters of the alphabet -
+	// a small bias, and free to avoid.
+	const max = 256 - (256 % len(idAlphabet))
+	out := make([]byte, 0, 24)
+	buf := make([]byte, 32)
+	for len(out) < 24 {
+		if _, err := crand.Read(buf); err != nil {
+			// crypto/rand does not fail on any platform this runs on,
+			// and a token from a degraded source is worse than none.
+			panic("crypto/rand: " + err.Error())
+		}
+		for _, v := range buf {
+			if int(v) >= max {
+				continue
+			}
+			out = append(out, idAlphabet[int(v)%len(idAlphabet)])
+			if len(out) == 24 {
+				break
+			}
+		}
+	}
+	return string(out)
+}
+
 var errNameTaken = errors.New("name already taken")
 
 func (m *memStore) registerTrainer(name string) (string, error) {
@@ -311,7 +351,7 @@ func (m *memStore) registerTrainer(name string) (string, error) {
 	if m.names[strings.ToLower(name)] {
 		return "", errNameTaken
 	}
-	token := randomID(m.rng, 24)
+	token := newToken()
 	m.names[strings.ToLower(name)] = true
 	m.trainers[token] = name
 	return token, nil

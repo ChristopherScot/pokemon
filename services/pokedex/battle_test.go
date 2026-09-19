@@ -7,6 +7,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -440,6 +441,49 @@ func TestCreateWithNoTeamPicksOne(t *testing.T) {
 	for _, p := range b.Sides[0].Team {
 		if p.MaxHp <= 0 || p.Hp != p.MaxHp {
 			t.Errorf("%s started at %d/%d", p.Name, p.Hp, p.MaxHp)
+		}
+	}
+}
+
+// Trainer tokens must not be reproducible from the process start time.
+//
+// They came from the store's math/rand, seeded with
+// time.Now().UnixNano() at startup, so two stores seeded identically
+// produced the same token stream in the same order - the first token,
+// the second, all of them. On the LAN the worst case was moving
+// someone else's Pokemon. On a public address it is worth the fifteen
+// lines to do properly.
+func TestTokensDoNotFollowTheSeed(t *testing.T) {
+	// Two stores with an identical seed. Anything derived from it
+	// matches; a token must not.
+	a := newMemStore(42)
+	b := newMemStore(42)
+
+	ta, err := a.registerTrainer("ash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tb, err := b.registerTrainer("ash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ta == tb {
+		t.Error("two stores with the same seed minted the same token; it is derived from the seed")
+	}
+
+	// And tokens within one store differ from each other.
+	seen := map[string]bool{ta: true}
+	for i := 0; i < 50; i++ {
+		tok, err := a.registerTrainer(fmt.Sprintf("trainer-%d", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if seen[tok] {
+			t.Fatalf("token %q repeated", tok)
+		}
+		seen[tok] = true
+		if len(tok) != 24 {
+			t.Errorf("token %q is %d characters, want 24", tok, len(tok))
 		}
 	}
 }
