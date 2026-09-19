@@ -52,3 +52,21 @@ replicas: 1
 manifests:
   - networkpolicy.yaml
   - db.yaml
+
+# DATABASE_URL, from the secret CNPG generates for the cluster in
+# db.yaml.
+#
+# Not `secrets:`, which reads Vault. CNPG mints this credential with
+# the cluster and rotates it there, so a copy in Vault would be a
+# second copy to go stale. `uri` is the key it writes a whole
+# connection string to; the same secret also carries host, port, user
+# and password separately.
+#
+# Setting this is what moves trainers and battles out of the process:
+# without it the service falls back to a map behind a mutex and loses
+# everything on a deploy.
+env:
+    DATABASE_URL:
+        secretKeyRef:
+            name: pokedex-db-app
+            key: uri

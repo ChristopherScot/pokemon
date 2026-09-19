@@ -25,6 +25,7 @@ spec:
         k8s.grafana.com/scrape: "true"
         k8s.grafana.com/metrics.path: "/metrics"
         k8s.grafana.com/metrics.portNumber: "3000"
+        reloader.stakater.com/secret-reload-on-change: "pokedex-db-app"
       labels:
         app: pokedex
         team: me-myself-and-i
@@ -45,6 +46,11 @@ spec:
           env:
             - name: PORT
               value: "3000"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: pokedex-db-app
+                  key: uri
           resources:
             requests:
               cpu: 10m
