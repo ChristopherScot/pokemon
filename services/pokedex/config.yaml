@@ -48,3 +48,33 @@ ingress:
 manifests:
   - networkpolicy.yaml
   - db.yaml
+
+# DATABASE_URL, from the secret CNPG generates for the cluster above.
+#
+# A patch rather than `secrets:`, which generates an ExternalSecret
+# reading from Vault. This credential is not in Vault: CNPG mints it
+# with the cluster and rotates it there, so copying it into Vault
+# would create a second copy to go stale.
+#
+# `uri` is the key CNPG writes a full connection string to - the same
+# secret also carries host, port, user and password separately, but
+# one env var beats reassembling five.
+#
+# PORT is repeated here because a patched list REPLACES the generated
+# one rather than merging into it - maps merge, sequences do not. Left
+# out, the container starts with no PORT and serves on the wrong one.
+patches:
+  Deployment: |
+    spec:
+      template:
+        spec:
+          containers:
+            - name: pokedex
+              env:
+                - name: PORT
+                  value: "3000"
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: pokedex-db-app
+                      key: uri

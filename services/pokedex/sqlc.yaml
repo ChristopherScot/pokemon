@@ -1,0 +1,29 @@
+# sqlc generates the database layer from the schema and the queries,
+# so a typo in SQL is a build error rather than a 500 in the cluster.
+#
+# Run `go generate ./...` after editing migrations/ or queries/ - the
+# //go:generate line is in db.go, alongside the ogen one, so one command
+# regenerates everything derived.
+version: "2"
+sql:
+  - engine: postgresql
+    # The migrations ARE the schema. Pointing sqlc at them rather than a
+    # separate schema.sql means the types it generates cannot drift from
+    # what the database actually has.
+    schema: migrations
+    queries: queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/dbgen
+        # pgx/v5, matching the driver the service already uses. The
+        # database/sql default would mean two connection stacks.
+        sql_package: pgx/v5
+        emit_json_tags: false
+        # A pointer for a nullable column, rather than sql.NullInt32.
+        # moves.accuracy is the only one, and *int32 reads better at
+        # the call site than a struct with a Valid field.
+        emit_pointers_for_null_types: true
+        # Interfaces for the generated methods, so a test can supply a
+        # fake without a database.
+        emit_interface: true

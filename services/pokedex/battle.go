@@ -44,6 +44,10 @@ const (
 )
 
 var (
+	// errNoBattle is update()'s "no such id", distinct from any error
+	// the closure itself returns - a caller needs to tell "the battle
+	// is gone" (404) from "that move is illegal" (409).
+	errNoBattle      = errors.New("no such battle")
 	errNotYourTurn   = errors.New("not your turn")
 	errIllegalMove   = errors.New("illegal move")
 	errBattleOver    = errors.New("battle is already finished")
@@ -284,6 +288,25 @@ type store interface {
 	waiting() []*battle
 	trainerByToken(token string) (string, bool)
 	registerTrainer(name string) (string, error)
+
+	// update applies fn to a battle and persists the result, as one
+	// atomic step.
+	//
+	// The closure form is what makes this safe across replicas. `get`
+	// then mutate works in one process because the pointer IS the
+	// stored battle; against a database it is a read-modify-write with
+	// a gap, and two pods resolving a turn at once would both read
+	// version 5 and one would overwrite the other with no error.
+	//
+	// The Postgres store runs fn inside a SERIALIZABLE transaction and
+	// retries on a serialization failure, so fn may run more than
+	// once. It must therefore not have side effects outside the battle
+	// it is given - no logging a turn, no sending a notification. The
+	// memory store just takes its mutex.
+	//
+	// Returns errNoBattle if there is none with that id, otherwise
+	// whatever fn returned.
+	update(id string, fn func(*battle) error) error
 }
 
 type memStore struct {
@@ -376,6 +399,26 @@ func (m *memStore) get(id string) (*battle, bool) {
 	defer m.mu.Unlock()
 	b, ok := m.battles[id]
 	return b, ok
+}
+
+// update runs fn under the store's lock.
+//
+// In memory the pointer IS the stored battle, so there is nothing to
+// write back - holding the lock for the duration is the whole job, and
+// it is what stops two requests interleaving a turn. The Postgres
+// store has real work to do here; see pgstore.update.
+func (m *memStore) update(id string, fn func(*battle) error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b, ok := m.battles[id]
+	if !ok {
+		return errNoBattle
+	}
+	if err := fn(b); err != nil {
+		return err
+	}
+	b.touched = time.Now()
+	return nil
 }
 
 // waiting lists open invitations, newest first, so a lobby shows the

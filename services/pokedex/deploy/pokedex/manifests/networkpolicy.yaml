@@ -44,9 +44,9 @@ spec:
         - protocol: TCP
           port: 3000
   egress:
-    # DNS only. The API holds its state in memory and calls nothing -
-    # no database, no upstream, no outbound HTTP - so this is the whole
-    # list, and this rule is what will say so when that changes.
+    # DNS, and Postgres. The API used to call nothing at all - state
+    # lived in memory - and this rule said so. State moved to
+    # pokedex-db, so this is that change.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -56,3 +56,14 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # The CNPG cluster in this namespace. Selected by CNPG's own label
+    # rather than by name: a cluster is several pods - primary, any
+    # replicas, and whichever is promoted on failover - and they all
+    # carry it.
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: pokedex-db
+      ports:
+        - protocol: TCP
+          port: 5432
