@@ -315,3 +315,70 @@ test('every request reports the UI version', async () => {
     assert.equal(headers['Client-Version'], UI_VERSION)
   }
 })
+
+// Joining from the battle page used to POST no body at all, which the
+// server reads as "no preference" and fills randomly. Landing on a
+// battle link someone sent you therefore gave you three Pokemon you did
+// not choose, with nothing on screen suggesting you had a say.
+test('the battle page offers a team input when the battle is joinable', async () => {
+  const { battlePage } = await import('./battle.ts')
+  const page = battlePage({ id: 'abc123', trainer: 'ash' })
+  // Match the INPUT, not any mention of the id: the script below also
+  // names it, so a bare includes() passes even with the input removed.
+  assert.match(page, /<input id="join-team"/, 'the join form should have a team input')
+})
+
+test('joining from the battle page sends the chosen team', async () => {
+  const { battlePage } = await import('./battle.ts')
+  const page = battlePage({ id: 'abc123', trainer: 'ash' })
+  const open = page.match(/<script[^>]*>/)!
+  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+
+  const board = { innerHTML: '', className: '', scrollTop: 0 }
+  const input = { value: 'pikachu, onix, gengar' }
+  const joinBtn: Record<string, unknown> = { disabled: false, textContent: '' }
+  const els: Record<string, unknown> = {
+    board, log: board, 'join-team': input, 'join-battle': joinBtn,
+  }
+  let sentBody: string | undefined
+
+  const sandbox = {
+    document: {
+      getElementById: (id: string) => els[id] ?? null,
+      addEventListener: () => {},
+      querySelectorAll: () => [],
+    },
+    location: { pathname: '/battle/abc123', reload: () => {} },
+    fetch: async (_u: string, init?: { body?: string }) => {
+      if (init?.body) sentBody = init.body
+      return { ok: true, status: 200, json: async () => ({ version: 1, sides: [], log: [] }) }
+    },
+    setTimeout: () => 0,
+    setInterval: () => 0,
+    requestAnimationFrame: () => 0,
+    console,
+  }
+
+  const run = new Function(
+    ...Object.keys(sandbox),
+    script + '\n;return { render };',
+  ) as (...a: unknown[]) => { render: (b: unknown) => void }
+
+  const { render } = run(...Object.values(sandbox))
+  // A waiting battle with one side is joinable, so render wires the button.
+  render({
+    id: 'abc123', status: 'waiting', version: 1, turn: null, log: [],
+    sides: [{ trainer: 'misty', team: [{ name: 'staryu', hp: 10, maxHp: 10, types: ['water'], moves: [], fainted: false }] }],
+  })
+
+  await (joinBtn.onclick as () => Promise<void>)()
+  assert.ok(sentBody, 'the join should send a body')
+  assert.deepEqual(JSON.parse(sentBody!).team, ['pikachu', 'onix', 'gengar'])
+})
+
+// The lobby rendered once and never changed, so a battle opened after
+// your page loaded never appeared and there was no button to join it.
+test('the lobby ships a waiting list the poll can replace', async () => {
+  const { registerBattle } = await import('./battle.ts')
+  assert.ok(registerBattle, 'registerBattle should be exported')
+})

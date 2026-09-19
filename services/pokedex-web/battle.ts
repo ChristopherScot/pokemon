@@ -241,7 +241,18 @@ function renderSpectator(b) {
   }
 
   if (joinable) {
-    html += '<div class="pick"><div class="moves">' +
+    // A team input, not just a button.
+    //
+    // Joining from here used to POST no body at all, which the server
+    // reads as "no preference" and fills randomly - so the only way to
+    // pick your own team was to come through the lobby. Landing on a
+    // battle URL someone sent you gave you three Pokemon you did not
+    // choose, with nothing on screen suggesting you had a say.
+    html += '<div class="pick"><div class="moves" style="flex-direction:column;gap:8px">' +
+      '<input id="join-team" placeholder="charizard, blastoise, venusaur" ' +
+      'style="width:100%;padding:8px;border-radius:6px;border:1px solid #2c3040;' +
+      'background:var(--bg);color:var(--fg)">' +
+      '<div class="sub" style="margin:0">three pokemon, comma separated - leave blank for a random team</div>' +
       '<button id="join-battle">join as ' + esc(ME) + '</button>' +
       '</div></div>'
   }
@@ -257,7 +268,15 @@ function renderSpectator(b) {
   if (join) {
     join.onclick = async () => {
       join.disabled = true
-      const res = await fetch(location.pathname + '/join', { method: 'POST' })
+      const input = document.getElementById('join-team')
+      const picked = input
+        ? input.value.split(',').map((s) => s.trim()).filter(Boolean)
+        : []
+      const res = await fetch(location.pathname + '/join', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...V },
+        body: JSON.stringify({ team: picked }),
+      })
       if (res.ok) { location.reload(); return }
       // 401 means this trainer no longer exists - the server has already
       // cleared the cookie, so reloading lands on the name prompt rather
@@ -567,6 +586,20 @@ export function registerBattle(app: FastifyInstance) {
     return reply.type('text/html').send(lobbyPage({ me, waiting }))
   })
 
+  // The waiting list as JSON, so the lobby can refresh without a full
+  // page load.
+  //
+  // The lobby used to render once and never change, so a battle opened
+  // by somebody else after your page loaded simply never appeared -
+  // there was no join button because the list was frozen at load time.
+  // The battle page has polled once a second all along; this is the
+  // same idea for the one screen that needed it more.
+  app.get('/battle/waiting', reachable(async (_request, reply) => {
+    const { data, error } = await api.GET('/trainers/waiting')
+    if (error) return reply.code(502).send(error)
+    return { waiting: data.waiting }
+  }))
+
   app.post<{ Body: NameBody }>('/battle/register', reachable(async (request, reply) => {
     const name = String((request.body || {}).name || '').trim()
     if (!name) return reply.code(400).send({ message: 'name is required' })
@@ -683,13 +716,14 @@ function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: WaitingBattle
   ${me ? '' : `<div class="row"><input id="name" placeholder="trainer name" maxlength="32">
     <button id="reg">register</button></div>`}
 
-  ${me ? `<div class="row"><div><strong>open a battle</strong>
-      <div class="sub" style="margin:0">three pokemon, comma separated</div></div></div>
+  ${me ? `<div class="row"><div><strong>your team</strong>
+      <div class="sub" style="margin:0">three pokemon, comma separated - used when you
+        open a battle OR join one below. leave blank for a random team.</div></div></div>
     <div class="row"><input id="team" style="flex:1" placeholder="charizard, blastoise, venusaur">
       <button id="open">open</button></div>` : ''}
 
   <h2 style="font-size:14px;color:var(--dim);margin:22px 0 8px">waiting</h2>
-  ${rows}
+  <div id="waiting">${rows}</div>
 
 <script type="module">
 const reg = document.getElementById('reg')
@@ -713,7 +747,12 @@ if (open) open.addEventListener('click', async () => {
   else alert(body.message || 'could not open that battle')
 })
 
-document.querySelectorAll('[data-join]').forEach((el) => el.addEventListener('click', async () => {
+// Delegated, not bound per button: the waiting list is replaced by the
+// poll below, and handlers attached to the old elements would go with
+// it - so the first refresh would leave every join button dead.
+document.addEventListener('click', async (ev) => {
+  const el = ev.target.closest('[data-join]')
+  if (!el) return
   const t = document.getElementById('team')
   const res = await fetch('/battle/' + el.dataset.join + '/join', {
     method:'POST', headers:{'content-type':'application/json', ...V},
@@ -721,7 +760,52 @@ document.querySelectorAll('[data-join]').forEach((el) => el.addEventListener('cl
   const body = await res.json()
   if (res.ok) location.href = '/battle/' + el.dataset.join
   else alert(body.message || 'could not join')
-}))
+})
+
+// Keep the waiting list current.
+//
+// It used to render once and never change, so a battle opened by
+// somebody else after your page loaded never appeared - no join button,
+// because the list was frozen at load. The battle page has polled all
+// along; this is the same idea for the screen that needed it more.
+//
+// Paused while the tab is hidden. A lobby left open in a background tab
+// is the shape that produced 46,000 wasted requests from one stale
+// battle page, and nobody is waiting to join a battle they cannot see.
+const esc2 = (t) => String(t).replace(/[&<>"']/g, (c) => (
+  { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]))
+
+function renderWaiting(list) {
+  const box = document.getElementById('waiting')
+  if (!box) return
+  box.innerHTML = list.length === 0
+    ? '<p class="sub">nobody is waiting. open one below and share the link.</p>'
+    : list.map((w) => '<div class="row">' +
+        '<div><strong>' + esc2(w.trainer) + '</strong>' +
+        '<div class="sub" style="margin:0">' + w.team.map(esc2).join(', ') + '</div></div>' +
+        '<button data-join="' + esc2(w.battleId) + '">join</button></div>').join('')
+}
+
+let lobbyMisses = 0
+async function pollLobby() {
+  if (!document.hidden) {
+    try {
+      const res = await fetch('/battle/waiting', { headers: V })
+      if (res.ok) {
+        lobbyMisses = 0
+        const b = await res.json()
+        renderWaiting(b.waiting || [])
+      } else if (TERMINAL_LOBBY.has(res.status)) {
+        return // this client is too old, or the endpoint is gone
+      } else if (++lobbyMisses >= 5) {
+        return // the API has been unreachable for a while; stop asking
+      }
+    } catch { /* a dropped poll retries on the next tick */ }
+  }
+  setTimeout(pollLobby, 3000)
+}
+const TERMINAL_LOBBY = new Set([410, 501, 505])
+setTimeout(pollLobby, 3000)
 </script>
 </body></html>`
 }
