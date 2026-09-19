@@ -270,15 +270,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(pollBattle(m.bc, bs.id), tick())
 
 	case lobbyMsg:
+		// Keep polling only while the lobby is the screen being looked
+		// at. Re-arming unconditionally would keep asking during a
+		// battle, and stopping on error would make one blip freeze the
+		// list for good.
+		var again tea.Cmd
+		if m.screen == screenLobby {
+			again = pollLobby(m.bc)
+		}
 		if msg.err != nil {
-			m.status = statusFor(msg.err)
-			return m, nil
+			// A background refresh that fails says nothing: the user
+			// did not ask for it, and overwriting the status line would
+			// replace something they did ask for.
+			if !msg.polled {
+				m.status = statusFor(msg.err)
+			}
+			return m, again
 		}
 		m.lobby = msg.list
 		if m.lobbyIdx >= len(msg.list.Waiting) {
 			m.lobbyIdx = 0
 		}
-		return m, nil
+		return m, again
 
 	case tea.KeyPressMsg:
 		// While the filter is open every key belongs to it - including

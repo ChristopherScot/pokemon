@@ -33,6 +33,13 @@ const DefaultAPI = "https://pokemon.home.chrisscotmartin.com/api"
 // tighter loop would spend requests to shave latency nobody notices.
 const PollInterval = time.Second
 
+// LobbyPollInterval is how often the lobby re-reads the waiting list.
+//
+// Slower than PollInterval because the lobby is a waiting room rather
+// than a game in progress: the thing it is watching for is another
+// person deciding to open a battle, which happens on human timescales.
+const LobbyPollInterval = 3 * time.Second
+
 var ErrNoIdentity = errors.New("no trainer registered; run register first")
 
 // ErrStaleIdentity is a token the server does not recognise: it was

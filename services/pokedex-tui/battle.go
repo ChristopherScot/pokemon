@@ -41,6 +41,10 @@ type battleMsg struct {
 
 // lobbyMsg carries the list of open battles.
 type lobbyMsg struct {
+	// polled marks a result from the timer rather than an explicit
+	// action. A background refresh that fails should not overwrite
+	// whatever the user was last told - they did not ask for it.
+	polled bool
 	list *api.WaitingList
 	err  error
 }
@@ -143,6 +147,26 @@ func pollBattle(c *battleclient.Client, id string) tea.Cmd {
 		defer cancel()
 		b, err := c.Get(ctx, id)
 		return battleMsg{battle: b, err: err}
+	})
+}
+
+// pollLobby re-reads the waiting list on a timer.
+//
+// The lobby used to load once and never change, so a battle opened by
+// somebody else after you arrived never appeared - you would sit on a
+// "nobody is waiting" screen while an opponent sat on theirs. Every
+// other path into the lobby refetches on a keypress; this is the one
+// case where nothing the user does triggers the update.
+//
+// Re-armed from the lobbyMsg handler, and only while the lobby is on
+// screen: a tick that keeps firing during a battle would spend requests
+// on a list nobody is looking at.
+func pollLobby(c *battleclient.Client) tea.Cmd {
+	return tea.Tick(battleclient.LobbyPollInterval, func(time.Time) tea.Msg {
+		ctx, cancel := shortCtx()
+		defer cancel()
+		l, err := c.Lobby(ctx)
+		return lobbyMsg{list: l, err: err, polled: true}
 	})
 }
 
