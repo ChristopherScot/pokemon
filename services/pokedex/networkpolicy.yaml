@@ -1,0 +1,58 @@
+# What the pokedex API may talk to, and who may talk to it.
+#
+# NetworkPolicy is enforced here - verified by applying a deny-all
+# egress to a scratch namespace and watching curl fail to resolve - so
+# this is real containment rather than decoration.
+#
+# The API is reachable from the internet through pokedex-web once
+# pokemon.chrisscotmartin.com is live. Its blast radius was already
+# small: no secrets mounted, no Kubernetes API permissions, distroless
+# with no shell. This closes the remaining gap, which is a compromised
+# process using the cluster network as a map.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pokedex
+spec:
+  podSelector:
+    matchLabels:
+      app: pokedex
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Both ingress controllers, because the API answers on /api of a
+    # host that may be LAN or public, and pokedex-web, which is its
+    # only in-cluster caller.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx-public
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pokedex-web
+      ports:
+        - protocol: TCP
+          port: 3000
+    # Prometheus scrapes /metrics on the same port.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    # DNS only. The API holds its state in memory and calls nothing -
+    # no database, no upstream, no outbound HTTP - so this is the whole
+    # list, and this rule is what will say so when that changes.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

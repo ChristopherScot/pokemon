@@ -1,0 +1,55 @@
+# What pokedex-web may talk to, and who may talk to it.
+#
+# This is the internet-facing half once pokemon.chrisscotmartin.com is
+# live, so it is the process an attacker reaches first. It holds no
+# secrets and runs distroless with no shell; this stops a compromised
+# one from using the cluster network as a map.
+#
+# Egress is the pokedex API and DNS, which is genuinely all it does:
+# pokedex.ts calls http://pokedex.pokedex.svc.cluster.local and nothing
+# else. The sprite images come from raw.githubusercontent.com fetched
+# by the BROWSER, not by this pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pokedex-web
+spec:
+  podSelector:
+    matchLabels:
+      app: pokedex-web
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx-public
+      ports:
+        - protocol: TCP
+          port: 3000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pokedex
+      ports:
+        - protocol: TCP
+          port: 3000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

@@ -42,3 +42,8 @@ ingress:
 #
 # Scaling up is a change that waits on persistence, not a change that
 # improves availability on its own.
+
+# The NetworkPolicy this service owns. Raw Kubernetes, because a
+# policy is about the cluster rather than about the service.
+manifests:
+  - networkpolicy.yaml

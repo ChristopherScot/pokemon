@@ -26,3 +26,7 @@ ingress:
 # secrets:
 #   vaultPath: <name>/config      # one Vault path per service
 #   keys: [SOME_TOKEN]
+
+# The NetworkPolicy this service owns.
+manifests:
+  - networkpolicy.yaml
