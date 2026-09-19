@@ -33,6 +33,10 @@ type frameMsg time.Time
 type battleMsg struct {
 	battle *api.Battle
 	err    error
+
+	// misses counts consecutive failed polls, so a battle that is gone
+	// stops the loop instead of being asked about forever.
+	misses int
 }
 
 // lobbyMsg carries the list of open battles.
@@ -48,6 +52,10 @@ type slot struct {
 	side, index int
 }
 
+// maxPollMisses is how many consecutive failed polls end the battle
+// screen. Matches the web client's ceiling.
+const maxPollMisses = 5
+
 // battleState is everything the battle screen needs. Split from model so
 // the browse screen's fields are not tangled with it.
 type battleState struct {
@@ -55,6 +63,10 @@ type battleState struct {
 	id     string
 	battle *api.Battle
 	err    error
+
+	// misses counts consecutive failed polls, so a battle that is gone
+	// stops the loop instead of being asked about forever.
+	misses int
 
 	// shown lags battle for the drain animation.
 	shown map[slot]int

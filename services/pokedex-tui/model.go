@@ -221,10 +221,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
+			// Bounded, so a battle that no longer exists stops the
+			// loop rather than being asked about once a second
+			// forever.
+			//
+			// Battles live in the server's memory, so a deploy ends
+			// every one of them - and a TUI left open on a finished
+			// battle kept polling. The web client had the same bug and
+			// it is what pushed pokedex-web past its memory limit: 1760
+			// requests per 30 minutes, unbroken, for five hours.
+			//
+			// Several misses rather than one, because gone and
+			// unreachable are different: a dropped request or a
+			// rollout mid-poll should still retry.
 			m.battle.err = msg.err
+			m.battle.misses++
+			if m.battle.misses >= maxPollMisses {
+				m.screen = screenLobby
+				m.status = "that battle is over - the server restarted and battles do not survive it"
+				m.battle = nil
+				return m, fetchLobby(m.bc)
+			}
 			return m, pollBattle(m.bc, m.battle.id)
 		}
 		m.battle.err = nil
+		m.battle.misses = 0
 		start := msg.battle.Version > m.battle.seen
 		m.battle.applyBattle(msg.battle)
 		cmds := []tea.Cmd{pollBattle(m.bc, m.battle.id)}
