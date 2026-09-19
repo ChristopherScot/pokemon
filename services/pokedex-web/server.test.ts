@@ -829,3 +829,78 @@ test('a stale trainer reloads into the register form rather than alerting', asyn
   assert.equal(reloaded, true, 'a 401 should reload into the register form')
   assert.equal(alerted, '', 'and not dead-end in an alert')
 })
+
+// Extracts the real checkTurn out of the shipped page script.
+async function checkTurnFromPage() {
+  const { battlePage } = await import('./battle.ts')
+  const page = battlePage({ id: 'abc123', trainer: 'ash' })
+  const open = page.match(/<script[^>]*>/)!
+  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+  const stub = {
+    innerHTML: '', textContent: '', className: '', scrollTop: 0, scrollHeight: 0,
+    addEventListener: () => {}, querySelectorAll: () => [], querySelector: () => null,
+    classList: { add: () => {}, remove: () => {} },
+  }
+  const sandbox = {
+    document: { getElementById: () => stub, addEventListener: () => {}, querySelectorAll: () => [] },
+    location: { pathname: '/battle/abc123', href: '', reload: () => {} },
+    sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    fetch: async () => ({ ok: true, status: 200, json: async () => ({ version: 1, sides: [], log: [] }) }),
+    setTimeout: () => 0, setInterval: () => 0, requestAnimationFrame: () => 0, console,
+  }
+  const run = new Function(...Object.keys(sandbox), script + '\n;return { checkTurn };')
+  return run(...Object.values(sandbox)).checkTurn as
+    (b: unknown, me: string, t: {attacker: number; move: number; target: number}) => string
+}
+
+const wMon = (name: string, fainted = false, disabled?: number) => ({
+  name, hp: fainted ? 0 : 20, maxHp: 20, types: ['normal'], fainted,
+  moves: [{ name: 'tackle', power: 40 }, { name: 'growl', power: 0 }],
+  ...(disabled === undefined ? {} : { disabledMove: disabled }),
+})
+const wBattle = (mine: unknown, theirs: unknown, over = {}) => ({
+  id: 'abc123', status: 'active', turn: 'ash', log: [],
+  sides: [{ trainer: 'ash', team: [mine] }, { trainer: 'misty', team: [theirs] }],
+  ...over,
+})
+
+// The web had NO turn rules at all. A disabled move rendered like any
+// other, you clicked it, and the server rejected it - even though the
+// spec says of disabledMove: "Selecting it is a 409, so a client should
+// show it as unavailable rather than letting the turn fail."
+test('the web refuses a disabled move before sending it', async () => {
+  const checkTurn = await checkTurnFromPage()
+  const b = wBattle(wMon('pikachu', false, 1), wMon('staryu'))
+  assert.match(checkTurn(b, 'ash', { attacker: 0, move: 1, target: 0 }), /disabled/)
+  // The other move on the same Pokemon is still fine.
+  assert.equal(checkTurn(b, 'ash', { attacker: 0, move: 0, target: 0 }), '')
+})
+
+test('the web refuses the same turns the Go clients do', async () => {
+  const checkTurn = await checkTurnFromPage()
+  const ok = () => wBattle(wMon('pikachu'), wMon('staryu'))
+
+  assert.match(checkTurn(wBattle(wMon('pikachu'), wMon('staryu'), { status: 'finished' }), 'ash', { attacker: 0, move: 0, target: 0 }), /over/)
+  assert.match(checkTurn(wBattle(wMon('pikachu'), wMon('staryu'), { status: 'waiting' }), 'ash', { attacker: 0, move: 0, target: 0 }), /not started/)
+  assert.match(checkTurn(wBattle(wMon('pikachu'), wMon('staryu'), { turn: 'misty' }), 'ash', { attacker: 0, move: 0, target: 0 }), /not your turn/)
+  assert.match(checkTurn(ok(), 'brock', { attacker: 0, move: 0, target: 0 }), /not your turn/, 'a spectator')
+  assert.match(checkTurn(ok(), 'ash', { attacker: 3, move: 0, target: 0 }), /no pokemon 4/)
+  assert.match(checkTurn(ok(), 'ash', { attacker: 0, move: 0, target: 3 }), /no pokemon 4/)
+  assert.match(checkTurn(wBattle(wMon('pikachu', true), wMon('staryu')), 'ash', { attacker: 0, move: 0, target: 0 }), /fainted/)
+  assert.match(checkTurn(ok(), 'ash', { attacker: 0, move: 9, target: 0 }), /no move 10/)
+  assert.match(checkTurn(wBattle(wMon('pikachu'), wMon('staryu', true)), 'ash', { attacker: 0, move: 0, target: 0 }), /already fainted/)
+  // And a legal turn is legal.
+  assert.equal(checkTurn(ok(), 'ash', { attacker: 0, move: 0, target: 0 }), '')
+})
+
+// The ORDER, same as the Go cross-check pins: with several things wrong
+// at once, the earliest server check must win.
+test('the web reports the same first reason the server would', async () => {
+  const checkTurn = await checkTurnFromPage()
+  const over = wBattle(wMon('pikachu', true), wMon('staryu', true), { status: 'finished', turn: 'misty' })
+  assert.match(checkTurn(over, 'ash', { attacker: 9, move: 9, target: 9 }), /over/, 'battle over outranks all')
+  const notYours = wBattle(wMon('pikachu'), wMon('staryu'), { turn: 'misty' })
+  assert.match(checkTurn(notYours, 'ash', { attacker: 9, move: 9, target: 9 }), /not your turn/, 'turn outranks indices')
+  const downed = wBattle(wMon('pikachu', true), wMon('staryu'))
+  assert.match(checkTurn(downed, 'ash', { attacker: 0, move: 9, target: 0 }), /fainted/, 'fainted outranks move range')
+})

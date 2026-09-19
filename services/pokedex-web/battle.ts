@@ -111,6 +111,41 @@ const esc = (t) => String(t).replace(/[&<>"']/g, (c) => (
 // two places this replaces: the battle log excluded 0 with an explicit
 // > 0 guard, the floating damage number did not, so the same immune hit
 // was styled two different ways on the same screen.
+// Why a turn cannot be played, or "" if it can.
+//
+// The order mirrors the server's takeTurn and the Go clients'
+// battleclient.CheckTurn, deliberately: a client that reports a
+// different FIRST reason than the authority teaches a rule that is not
+// the rule. "that pokemon has fainted" where the server would say "not
+// your turn" is worse than saying nothing, because it is confidently
+// wrong.
+//
+// This does not replace the server's check. The board is up to a poll
+// behind and the opponent moves too, so a locally-legal turn can still
+// be rejected - attack() still shows that. What this removes is the
+// turn that was knowably illegal before it was sent.
+const checkTurn = (b, me, t) => {
+  if (b.status === 'finished') return 'this battle is over'
+  if (b.status !== 'active') return 'this battle has not started'
+
+  const mineIdx = b.sides.findIndex((s) => s.trainer === me)
+  if (mineIdx === -1 || b.turn !== me) return 'not your turn'
+  const mine = b.sides[mineIdx], theirs = b.sides[1 - mineIdx]
+
+  if (!mine.team[t.attacker]) return 'you have no pokemon ' + (t.attacker + 1)
+  if (!theirs.team[t.target]) return 'they have no pokemon ' + (t.target + 1)
+
+  const attacker = mine.team[t.attacker]
+  if (attacker.fainted) return attacker.name + ' has fainted'
+  if (!attacker.moves[t.move]) return attacker.name + ' has no move ' + (t.move + 1)
+  if (theirs.team[t.target].fainted) return theirs.team[t.target].name + ' has already fainted'
+  // The spec says of disabledMove: "Selecting it is a 409, so a client
+  // should show it as unavailable rather than letting the turn fail."
+  // This page was not reading the field at all.
+  if (attacker.disabledMove === t.move) return attacker.moves[t.move].name + ' is disabled this turn'
+  return ''
+}
+
 const effectBand = (e) => {
   if (e === undefined || e === null) return 'normal'
   if (e === 0) return 'immune'
@@ -252,6 +287,9 @@ try { sessionStorage.setItem('pokedex.battle', ID) } catch {}
 
 let seen = -1
 let picked = { attacker: 0, move: 0, target: 0 }
+// The battle as last rendered, so attack() can check the turn against
+// the same state the player is looking at.
+let shownBattle = null
 // -1 means "not rendered yet"; the first render adopts the log's
 // length rather than replaying it.
 let lastLogLen = -1
@@ -346,6 +384,7 @@ function renderSpectator(b) {
 }
 
 function render(b) {
+  shownBattle = b
   const mineIdx = b.sides.findIndex((s) => s.trainer === ME)
 
   // Not a participant: show the battle and a way in, rather than
@@ -393,10 +432,17 @@ function render(b) {
     const att = mine.team[picked.attacker]
     html += '<div class="pick"><strong>' + esc(att.name) + '</strong> uses…' +
       '<div class="moves">' +
-      att.moves.map((m, i) =>
-        '<button data-move="' + i + '"' + (picked.move === i ? ' class="sel"' : '') + '>' +
-        esc(m.name) + (m.power ? ' <span style="opacity:.6">' + m.power + '</span>' : ' <span style="opacity:.6">—</span>') +
-        '</button>').join('') +
+      att.moves.map((m, i) => {
+        // disabled rather than merely styled: the spec says selecting a
+        // disabled move is a 409, and this page was not reading the
+        // field at all - the move looked identical to every other one.
+        const off = att.disabledMove === i
+        return '<button data-move="' + i + '"' +
+          (off ? ' disabled title="disabled this turn"' : '') +
+          (picked.move === i ? ' class="sel"' : '') + '>' +
+          esc(m.name) + (m.power ? ' <span style="opacity:.6">' + m.power + '</span>' : ' <span style="opacity:.6">\u2014</span>') +
+          '</button>'
+      }).join('') +
       '</div><div class="commit">' +
       '<button id="go">attack ' + esc(theirs.team[picked.target].name) + '</button>' +
       '</div></div>'
@@ -494,6 +540,22 @@ function render(b) {
 
 async function attack() {
   const go = document.getElementById('go')
+
+  // Refuse what is knowably illegal, naming the reason, rather than
+  // spending a round trip to be told "illegal move". The server stays
+  // the authority - the 409 path below is untouched.
+  const why = shownBattle && checkTurn(shownBattle, ME, picked)
+  if (why) {
+    const log = document.getElementById('log')
+    if (log) {
+      const d = document.createElement('div')
+      d.textContent = why
+      log.appendChild(d)
+      log.scrollTop = log.scrollHeight
+    }
+    return
+  }
+
   if (go) { go.disabled = true; go.textContent = 'attacking…' }
   const res = await fetch('/battle/' + ID + '/turn', {
     method: 'POST',
