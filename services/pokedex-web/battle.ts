@@ -76,6 +76,34 @@ const esc = (s: unknown): string =>
 // the server adds the v before comparing.
 export const UI_VERSION = '0.3.0'
 
+// Shared by BOTH inline scripts.
+//
+// battlePage and lobbyPage each emit their own <script type="module">,
+// which are separate module scopes in separate documents. A helper
+// defined in one is simply absent in the other - and because these are
+// strings, TypeScript cannot see the difference. Client-Version headers
+// were added to the lobby's fetches while `V` was only ever declared in
+// the battle page's script, so every lobby button threw
+// "ReferenceError: V is not defined" and did nothing, silently, inside
+// an async handler.
+//
+// Anything both pages need goes here, once.
+const PRELUDE = `
+const UI_VERSION = ${JSON.stringify(UI_VERSION)}
+
+// Sent on every request this page makes, so the server knows which
+// browser code is calling it.
+const V = { 'Client-Version': UI_VERSION }
+
+// Statuses that mean "stop asking" rather than "try again". 410 is the
+// server refusing this client as too old; retrying cannot help, because
+// the code in this tab will not change on its own.
+const TERMINAL = new Set([410, 501, 505])
+
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => (
+  { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]))
+`
+
 // The battle page. Everything below the initial render is done by the
 // inline script, which polls /battle/:id/state and swaps the board.
 // Exported so a test can run the real browser code rather than assert
@@ -177,15 +205,10 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
   <div id="board" class="board">loading…</div>
 
 <script type="module">
+${PRELUDE}
 const ID = ${JSON.stringify(id)}
 const ME = ${JSON.stringify(trainer)}
-const UI_VERSION = ${JSON.stringify(UI_VERSION)}
 const COLOURS = ${JSON.stringify(TYPE_COLOURS)}
-
-// Sent on every request this page makes, so the server knows which
-// browser code is calling it. A tab that predates this sends nothing,
-// which the server reads as "unknown" rather than guessing.
-const V = { 'Client-Version': UI_VERSION }
 
 let seen = -1
 let picked = { attacker: 0, move: 0, target: 0 }
@@ -197,9 +220,6 @@ let lastLogLen = -1
 // start the transition from where the bar was rather than from the
 // value it is moving to.
 const shownHp = new Map()
-
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
-  { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))
 
 function hpColour(hp, max) {
   const f = max > 0 ? hp / max : 0
@@ -465,17 +485,6 @@ async function attack() {
 const MAX_MISSES = 5
 let misses = 0
 
-// Statuses that mean "stop asking", as opposed to "try again".
-//
-// 410 is the server refusing this client: it is below minVersion, and
-// retrying cannot help because the code in this tab will not change on
-// its own. 501 and 505 are the same shape - the server will not do
-// this, ever - and anything else is treated as transient.
-//
-// Without this list an unexpected status fell through to the retry at
-// the bottom, so a 500 or an nginx 502 mid-rollout polled forever just
-// as a 404 used to.
-const TERMINAL = new Set([410, 501, 505])
 
 function stop(message) {
   const board = document.getElementById('board')
@@ -678,7 +687,7 @@ export function registerBattle(app: FastifyInstance) {
 
 // lobbyPage lists open battles and, when there is no trainer yet, asks
 // for a name first.
-function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: WaitingBattle[] }) {
+export function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: WaitingBattle[] }) {
   const rows = waiting.length === 0
     ? '<p class="sub">nobody is waiting. open one below and share the link.</p>'
     : waiting.map((w) => `<div class="row">
@@ -726,6 +735,7 @@ function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: WaitingBattle
   <div id="waiting">${rows}</div>
 
 <script type="module">
+${PRELUDE}
 const reg = document.getElementById('reg')
 if (reg) reg.addEventListener('click', async () => {
   const name = document.getElementById('name').value.trim()
@@ -772,18 +782,15 @@ document.addEventListener('click', async (ev) => {
 // Paused while the tab is hidden. A lobby left open in a background tab
 // is the shape that produced 46,000 wasted requests from one stale
 // battle page, and nobody is waiting to join a battle they cannot see.
-const esc2 = (t) => String(t).replace(/[&<>"']/g, (c) => (
-  { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]))
-
 function renderWaiting(list) {
   const box = document.getElementById('waiting')
   if (!box) return
   box.innerHTML = list.length === 0
     ? '<p class="sub">nobody is waiting. open one below and share the link.</p>'
     : list.map((w) => '<div class="row">' +
-        '<div><strong>' + esc2(w.trainer) + '</strong>' +
-        '<div class="sub" style="margin:0">' + w.team.map(esc2).join(', ') + '</div></div>' +
-        '<button data-join="' + esc2(w.battleId) + '">join</button></div>').join('')
+        '<div><strong>' + esc(w.trainer) + '</strong>' +
+        '<div class="sub" style="margin:0">' + w.team.map(esc).join(', ') + '</div></div>' +
+        '<button data-join="' + esc(w.battleId) + '">join</button></div>').join('')
 }
 
 let lobbyMisses = 0
@@ -795,7 +802,7 @@ async function pollLobby() {
         lobbyMisses = 0
         const b = await res.json()
         renderWaiting(b.waiting || [])
-      } else if (TERMINAL_LOBBY.has(res.status)) {
+      } else if (TERMINAL.has(res.status)) {
         return // this client is too old, or the endpoint is gone
       } else if (++lobbyMisses >= 5) {
         return // the API has been unreachable for a while; stop asking
@@ -804,7 +811,6 @@ async function pollLobby() {
   }
   setTimeout(pollLobby, 3000)
 }
-const TERMINAL_LOBBY = new Set([410, 501, 505])
 setTimeout(pollLobby, 3000)
 </script>
 </body></html>`

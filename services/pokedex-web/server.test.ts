@@ -403,3 +403,64 @@ test('the filter bar pins to a measured topbar height, not a guess', async () =>
     'the filters must not pin to a hardcoded pixel offset',
   )
 })
+
+// The lobby's script is EXECUTED, not just asserted on as a string.
+//
+// It shipped with `V` used in four handlers and declared only in the
+// battle page's script - a different module scope in a different
+// document. Every lobby handler threw "ReferenceError: V is not
+// defined" on its first statement: register, open, join and the poll,
+// all dead, all silent, because module scripts fail quietly and the
+// poll's catch swallowed its own throw.
+//
+// A test that checks the page CONTAINS something passes whether or not
+// the page works. This one runs it.
+async function runLobbyScript(waiting: unknown[] = []) {
+  const { lobbyPage } = await import('./battle.ts')
+  const page = lobbyPage({
+    me: { name: 'ash', token: 't' },
+    waiting: waiting as never,
+  })
+  const open = page.match(/<script[^>]*>/)!
+  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+
+  const sent: Array<{ url: string; headers: Record<string, string> }> = []
+  const els: Record<string, unknown> = {
+    team: { value: 'pikachu' },
+    waiting: { innerHTML: '' },
+  }
+  const sandbox = {
+    document: {
+      getElementById: (id: string) => els[id] ?? null,
+      addEventListener: () => {},
+      querySelectorAll: () => [],
+      hidden: false,
+    },
+    location: { pathname: '/battle', href: '', reload: () => {} },
+    fetch: async (url: string, init?: { headers?: Record<string, string> }) => {
+      sent.push({ url, headers: init?.headers ?? {} })
+      return { ok: true, status: 200, json: async () => ({ waiting: [] }) }
+    },
+    setTimeout: () => 0,
+    alert: () => {},
+    console,
+  }
+  // Throws here if the script references anything it does not define.
+  const run = new Function(...Object.keys(sandbox), script + '\n;return { pollLobby };')
+  const api = run(...Object.values(sandbox)) as { pollLobby: () => Promise<void> }
+  return { api, sent }
+}
+
+test('the lobby script evaluates without a missing binding', async () => {
+  await runLobbyScript()
+})
+
+test('lobby requests report the UI version', async () => {
+  const { UI_VERSION } = await import('./battle.ts')
+  const { api, sent } = await runLobbyScript()
+  await api.pollLobby()
+  assert.ok(sent.length > 0, 'the poll should have made a request')
+  for (const r of sent) {
+    assert.equal(r.headers['Client-Version'], UI_VERSION, `${r.url} sent no version`)
+  }
+})
