@@ -24,34 +24,27 @@ ingress:
 #   vaultPath: <name>/config      # one Vault path per service
 #   keys: [SOME_TOKEN]
 
-# ONE replica, temporarily.
+# One replica, by choice rather than by constraint.
 #
-# The code supports two - state is in Postgres and a turn is a
-# SERIALIZABLE transaction - but the container cannot reach the
-# database yet. DATABASE_URL comes from the secret CNPG generates,
-# and the only way config.yaml could express that was a `patches:`
-# block, which replaced the whole container and stripped its image:
-# Argo refused every sync with "spec.template.spec.containers[0].
-# image: Required value" until it was removed.
+# Two are now SAFE - state is in Postgres, a name is claimed by a
+# UNIQUE index rather than a mutex, and a turn is one SERIALIZABLE
+# transaction that retries when two players move at once, verified
+# with ten concurrent writers against one battle. They are just not
+# NEEDED. This serves a handful of people on a LAN; a second pod buys
+# availability during a rollout and costs a second set of connections
+# to a single-instance database.
 #
-# Two replicas WITHOUT the database is the split-brain the note below
-# describes, so this stays at one until homelabctl can render an env
-# var that reads a key from an existing secret.
+# Raising it is now a one-line change with nothing behind it, which
+# is the part that took the work.
 #
-# This waited on persistence, and the reason is worth keeping: with
-# state in a map behind a mutex, a second pod made every request a
-# coin flip. register minted a token on pod A and the next command
-# hit pod B and was told the token was unknown; a battle opened on A
-# 404'd when its opponent joined via B. One replica loses everything
-# on a deploy - total, obvious, over in a rollout - where two would
-# have lost about half of every operation, continuously, and looked
-# like a flaky network rather than missing shared state.
-#
-# What makes two safe now: trainers and battles are rows, a name is
-# claimed by a UNIQUE index rather than a mutex, and a turn is one
-# SERIALIZABLE transaction that retries when two players move at
-# once. Verified with ten concurrent writers against one battle -
-# every write lands.
+# Worth keeping, because it is why the database happened: with state
+# in a map behind a mutex, a second pod made every request a coin
+# flip. register minted a token on pod A and the next command hit pod
+# B and was told the token was unknown; a battle opened on A 404'd
+# when its opponent joined via B. One replica loses everything on a
+# deploy - total, obvious, over in a rollout - where two would have
+# lost about half of every operation, continuously, and looked like a
+# flaky network rather than missing shared state.
 replicas: 1
 
 # The NetworkPolicy this service owns. Raw Kubernetes, because a
