@@ -1,0 +1,66 @@
+# Postgres for the pokedex: game state that has to survive a restart,
+# and the reference data the API serves.
+#
+# One instance. The data here is reconstructible - reference data from
+# pokedex.json, game state that is swept after an hour - so paying for
+# a standby to protect it is the wrong trade. A failover takes the
+# service down with it either way until the Deployment reconnects.
+#
+# CNPG generates a `pokedex-db-app` secret in this namespace holding
+# the connection details; the Deployment reads it through config.yaml's
+# secrets block.
+#
+# PRUNED WITH THE APP, deliberately. The generated Application syncs
+# with prune: true and nothing here opts out, so removing this file
+# from `manifests:` deletes the Cluster and its PVC.
+#
+# That is the accepted trade: this database holds nothing that cannot
+# be rebuilt - reference data re-seeds from pokedex.json, and game
+# state is swept after an hour - so keeping the manifest and the
+# cluster in step is worth more than a Prune=false that hides drift.
+# Deleting a database manifest is a deliberate act either way.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pokedex-db
+spec:
+  instances: 1
+  monitoring:
+    enablePodMonitor: true
+  storage:
+    # The reference data is about 500KB and the game state is smaller
+    # still - battles are swept after an hour. 2Gi is the smallest
+    # size worth provisioning, not a considered estimate.
+    size: 2Gi
+    storageClass: longhorn
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  bootstrap:
+    initdb:
+      database: pokedex
+      owner: pokedex
+
+  # Continuous backup to S3, same bucket as every other cluster here.
+  #
+  # The credential is per service and scoped to this prefix: the IAM
+  # user behind it can read and write s3://.../pokedex/* and nothing
+  # else, so a compromise here cannot reach another database's
+  # backups. Vault rotates its key every 24h and ESO syncs it into
+  # pokedex-db-backup-s3.
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://cscot-homelab-pg-backups/pokedex"
+      s3Credentials:
+        accessKeyId:
+          name: pokedex-db-backup-s3
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: pokedex-db-backup-s3
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+    retentionPolicy: "30d"

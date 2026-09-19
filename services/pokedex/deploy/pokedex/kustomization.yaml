@@ -8,6 +8,7 @@ resources:
   - service.yaml
   - ingress.yaml
   - manifests/networkpolicy.yaml
+  - manifests/db.yaml
 images:
   - name: ghcr.io/christopherscot/pokemon-pokedex
     newTag: latest
