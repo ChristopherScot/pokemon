@@ -23,6 +23,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -84,6 +85,40 @@ func main() {
 		identityHint(err)
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
+	}
+}
+
+// makeTeamCompleter completes Pokemon names at every team position,
+// skipping the first `fixed` arguments (the battle id, for join).
+//
+// Separate from makeCompleter because that one deliberately stops after
+// one argument - `show pikachu` takes exactly one Pokemon, and offering
+// a second is wrong. A team takes three, so stopping at the first is
+// what left `open pikachu <TAB>` silent and sent the player to look the
+// next two names up somewhere else.
+//
+// Already-picked names are filtered out: the server rejects a duplicate
+// team, and offering one is offering a mistake.
+func makeTeamCompleter(list func() ([]string, error), fixed, max int) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+		if len(args) < fixed || len(args)-fixed >= max {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		names, err := list()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		picked := make(map[string]bool, len(args))
+		for _, a := range args[fixed:] {
+			picked[strings.ToLower(strings.TrimSpace(a))] = true
+		}
+		out := names[:0:0]
+		for _, n := range names {
+			if !picked[strings.ToLower(n)] {
+				out = append(out, n)
+			}
+		}
+		return out, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 

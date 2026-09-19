@@ -78,3 +78,68 @@ func TestEnsureVAcceptsEitherSpelling(t *testing.T) {
 		t.Error("a mixed-spelling comparison did not reach semver intact")
 	}
 }
+
+// TAB must complete every team slot, not just the first.
+//
+// makeCompleter deliberately stops after one argument, which is right
+// for `show pikachu` and wrong for a team of three: `open pikachu <TAB>`
+// went silent and sent the player to look the next two names up
+// somewhere else. That is the CLI's version of the bug the web had -
+// the names existed, the completer existed, and the two were never
+// connected on the commands that take a team.
+func TestTeamCompleterOffersEverySlot(t *testing.T) {
+	names := func() ([]string, error) { return []string{"pikachu", "onix", "gengar"}, nil }
+	complete := makeTeamCompleter(names, 0, 3)
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"first slot", nil, 3},
+		{"second slot", []string{"pikachu"}, 2},
+		{"third slot", []string{"pikachu", "onix"}, 1},
+		{"team is full", []string{"pikachu", "onix", "gengar"}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, _ := complete(nil, tc.args, "")
+			if len(got) != tc.want {
+				t.Errorf("completions = %v (%d), want %d", got, len(got), tc.want)
+			}
+		})
+	}
+}
+
+// A name already on the team is not offered again: the server rejects a
+// duplicate team, so suggesting one is suggesting a mistake.
+func TestTeamCompleterSkipsWhatIsAlreadyPicked(t *testing.T) {
+	names := func() ([]string, error) { return []string{"pikachu", "onix", "gengar"}, nil }
+	got, _ := makeTeamCompleter(names, 0, 3)(nil, []string{"ONIX "}, "")
+	for _, n := range got {
+		if strings.EqualFold(strings.TrimSpace(n), "onix") {
+			t.Errorf("offered %q, which is already on the team", n)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("completions = %v, want the two not yet picked", got)
+	}
+}
+
+// join's first argument is the battle id, so the team starts one later.
+func TestTeamCompleterSkipsTheBattleID(t *testing.T) {
+	names := func() ([]string, error) { return []string{"pikachu", "onix", "gengar"}, nil }
+	complete := makeTeamCompleter(names, 1, 3)
+
+	// No id typed yet: nothing to complete, and definitely not a Pokemon.
+	if got, _ := complete(nil, nil, ""); len(got) != 0 {
+		t.Errorf("offered %v in the battle-id position", got)
+	}
+	// Id present: the first team slot is open.
+	if got, _ := complete(nil, []string{"abc123"}, ""); len(got) != 3 {
+		t.Errorf("completions after the id = %v, want all three", got)
+	}
+	// Id plus a full team: done.
+	if got, _ := complete(nil, []string{"abc123", "pikachu", "onix", "gengar"}, ""); len(got) != 0 {
+		t.Errorf("offered %v with a full team", got)
+	}
+}

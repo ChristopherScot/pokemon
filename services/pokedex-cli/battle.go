@@ -85,14 +85,20 @@ func lobbyCmd() *cobra.Command {
 	}
 }
 
+// teamSize is how many Pokemon a battle side holds. Named so the
+// argument limits and the TAB completer cannot disagree about it - they
+// were two separate literals, and a completer that offers a fourth name
+// the parser then rejects is worse than no completer.
+const teamSize = 3
+
 func openCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "open [pokemon pokemon pokemon]",
 		Short: "open a battle and wait for an opponent",
 		Long: "Names up to three Pokemon. The server fills whatever you " +
 			"leave out, so naming none at all is the fastest way into a " +
 			"battle and naming one is a perfectly good way to start.",
-		Args: cobra.RangeArgs(0, 3),
+		Args: cobra.RangeArgs(0, teamSize),
 		RunE: func(_ *cobra.Command, args []string) error {
 			// No "0 or exactly 3" check. The API took partial teams from
 			// 0.4.0 and both other clients offer them; this rule only
@@ -115,14 +121,20 @@ func openCmd() *cobra.Command {
 			return nil
 		},
 	}
+	// TAB completes every team slot, not just the first. Typing three
+	// Pokemon from memory was the CLI's version of the bug the web had:
+	// the names exist, the completer existed, and the two were never
+	// connected on the commands that take a team.
+	cmd.ValidArgsFunction = makeTeamCompleter(pokemonNames, 0, teamSize)
+	return cmd
 }
 
 func joinCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "join <battle-id> [pokemon pokemon pokemon]",
 		Short: "join a waiting battle",
 		Long:  "Names up to three Pokemon; the server fills the rest.",
-		Args:  cobra.RangeArgs(1, 4),
+		Args:  cobra.RangeArgs(1, teamSize+1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			c, err := battleClient()
 			if err != nil {
@@ -139,6 +151,9 @@ func joinCmd() *cobra.Command {
 			return nil
 		},
 	}
+	// fixed=1: argument one is the battle id, so the team starts at two.
+	cmd.ValidArgsFunction = makeTeamCompleter(pokemonNames, 1, teamSize)
+	return cmd
 }
 
 func showBattleCmd() *cobra.Command {
