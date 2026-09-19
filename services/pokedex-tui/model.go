@@ -296,7 +296,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		// While the filter is open every key belongs to it - including
 		// "q". Without this check, typing a name containing q quits.
-		if m.list.FilterState() == list.Filtering {
+		//
+		// Only on a screen that actually shows the list: the filter
+		// state belongs to m.list, so on a screen that does not render
+		// it a stale Filtering state would swallow every key with
+		// nothing on screen to explain why.
+		if m.screenUsesList() && m.list.FilterState() == list.Filtering {
 			break
 		}
 		if msg.String() == "ctrl+c" {
@@ -305,14 +310,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	}
 
-	// Only the browse screen's list consumes stray messages; on other
-	// screens forwarding them would scroll a list nobody can see.
-	if m.screen != screenBrowse {
+	// The list is updated on every screen that SHOWS it, which is
+	// browse and the team picker - teamView renders the same m.list.
+	//
+	// It used to be browse only, so on the picker the list was drawn
+	// but never updated. Pressing "/" opened its filter, the guard
+	// above then routed every following key to the list, and this
+	// return threw them away: the filter could not receive text and
+	// escape could not close it, so the screen ate input until the
+	// program was killed.
+	//
+	// Which screen is DISPLAYED decides what to draw; it must not
+	// decide whether a component that is on screen gets its messages.
+	// Those are separate questions, and answering them in two places is
+	// what let them disagree.
+	if !m.screenUsesList() {
 		return m, nil
 	}
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return m, cmd
+}
+
+// screenUsesList reports whether the current screen renders m.list.
+//
+// One place both Update and View can agree on, rather than a condition
+// restated at each site - restating it is how the picker ended up
+// drawing a list it never updated.
+func (m model) screenUsesList() bool {
+	return m.screen == screenBrowse || m.screen == screenTeam
 }
 
 // handleKey dispatches on the active screen, which is the pattern the

@@ -269,7 +269,15 @@ func (bs *battleState) moveRow(mine api.Side) string {
 	moves := attacker.Moves
 	parts := make([]string, 0, len(moves))
 	for i, mv := range moves {
-		label := fmt.Sprintf("%s %s", mv.Name, powerLabel(mv.Power))
+		// The power is composed as PLAIN text and styled once with the
+		// label around it. It used to be pre-rendered by powerLabel and
+		// then wrapped again by the cases below, and a rendered string
+		// nested inside another Render loses the inner sequence's escape
+		// byte: the terminal showed "mega-punch [2m(80)[m", the codes
+		// printed as literal characters on whichever move was selected.
+		//
+		// One Render per label, never a Render of a Render.
+		label := fmt.Sprintf("%s %s", mv.Name, powerText(mv.Power))
 		switch {
 		case !battleclient.MoveUsable(attacker, i):
 			// Selecting a disabled move is a 409, so it must not look
@@ -287,11 +295,16 @@ func (bs *battleState) moveRow(mine api.Side) string {
 	return "  " + strings.Join(parts, dimStyle.Render(" · "))
 }
 
-func powerLabel(p int) string {
+// powerText is the power in parentheses, UNSTYLED.
+//
+// Styling happens once, at the call site, around the whole label. A
+// helper that returns pre-styled text cannot be safely composed into a
+// larger styled string, which is how escape codes ended up on screen.
+func powerText(p int) string {
 	if p == 0 {
-		return dimStyle.Render("(status)")
+		return "(status)"
 	}
-	return dimStyle.Render(fmt.Sprintf("(%d)", p))
+	return fmt.Sprintf("(%d)", p)
 }
 
 // logView shows the tail of the battle log, newest last.
