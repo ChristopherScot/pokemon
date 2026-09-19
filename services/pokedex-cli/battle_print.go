@@ -75,10 +75,20 @@ func lastTurn(b *api.Battle) []api.BattleEvent {
 func printBattle(c *battleclient.Client, b *api.Battle) {
 	mine, theirs, ok := c.SideFor(b)
 	if !ok {
-		fmt.Printf("battle %s: waiting for an opponent\n", b.ID)
-		if len(b.Sides) == 1 {
-			fmt.Printf("  %s: %s\n", b.Sides[0].Trainer, teamLine(b.Sides[0]))
+		// Two different situations, and they used to print the same
+		// line. SideFor says "not you" for a battle still waiting AND
+		// for one you are simply not in - and until it stopped claiming
+		// spectators were participants, the second case never got here,
+		// so "waiting for an opponent" was right by accident. It is
+		// wrong the moment you watch someone else's battle.
+		if len(b.Sides) < 2 {
+			fmt.Printf("battle %s: waiting for an opponent\n", b.ID)
+			if len(b.Sides) == 1 {
+				fmt.Printf("  %s: %s\n", b.Sides[0].Trainer, teamLine(b.Sides[0]))
+			}
+			return
 		}
+		printSpectated(b)
 		return
 	}
 
@@ -122,6 +132,28 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 		fmt.Printf("\nyour move: pokedex-cli attack %s <your 1-3> <move 1-6> <their 1-3>\n", b.ID)
 	default:
 		fmt.Printf("\nwaiting on %s. `watch %s` to block until it is your turn.\n", b.Turn.Value, b.ID)
+	}
+}
+
+// printSpectated shows a battle the viewer is not in.
+//
+// Neither side is "you", so both are named. Reachable from `battle <id>`
+// and `watch <id>`, which take any id - the flow the CLI itself suggests
+// when it prints "tell your opponent: pokedex-cli join <id>".
+func printSpectated(b *api.Battle) {
+	fmt.Printf("battle %s (watching)\n", b.ID)
+	for _, s := range b.Sides {
+		printSide(s.Trainer, s)
+	}
+	switch {
+	case b.Status == api.BattleStatusFinished:
+		if w, ok := b.Winner.Get(); ok {
+			fmt.Printf("\n%s won.\n", w)
+		}
+	default:
+		if t, ok := b.Turn.Get(); ok && t != "" {
+			fmt.Printf("\nwaiting on %s.\n", t)
+		}
 	}
 }
 

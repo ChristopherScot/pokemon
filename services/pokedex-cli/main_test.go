@@ -1,6 +1,10 @@
 package main
 
 import (
+	"github.com/christopherscot/pokemon/services/pokedex/api"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
+	"io"
+	"os"
 	"strings"
 	"testing"
 )
@@ -142,4 +146,74 @@ func TestTeamCompleterSkipsTheBattleID(t *testing.T) {
 	if got, _ := complete(nil, []string{"abc123", "pikachu", "onix", "gengar"}, ""); len(got) != 0 {
 		t.Errorf("offered %v with a full team", got)
 	}
+}
+
+// "Not your battle" and "not started yet" are different answers.
+//
+// printBattle branched on SideFor's ok alone, which conflated them. That
+// was invisible while SideFor wrongly claimed every non-participant was
+// side 1; once it started telling the truth, watching someone else's
+// active battle printed "waiting for an opponent" about a battle that
+// had two trainers and a turn in progress.
+func TestSpectatingAnActiveBattleDoesNotClaimItIsWaiting(t *testing.T) {
+	mon := api.BattlePokemon{Name: "abra", Hp: 10, MaxHp: 10, Types: []string{"psychic"}}
+	b := &api.Battle{
+		ID:     "abc123",
+		Status: api.BattleStatusActive,
+		Turn:   api.NewOptString("ash"),
+		Sides: []api.Side{
+			{Trainer: "ash", Team: []api.BattlePokemon{mon}},
+			{Trainer: "misty", Team: []api.BattlePokemon{mon}},
+		},
+	}
+
+	c := &battleclient.Client{Name: "brock"} // watching, in neither side
+	out := captureStdout(t, func() { printBattle(c, b) })
+
+	if strings.Contains(out, "waiting for an opponent") {
+		t.Errorf("an active two-sided battle was described as waiting:\n%s", out)
+	}
+	if !strings.Contains(out, "ash") || !strings.Contains(out, "misty") {
+		t.Errorf("a spectator should see both trainers named:\n%s", out)
+	}
+	if strings.Contains(out, "\nyou\n") {
+		t.Errorf("a spectator was told one of the teams was theirs:\n%s", out)
+	}
+}
+
+// A battle with one side really is waiting, and still says so.
+func TestAOneSidedBattleStillReadsAsWaiting(t *testing.T) {
+	b := &api.Battle{
+		ID:     "abc123",
+		Status: api.BattleStatusWaiting,
+		Sides:  []api.Side{{Trainer: "ash", Team: []api.BattlePokemon{{Name: "abra"}}}},
+	}
+	c := &battleclient.Client{Name: "brock"}
+	out := captureStdout(t, func() { printBattle(c, b) })
+	if !strings.Contains(out, "waiting for an opponent") {
+		t.Errorf("a one-sided battle should read as waiting:\n%s", out)
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected, because these
+// printers write there directly - see battle_print.go's note on why an
+// io.Writer seam is not worth it until something needs one. This is
+// that something, and it is cheaper than the seam.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = orig }()
+
+	fn()
+	w.Close()
+	var sb strings.Builder
+	if _, err := io.Copy(&sb, r); err != nil {
+		t.Fatal(err)
+	}
+	return sb.String()
 }
