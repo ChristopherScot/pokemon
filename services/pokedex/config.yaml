@@ -47,3 +47,4 @@ ingress:
 # policy is about the cluster rather than about the service.
 manifests:
   - networkpolicy.yaml
+  - db.yaml
