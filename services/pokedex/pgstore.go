@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	randv2 "math/rand/v2"
 	"time"
@@ -160,19 +161,17 @@ func fromRow(id, status string, version, turn, turnNumber int, winner string,
 
 // ---------------------------------------------------------------- store
 
-func (p *pgStore) create(b *battle) {
-	ctx := context.Background()
+func (p *pgStore) create(ctx context.Context, b *battle) error {
 	state, err := json.Marshal(toState(b))
 	if err != nil {
-		// toState produces only marshalable types; a failure here is a
-		// programming error, and the interface has nowhere to report
-		// it. Matching memStore, which also cannot fail.
-		panic("marshalling battle state: " + err.Error())
+		// toState produces only marshalable types, so a failure here
+		// is a programming error rather than a runtime condition.
+		return fmt.Errorf("marshalling battle state: %w", err)
 	}
 
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
-		return
+		return fmt.Errorf("beginning transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := dbgen.New(tx)
@@ -180,7 +179,12 @@ func (p *pgStore) create(b *battle) {
 	// Swept here rather than from a timer: with several replicas a
 	// timer in each would mean several sweeps racing, and a store
 	// nobody writes to does not grow.
-	_ = q.SweepBattles(ctx, pgTime(time.Now().Add(-battleTTL)))
+	//
+	// Opportunistic - a failed sweep costs disk, not correctness, and
+	// must not fail the battle somebody is trying to open.
+	if err := q.SweepBattles(ctx, pgTime(time.Now().Add(-battleTTL))); err != nil {
+		slog.Warn("sweeping old battles", "err", err)
+	}
 
 	if err := q.CreateBattle(ctx, dbgen.CreateBattleParams{
 		ID:         b.id,
@@ -191,26 +195,28 @@ func (p *pgStore) create(b *battle) {
 		Winner:     b.winner,
 		State:      state,
 	}); err != nil {
-		return
+		return fmt.Errorf("inserting battle %s: %w", b.id, err)
 	}
-	for i, s := range b.sides {
+	for i, side := range b.sides {
 		if err := q.AddBattleSide(ctx, dbgen.AddBattleSideParams{
 			BattleID:     b.id,
 			Idx:          int32(i),
-			TrainerToken: s.token,
+			TrainerToken: side.token,
 		}); err != nil {
-			return
+			return fmt.Errorf("adding side %d to battle %s: %w", i, b.id, err)
 		}
 	}
-	_ = tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("committing battle %s: %w", b.id, err)
+	}
+	return nil
 }
 
 // get converts before returning, matching memStore. The pgStore path
 // builds a fresh *battle per call so nothing is shared, but the
 // interface is the same either way and a caller should not have to know
 // which implementation it is talking to.
-func (p *pgStore) get(id string) (*api.Battle, bool) {
-	ctx := context.Background()
+func (p *pgStore) get(ctx context.Context, id string) (*api.Battle, bool) {
 	row, err := dbgen.New(p.pool).GetBattle(ctx, id)
 	if err != nil {
 		return nil, false
@@ -226,8 +232,7 @@ func (p *pgStore) get(id string) (*api.Battle, bool) {
 
 // update is the one that matters. See the interface comment in
 // battle.go for why the closure form rather than get-then-save.
-func (p *pgStore) update(id string, fn func(*battle) error) error {
-	ctx := context.Background()
+func (p *pgStore) update(ctx context.Context, id string, fn func(*battle) error) error {
 	var lastErr error
 
 	for attempt := range maxRetries {
@@ -326,13 +331,21 @@ func (p *pgStore) attemptUpdate(ctx context.Context, id string, fn func(*battle)
 	return tx.Commit(ctx)
 }
 
-func (p *pgStore) waiting() []api.WaitingBattle {
-	ctx := context.Background()
+func (p *pgStore) waiting(ctx context.Context) []api.WaitingBattle {
 	q := dbgen.New(p.pool)
-	_ = q.SweepBattles(ctx, pgTime(time.Now().Add(-battleTTL)))
+	// Opportunistic: the sweep is garbage collection, not part of
+	// answering this request, so a failure is logged and the lobby is
+	// still served. Discarding it silently meant a sweep that had been
+	// failing for weeks would look exactly like one that never ran.
+	if err := q.SweepBattles(ctx, pgTime(time.Now().Add(-battleTTL))); err != nil {
+		slog.Warn("sweeping expired battles", "error", err)
+	}
 
 	rows, err := q.ListWaitingBattles(ctx)
 	if err != nil {
+		// An empty lobby and a broken database look identical to the
+		// caller, so say which one this is.
+		slog.Error("listing waiting battles", "error", err)
 		return nil
 	}
 	out := make([]api.WaitingBattle, 0, len(rows))
@@ -349,8 +362,7 @@ func (p *pgStore) waiting() []api.WaitingBattle {
 	return out
 }
 
-func (p *pgStore) trainerByToken(token string) (string, bool) {
-	ctx := context.Background()
+func (p *pgStore) trainerByToken(ctx context.Context, token string) (string, bool) {
 	t, err := dbgen.New(p.pool).TrainerByToken(ctx, token)
 	if err != nil {
 		return "", false
@@ -364,8 +376,7 @@ func (p *pgStore) trainerByToken(token string) (string, bool) {
 // settled by the UNIQUE index on lower(name) rather than by checking
 // first. A check-then-insert has a gap between the two, and with
 // several replicas there is no lock that closes it.
-func (p *pgStore) registerTrainer(name string) (string, error) {
-	ctx := context.Background()
+func (p *pgStore) registerTrainer(ctx context.Context, name string) (string, error) {
 	token := newToken()
 	_, err := dbgen.New(p.pool).RegisterTrainer(ctx, dbgen.RegisterTrainerParams{
 		Token: token,

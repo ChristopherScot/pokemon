@@ -18,30 +18,36 @@ import (
 
 // RegisterTrainer claims a name and mints the token that authorises this
 // trainer's moves.
-func (s service) RegisterTrainer(_ context.Context, req *api.RegisterTrainer) (api.RegisterTrainerRes, error) {
+func (s service) RegisterTrainer(ctx context.Context, req *api.RegisterTrainer) (api.RegisterTrainerRes, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		return &api.Error{Message: "name cannot be empty"}, nil
 	}
-	token, err := s.battles.registerTrainer(name)
-	if err != nil {
+	token, err := s.battles.registerTrainer(ctx, name)
+	switch {
+	case errors.Is(err, errNameTaken):
 		// The spec's only non-201 here is 409, which ogen models as the
 		// bare Error type.
 		return &api.Error{Message: fmt.Sprintf("%q is taken, pick another", name)}, nil
+	case err != nil:
+		// Anything else is not the player's fault. Reporting a database
+		// outage as "that name is taken" sends them off to invent a new
+		// one against a problem no name can fix.
+		return nil, fmt.Errorf("registering %q: %w", name, err)
 	}
 	return &api.Trainer{Name: name, Token: token}, nil
 }
 
 // ListWaitingTrainers is the lobby: who is looking for a battle.
-func (s service) ListWaitingTrainers(context.Context) (*api.WaitingList, error) {
-	open := s.battles.waiting()
+func (s service) ListWaitingTrainers(ctx context.Context) (*api.WaitingList, error) {
+	open := s.battles.waiting(ctx)
 	return &api.WaitingList{Count: len(open), Waiting: open}, nil
 }
 
 // CreateBattle opens an invitation. The battle sits in `waiting` until
 // someone joins, which is when turn order is decided.
-func (s service) CreateBattle(_ context.Context, req *api.CreateBattle, params api.CreateBattleParams) (api.CreateBattleRes, error) {
-	trainer, ok := s.battles.trainerByToken(params.XTrainerToken)
+func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params api.CreateBattleParams) (api.CreateBattleRes, error) {
+	trainer, ok := s.battles.trainerByToken(ctx, params.XTrainerToken)
 	if !ok {
 		return &api.CreateBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
@@ -70,14 +76,23 @@ func (s service) CreateBattle(_ context.Context, req *api.CreateBattle, params a
 		TurnNumber: 0,
 		Text:       fmt.Sprintf("%s is looking for a battle.", trainer),
 	})
-	s.battles.create(b)
+	// Surfaced, not swallowed. This used to be a bare call and the
+	// handler answered 201 regardless, so a failed insert handed the
+	// player a battle id that was never written - they shared it, and
+	// every later read 404'd with nothing in the logs to say why.
+	//
+	// NewError logs it and renders a 500, which is the honest answer:
+	// the battle does not exist.
+	if err := s.battles.create(ctx, b); err != nil {
+		return nil, fmt.Errorf("creating battle: %w", err)
+	}
 	return b.toAPI(), nil
 }
 
 // GetBattle is what clients poll. Cheap on purpose: `version` lets a
 // caller skip re-rendering when nothing has changed.
-func (s service) GetBattle(_ context.Context, params api.GetBattleParams) (api.GetBattleRes, error) {
-	b, ok := s.battles.get(params.ID)
+func (s service) GetBattle(ctx context.Context, params api.GetBattleParams) (api.GetBattleRes, error) {
+	b, ok := s.battles.get(ctx, params.ID)
 	if !ok {
 		return &api.Error{Message: "no such battle"}, nil
 	}
@@ -85,8 +100,8 @@ func (s service) GetBattle(_ context.Context, params api.GetBattleParams) (api.G
 }
 
 // JoinBattle fills the second side and starts play.
-func (s service) JoinBattle(_ context.Context, req *api.JoinBattle, params api.JoinBattleParams) (api.JoinBattleRes, error) {
-	trainer, ok := s.battles.trainerByToken(params.XTrainerToken)
+func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api.JoinBattleParams) (api.JoinBattleRes, error) {
+	trainer, ok := s.battles.trainerByToken(ctx, params.XTrainerToken)
 	if !ok {
 		return &api.JoinBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
@@ -97,7 +112,7 @@ func (s service) JoinBattle(_ context.Context, req *api.JoinBattle, params api.J
 		out     *api.Battle
 		badTeam error
 	)
-	err := s.battles.update(params.ID, func(b *battle) error {
+	err := s.battles.update(ctx, params.ID, func(b *battle) error {
 		if b.status != "waiting" {
 			return errBattleFull
 		}
@@ -148,8 +163,8 @@ func (s service) JoinBattle(_ context.Context, req *api.JoinBattle, params api.J
 }
 
 // TakeTurn resolves one attack.
-func (s service) TakeTurn(_ context.Context, req *api.TakeTurn, params api.TakeTurnParams) (api.TakeTurnRes, error) {
-	if _, ok := s.battles.trainerByToken(params.XTrainerToken); !ok {
+func (s service) TakeTurn(ctx context.Context, req *api.TakeTurn, params api.TakeTurnParams) (api.TakeTurnRes, error) {
+	if _, ok := s.battles.trainerByToken(ctx, params.XTrainerToken); !ok {
 		return &api.TakeTurnUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
 	// The turn resolves inside the transaction that reads and writes
@@ -157,7 +172,7 @@ func (s service) TakeTurn(_ context.Context, req *api.TakeTurn, params api.TakeT
 	// because one process held a mutex; with several replicas this is
 	// what replaces it.
 	var out *api.Battle
-	err := s.battles.update(params.ID, func(b *battle) error {
+	err := s.battles.update(ctx, params.ID, func(b *battle) error {
 		if err := b.takeTurn(params.XTrainerToken, req.Attacker, req.Move, req.Target, s.rng); err != nil {
 			return err
 		}

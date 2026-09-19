@@ -10,6 +10,7 @@ package main
 // interface is what keeps the swap to a real store from being a rewrite.
 
 import (
+	"context"
 	crand "crypto/rand"
 	"errors"
 	"fmt"
@@ -184,12 +185,14 @@ func newCombatants(dex *pokedex, names []string) ([]*combatant, error) {
 // game and confusing to read: the board would show the same name three
 // times with different HP, and a target index would be the only way to
 // tell them apart.
+
 // fillTeam completes a partial selection with random Pokemon.
 //
 // A client offering "pick the ones you care about" sends one or two
 // names, and the rest are the server's to choose - which is what makes
 // the empty slots in the web UI mean something rather than being a
 // validation error waiting to happen.
+
 // roller is the randomness the battle engine needs: two methods, and
 // no opinion about whether they are guarded.
 //
@@ -294,8 +297,23 @@ func damage(attacker, defender *combatant, move api.Move, rng roller) (int, floa
 // store holds battles. An interface because replicas: 1 is what makes a
 // map correct today, and that is a deployment detail rather than a
 // design one.
+// Every method takes a context.
+//
+// The handlers receive one per request and used to discard it, and the
+// Postgres store then manufactured context.Background(). That made
+// `case <-ctx.Done()` in its retry loop dead code: a client that
+// disconnects mid-turn left ten SERIALIZABLE retries with exponential
+// backoff grinding against a database nobody was waiting on, and
+// srv.Shutdown could not interrupt in-flight work.
 type store interface {
-	create(*battle)
+	// create returns an error because the Postgres implementation can
+	// fail and used to say nothing. Begin, the inserts and the commit
+	// each returned bare on failure, and the handler then answered 201
+	// with a battle id that was never written - the player shared it,
+	// and every later read 404'd with nothing in the logs.
+	//
+	// The memory store cannot fail and returns nil.
+	create(ctx context.Context, b *battle) error
 	// get and waiting return CONVERTED values, not *battle.
 	//
 	// They used to hand the pointer back and release the lock, and the
@@ -307,10 +325,10 @@ type store interface {
 	//
 	// Converting inside the lock is the fix that keeps the lock's
 	// meaning honest: nothing reachable from the store escapes it.
-	get(id string) (*api.Battle, bool)
-	waiting() []api.WaitingBattle
-	trainerByToken(token string) (string, bool)
-	registerTrainer(name string) (string, error)
+	get(ctx context.Context, id string) (*api.Battle, bool)
+	waiting(ctx context.Context) []api.WaitingBattle
+	trainerByToken(ctx context.Context, token string) (string, bool)
+	registerTrainer(ctx context.Context, name string) (string, error)
 
 	// update applies fn to a battle and persists the result, as one
 	// atomic step.
@@ -329,7 +347,7 @@ type store interface {
 	//
 	// Returns errNoBattle if there is none with that id, otherwise
 	// whatever fn returned.
-	update(id string, fn func(*battle) error) error
+	update(ctx context.Context, id string, fn func(*battle) error) error
 }
 
 type memStore struct {
@@ -390,7 +408,7 @@ func newToken() string {
 
 var errNameTaken = errors.New("name already taken")
 
-func (m *memStore) registerTrainer(name string) (string, error) {
+func (m *memStore) registerTrainer(_ context.Context, name string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	name = strings.TrimSpace(name)
@@ -403,21 +421,23 @@ func (m *memStore) registerTrainer(name string) (string, error) {
 	return token, nil
 }
 
-func (m *memStore) trainerByToken(token string) (string, bool) {
+func (m *memStore) trainerByToken(_ context.Context, token string) (string, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	n, ok := m.trainers[token]
 	return n, ok
 }
 
-func (m *memStore) create(b *battle) {
+func (m *memStore) create(_ context.Context, b *battle) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sweepLocked()
 	m.battles[b.id] = b
+	// Cannot fail: the error exists for the Postgres implementation.
+	return nil
 }
 
-func (m *memStore) get(id string) (*api.Battle, bool) {
+func (m *memStore) get(_ context.Context, id string) (*api.Battle, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	b, ok := m.battles[id]
@@ -450,7 +470,7 @@ func (m *memStore) rawForTest(id string) (*battle, bool) {
 // write back - holding the lock for the duration is the whole job, and
 // it is what stops two requests interleaving a turn. The Postgres
 // store has real work to do here; see pgstore.update.
-func (m *memStore) update(id string, fn func(*battle) error) error {
+func (m *memStore) update(_ context.Context, id string, fn func(*battle) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	b, ok := m.battles[id]
@@ -466,7 +486,7 @@ func (m *memStore) update(id string, fn func(*battle) error) error {
 
 // waiting lists open invitations, newest first, so a lobby shows the
 // freshest at the top.
-func (m *memStore) waiting() []api.WaitingBattle {
+func (m *memStore) waiting(_ context.Context) []api.WaitingBattle {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sweepLocked()

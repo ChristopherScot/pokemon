@@ -6,6 +6,7 @@ package main
 // without a transport in the way.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -29,11 +30,11 @@ func testService(t *testing.T) service {
 // point for most of what follows.
 func activeBattle(t *testing.T, s service) (*battle, string, string) {
 	t.Helper()
-	a, err := s.battles.registerTrainer("ash")
+	a, err := s.battles.registerTrainer(context.Background(), "ash")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := s.battles.registerTrainer("gary")
+	b, err := s.battles.registerTrainer(context.Background(), "gary")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,10 +337,10 @@ func TestRejectedTurnChangesNothing(t *testing.T) {
 // the lobby is meaningless.
 func TestTrainerNamesAreUnique(t *testing.T) {
 	s := testService(t)
-	if _, err := s.battles.registerTrainer("ash"); err != nil {
+	if _, err := s.battles.registerTrainer(context.Background(), "ash"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.battles.registerTrainer("ASH"); !errors.Is(err, errNameTaken) {
+	if _, err := s.battles.registerTrainer(context.Background(), "ASH"); !errors.Is(err, errNameTaken) {
 		t.Errorf("case-different duplicate accepted: %v", err)
 	}
 }
@@ -421,7 +422,7 @@ func TestRandomTeamIsThreeDistinctPokemon(t *testing.T) {
 // it has to produce a playable side rather than an empty one.
 func TestCreateWithNoTeamPicksOne(t *testing.T) {
 	s := testService(t)
-	tok, err := s.battles.registerTrainer("ash")
+	tok, err := s.battles.registerTrainer(context.Background(), "ash")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -459,11 +460,11 @@ func TestTokensDoNotFollowTheSeed(t *testing.T) {
 	a := newMemStore(42)
 	b := newMemStore(42)
 
-	ta, err := a.registerTrainer("ash")
+	ta, err := a.registerTrainer(context.Background(), "ash")
 	if err != nil {
 		t.Fatal(err)
 	}
-	tb, err := b.registerTrainer("ash")
+	tb, err := b.registerTrainer(context.Background(), "ash")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,7 +475,7 @@ func TestTokensDoNotFollowTheSeed(t *testing.T) {
 	// And tokens within one store differ from each other.
 	seen := map[string]bool{ta: true}
 	for i := 0; i < 50; i++ {
-		tok, err := a.registerTrainer(fmt.Sprintf("trainer-%d", i))
+		tok, err := a.registerTrainer(context.Background(), fmt.Sprintf("trainer-%d", i))
 		if err != nil {
 			t.Fatal(err)
 		}

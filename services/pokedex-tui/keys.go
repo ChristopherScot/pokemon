@@ -12,7 +12,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
-	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 // shortCtx bounds a request. Battle actions are interactive: one that
@@ -282,5 +281,3 @@ func prevAlive(team []api.BattlePokemon, i int) int {
 	}
 	return i
 }
-
-var _ = battleclient.PollInterval

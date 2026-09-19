@@ -271,8 +271,6 @@ func index1(s, what string) (int, error) {
 	return n - 1, nil
 }
 
-// lastTurn is the events from the most recent turn, which is what a
-// player wants to see after attacking.
 // printEvent writes one log line with a glyph for what it did.
 //
 // The CLI cannot animate a hit the way the web does, so the glyph is
@@ -289,6 +287,8 @@ func printEvent(ev api.BattleEvent) {
 	fmt.Println("   ", ev.Text)
 }
 
+// lastTurn is the events from the most recent turn, which is what a
+// player wants to see after attacking.
 func lastTurn(b *api.Battle) []api.BattleEvent {
 	if len(b.Log) == 0 {
 		return nil

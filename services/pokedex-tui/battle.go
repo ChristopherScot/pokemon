@@ -45,8 +45,8 @@ type lobbyMsg struct {
 	// action. A background refresh that fails should not overwrite
 	// whatever the user was last told - they did not ask for it.
 	polled bool
-	list *api.WaitingList
-	err  error
+	list   *api.WaitingList
+	err    error
 }
 
 // shownHP is the HP a bar is currently drawing, which lags the real

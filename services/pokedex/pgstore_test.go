@@ -41,17 +41,17 @@ func freshPG(t *testing.T) (*pgxpool.Pool, *pgStore, *pokedex) {
 func TestPGRegisterTrainer(t *testing.T) {
 	_, store, _ := freshPG(t)
 
-	token, err := store.registerTrainer("Ash")
+	token, err := store.registerTrainer(context.Background(), "Ash")
 	if err != nil {
 		t.Fatalf("registering: %v", err)
 	}
-	name, ok := store.trainerByToken(token)
+	name, ok := store.trainerByToken(context.Background(), token)
 	if !ok || name != "Ash" {
 		t.Fatalf("trainerByToken = %q, %v; want Ash, true", name, ok)
 	}
 
 	// Case-insensitive, matching the in-memory store.
-	if _, err := store.registerTrainer("ash"); !errors.Is(err, errNameTaken) {
+	if _, err := store.registerTrainer(context.Background(), "ash"); !errors.Is(err, errNameTaken) {
 		t.Errorf("registering ash after Ash = %v, want errNameTaken", err)
 	}
 }
@@ -73,7 +73,7 @@ func TestPGRegisterTrainerRace(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := store.registerTrainer("misty")
+			_, err := store.registerTrainer(context.Background(), "misty")
 			mu.Lock()
 			defer mu.Unlock()
 			switch {
@@ -104,17 +104,17 @@ func TestPGRegisterTrainerRace(t *testing.T) {
 func TestPGBattleSurvivesANewStore(t *testing.T) {
 	pool, store, dex := freshPG(t)
 
-	token, err := store.registerTrainer("Ash")
+	token, err := store.registerTrainer(context.Background(), "Ash")
 	if err != nil {
 		t.Fatalf("registering: %v", err)
 	}
 	b := newTestBattle(t, dex, "Ash", token)
-	store.create(b)
+	store.create(context.Background(), b)
 
 	// A different store on the same database: a second replica, or the
 	// same one after a restart.
 	other := newPGStore(pool, 2)
-	got, ok := other.get(b.id)
+	got, ok := other.get(context.Background(), b.id)
 	if !ok {
 		t.Fatalf("battle %s not found by a second store", b.id)
 	}
@@ -143,12 +143,12 @@ func TestPGBattleSurvivesANewStore(t *testing.T) {
 func TestPGConcurrentUpdatesAllLand(t *testing.T) {
 	_, store, dex := freshPG(t)
 
-	token, err := store.registerTrainer("Ash")
+	token, err := store.registerTrainer(context.Background(), "Ash")
 	if err != nil {
 		t.Fatalf("registering: %v", err)
 	}
 	b := newTestBattle(t, dex, "Ash", token)
-	store.create(b)
+	store.create(context.Background(), b)
 
 	// Each writer appends one event. If two interleave and one is
 	// lost, the log is short - a silent corruption, which is exactly
@@ -160,7 +160,7 @@ func TestPGConcurrentUpdatesAllLand(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs[i] = store.update(b.id, func(cur *battle) error {
+			errs[i] = store.update(context.Background(), b.id, func(cur *battle) error {
 				cur.log = append(cur.log, api.BattleEvent{
 					TurnNumber: len(cur.log),
 					Text:       "event",
@@ -177,7 +177,7 @@ func TestPGConcurrentUpdatesAllLand(t *testing.T) {
 		}
 	}
 
-	got, ok := store.get(b.id)
+	got, ok := store.get(context.Background(), b.id)
 	if !ok {
 		t.Fatal("battle disappeared")
 	}
@@ -198,15 +198,15 @@ func TestPGConcurrentUpdatesAllLand(t *testing.T) {
 func TestPGUpdatePropagatesClosureError(t *testing.T) {
 	_, store, dex := freshPG(t)
 
-	token, err := store.registerTrainer("Ash")
+	token, err := store.registerTrainer(context.Background(), "Ash")
 	if err != nil {
 		t.Fatalf("registering: %v", err)
 	}
 	b := newTestBattle(t, dex, "Ash", token)
-	store.create(b)
+	store.create(context.Background(), b)
 
 	sentinel := errors.New("nope")
-	err = store.update(b.id, func(cur *battle) error {
+	err = store.update(context.Background(), b.id, func(cur *battle) error {
 		cur.status = "finished"
 		return sentinel
 	})
@@ -214,7 +214,7 @@ func TestPGUpdatePropagatesClosureError(t *testing.T) {
 		t.Fatalf("update returned %v, want the closure's error", err)
 	}
 
-	got, _ := store.get(b.id)
+	got, _ := store.get(context.Background(), b.id)
 	if string(got.Status) == "finished" {
 		t.Error("the mutation was committed despite the closure failing")
 	}
@@ -222,7 +222,7 @@ func TestPGUpdatePropagatesClosureError(t *testing.T) {
 
 func TestPGUpdateMissingBattle(t *testing.T) {
 	_, store, _ := freshPG(t)
-	err := store.update("nosuchid", func(*battle) error { return nil })
+	err := store.update(context.Background(), "nosuchid", func(*battle) error { return nil })
 	if !errors.Is(err, errNoBattle) {
 		t.Errorf("update on a missing battle = %v, want errNoBattle", err)
 	}
@@ -231,26 +231,26 @@ func TestPGUpdateMissingBattle(t *testing.T) {
 func TestPGWaitingLists(t *testing.T) {
 	_, store, dex := freshPG(t)
 
-	token, err := store.registerTrainer("Ash")
+	token, err := store.registerTrainer(context.Background(), "Ash")
 	if err != nil {
 		t.Fatalf("registering: %v", err)
 	}
 	b := newTestBattle(t, dex, "Ash", token)
-	store.create(b)
+	store.create(context.Background(), b)
 
-	waiting := store.waiting()
+	waiting := store.waiting(context.Background())
 	if len(waiting) != 1 || waiting[0].BattleId != b.id {
 		t.Fatalf("waiting() returned %d battles, want the one just created", len(waiting))
 	}
 
 	// Once it is active it leaves the lobby.
-	if err := store.update(b.id, func(cur *battle) error {
+	if err := store.update(context.Background(), b.id, func(cur *battle) error {
 		cur.status = "active"
 		return nil
 	}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	if got := store.waiting(); len(got) != 0 {
+	if got := store.waiting(context.Background()); len(got) != 0 {
 		t.Errorf("waiting() returned %d battles after the only one went active", len(got))
 	}
 }
