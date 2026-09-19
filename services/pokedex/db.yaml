@@ -64,3 +64,23 @@ spec:
       wal:
         compression: gzip
     retentionPolicy: "30d"
+---
+# The thing that actually runs a backup.
+#
+# barmanObjectStore above only says WHERE backups go; without this,
+# nothing ever triggers one. The cluster sat configured-but-never-
+# backed-up until Grafana's "last backup is >36h old" alert caught it,
+# which is exactly the failure that alert exists for.
+#
+# 05:15, after monitoring's 05:00 and shlink's 04:45, so no two
+# clusters push to S3 at once. CNPG uses 6-field cron: sec min hour
+# dom mon dow.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: pokedex-db-daily
+spec:
+  schedule: "0 15 5 * * *"
+  backupOwnerReference: self
+  cluster:
+    name: pokedex-db
