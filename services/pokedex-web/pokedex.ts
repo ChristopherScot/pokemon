@@ -89,11 +89,22 @@ function card(p: Pokemon) {
 // Exported like battlePage/lobbyPage so a test can assert on the real
 // markup. The route itself 502s without a live API behind it, so
 // testing through inject() cannot see the page at all.
-export function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: TypeSummary[]; active: string }) {
+export function page(
+  { pokemon, types, active, join = '' }:
+  { pokemon: Pokemon[]; types: TypeSummary[]; active: string; join?: string },
+) {
+  // Every filter link carries the join id along. Dropping it would end
+  // the join halfway through: you would filter to "water", lose the
+  // battle you were joining, and press a button that opens a new one.
+  const keep = join ? `join=${encodeURIComponent(join)}` : ''
+  const href = (q: string) => {
+    const parts = [q, keep].filter(Boolean).join('&')
+    return parts ? `/?${parts}` : '/'
+  }
   const filters = [
-    `<a href="/" class="${active ? '' : 'on'}">all</a>`,
+    `<a href="${href('')}" class="${active ? '' : 'on'}">all</a>`,
     ...types.map((t) =>
-      `<a href="/?type=${encodeURIComponent(t.name)}" class="${active === t.name ? 'on' : ''}" style="border-color:${colour(t.name)}">${escape(t.name)} <small>${t.count}</small></a>`),
+      `<a href="${href(`type=${encodeURIComponent(t.name)}`)}" class="${active === t.name ? 'on' : ''}" style="border-color:${colour(t.name)}">${escape(t.name)} <small>${t.count}</small></a>`),
   ].join('')
 
   return `<!doctype html>
@@ -244,13 +255,16 @@ export function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: Ty
        than its name does - so there is no text hint beside them. -->
   <header class="topbar">
     <div class="title">
-      <h1>Pokedex</h1>
+      <h1>${join ? 'Pick your team' : 'Pokedex'}</h1>
       <!-- The lobby had no link in. "Ready to battle" below OPENS a
            battle, so without this you could create one and never see
            or join anyone else's - the lobby was reachable only by
            typing /battle. Both battle pages already link back here. -->
-      <p class="sub">${pokemon.length} pokemon &middot; served from a generated client
-        &middot; <a class="battle-link" href="/battle">Battle lobby &rarr;</a></p>
+      <p class="sub">${
+        join
+          ? `joining battle <code>${escape(join)}</code> &middot; pick up to three, or none for a random team &middot; <a class="battle-link" href="/battle">back to the lobby</a>`
+          : `${pokemon.length} pokemon &middot; served from a generated client &middot; <a class="battle-link" href="/battle">Battle lobby &rarr;</a>`
+      }</p>
     </div>
 
     <!-- Filters narrow by type; this narrows by name, which is faster
@@ -264,7 +278,7 @@ export function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: Ty
       <div class="slot" data-slot="2" title="random"><span class="slot-empty">&#127922;</span></div>
     </div>
 
-    <button id="ready">Ready to battle</button>
+    <button id="ready" data-join="${join ? escape(join) : ''}">${join ? 'Join battle' : 'Ready to battle'}</button>
   </header>
   <nav class="filters">${filters}</nav>
 
@@ -415,31 +429,45 @@ function showError(msg) {
   nameError.hidden = false
 }
 
-/** Opens a battle with the current team. Returns false if it needs a name. */
-async function openBattle() {
-  const res = await fetch('/battle/open', {
+// The battle this page is joining, if any. Empty means "open a new one".
+const JOIN_ID = ready.dataset.join || ''
+
+/**
+ * Commits the current team: joins JOIN_ID if set, otherwise opens a new
+ * battle. Returns false if it needs a trainer name first.
+ *
+ * One function for both, because picking a team is the same act either
+ * way. Splitting them is what left joining without a picker at all: the
+ * grid was wired only to "open", so everyone joining a battle got a
+ * bare text box and had to type three names from memory.
+ */
+async function commitTeam() {
+  // Only what was actually picked. A short or absent team is the
+  // server's cue to fill the rest at random.
+  const body = team.length ? { team: team.map((t) => t.name) } : {}
+  const url = JOIN_ID ? '/battle/' + encodeURIComponent(JOIN_ID) + '/join' : '/battle/open'
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    // Only what was actually picked. A short or absent team is the
-    // server's cue to fill the rest at random.
-    body: JSON.stringify(team.length ? { team: team.map((t) => t.name) } : {}),
+    body: JSON.stringify(body),
   })
-  const body = await res.json().catch(() => ({}))
+  const out = await res.json().catch(() => ({}))
   if (res.ok) {
     sessionStorage.removeItem(KEY)
-    location.href = '/battle/' + body.id
+    location.href = '/battle/' + (JOIN_ID || out.id)
     return true
   }
   // 401 is the only recoverable one: it means there is no trainer yet.
   if (res.status === 401) return false
-  throw new Error(body.message || 'could not open that battle')
+  throw new Error(out.message || (JOIN_ID ? 'could not join that battle' : 'could not open that battle'))
 }
 
 ready.addEventListener('click', async () => {
   ready.disabled = true
-  ready.textContent = 'opening...'
+  ready.textContent = JOIN_ID ? 'joining...' : 'opening...'
   try {
-    if (await openBattle()) return
+    if (await commitTeam()) return
     // Ask for the name in place rather than redirecting to the lobby,
     // which would throw away the team just picked - the actual work.
     nameError.hidden = true
@@ -473,9 +501,10 @@ document.getElementById('name-form').addEventListener('submit', async (e) => {
   }
 
   modal.close()
-  // Straight on into the battle they asked for, team intact.
+  // Straight on into the battle they asked for, team intact - the
+  // one they were joining, or a new one.
   try {
-    await openBattle()
+    await commitTeam()
   } catch (err) {
     alert(err.message)
   }
@@ -582,7 +611,21 @@ async function detectPlatform() {
 
 async function showDownloads() {
   const plat = await detectPlatform()
-  if (!plat) return
+
+  // No matching build - a phone, or Windows. Show the section anyway,
+  // with just the link out.
+  //
+  // Hiding it entirely was the first version and it was wrong: on
+  // Android the whole footer vanished, so there was no way even to
+  // reach the releases page and fetch a build for a laptop. There is
+  // no Android binary; that is a reason to offer the link, not to
+  // pretend downloads do not exist.
+  if (!plat) {
+    document.getElementById('dl-platform').textContent =
+      'No build for this device - see all downloads below'
+    document.getElementById('downloads').hidden = false
+    return
+  }
 
   let releases
   try {
@@ -610,7 +653,14 @@ async function showDownloads() {
       }
     }
   }
-  if (!links.length) return
+  // A platform we recognise but have no build for. Same as above:
+  // say so and leave the link out visible.
+  if (!links.length) {
+    document.getElementById('dl-platform').textContent =
+      'No build for ' + plat.label + ' - see all downloads below'
+    document.getElementById('downloads').hidden = false
+    return
+  }
 
   // Each tool carries its own version, because they are not released
   // together - one line naming a single version would be wrong for
@@ -634,8 +684,13 @@ showDownloads()
 export function register(app: FastifyInstance) {
   // The type filter arrives as a query parameter; typing it here is
   // what makes request.query.type a string rather than unknown.
-  app.get<{ Querystring: { type?: string } }>('/', async (request, reply) => {
+  app.get<{ Querystring: { type?: string; join?: string } }>('/', async (request, reply) => {
     const active = typeof request.query.type === 'string' ? request.query.type : ''
+    // ?join=<id> means "pick a team, then join THAT battle". The card
+    // grid is the only real team picker in the product; without this it
+    // was reachable only when opening a battle, so everyone joining one
+    // had to type three names from memory into a text box.
+    const join = typeof request.query.join === 'string' ? request.query.join : ''
 
     // Both calls go through the generated client. A failure here is a 502
     // rather than a stack trace: the UI is down because its API is, and
@@ -667,6 +722,7 @@ export function register(app: FastifyInstance) {
       pokemon: list.data.pokemon,
       types: typeList.data.types,
       active,
+      join,
     }))
   })
 }
