@@ -173,7 +173,16 @@ function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: TypeSumma
   /* Sticky under the topbar, not scrolling away with the grid: picking
      a third fire type otherwise means scrolling back up to find the
      filter you were using. top is the topbar's height. */
-  .filters { position:sticky; top:86px; z-index:9; background:var(--bg);
+  /* top is MEASURED, not guessed.
+     .
+     It used to be a hardcoded 86px, which is roughly the topbar's height
+     on a desktop window and wrong everywhere else: the topbar wraps
+     (title, search, three team slots, a button), so on a phone it is two
+     or three rows tall and the filters pinned underneath it - visible
+     while scrolling, then sliding behind the header and out of reach.
+     A script sets --topbar-h from the real element and updates it on
+     resize. */
+  .filters { position:sticky; top:var(--topbar-h, 86px); z-index:9; background:var(--bg);
              display:flex; flex-wrap:wrap; gap:8px;
              padding:10px 0 12px; margin-bottom:12px;
              border-bottom:1px solid #262a38; }
@@ -253,6 +262,26 @@ function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: TypeSumma
       : `<p class="empty">No pokemon of that type.</p>`}
 
 <script type="module">
+// Pin the filters directly below the topbar, whatever height it is.
+//
+// The topbar wraps - title, search, three team slots, a button - so on a
+// phone it is two or three rows tall rather than the one row a desktop
+// window gives it. The filters used to pin at a hardcoded 86px, which
+// put them BEHIND the header on a narrow screen: they scrolled up, slid
+// under the topbar, and could not be reached again without scrolling
+// back to the top.
+//
+// ResizeObserver rather than a resize listener: the topbar also changes
+// height when a team slot fills and the text inside it reflows, which
+// fires no resize event.
+const topbar = document.querySelector('.topbar')
+if (topbar) {
+  const pin = () => document.documentElement.style.setProperty(
+    '--topbar-h', topbar.getBoundingClientRect().height + 'px')
+  pin()
+  new ResizeObserver(pin).observe(topbar)
+}
+
 // The team picker. Click a card to add it, click again or use the x to
 // remove it, and "Ready to battle" opens a battle with those three.
 //

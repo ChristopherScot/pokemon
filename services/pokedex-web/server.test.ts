@@ -1,5 +1,6 @@
 import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 import { app } from './server.ts'
 
@@ -381,4 +382,24 @@ test('joining from the battle page sends the chosen team', async () => {
 test('the lobby ships a waiting list the poll can replace', async () => {
   const { registerBattle } = await import('./battle.ts')
   assert.ok(registerBattle, 'registerBattle should be exported')
+})
+
+// The filters pin below the topbar, which WRAPS on a narrow screen -
+// title, search, three team slots, a button. A hardcoded offset is
+// right for one window width and wrong for a phone, where it put the
+// filters behind the header and out of reach.
+test('the filter bar pins to a measured topbar height, not a guess', async () => {
+  // Read the source rather than render the page: the route calls the
+  // pokedex API, which a unit test has no business reaching, and the
+  // CSS and script under test are static text either way.
+  const page = await readFile(new URL('./pokedex.ts', import.meta.url), 'utf8')
+  assert.match(page, /top:var\(--topbar-h/, 'filters should pin to the measured height')
+  // The CALL, not the word: the comment above it also says
+  // ResizeObserver, so a bare match passes with the observer deleted.
+  assert.match(page, /new ResizeObserver\(pin\)\.observe\(topbar\)/,
+    'the height should be re-measured when the topbar reflows')
+  assert.ok(
+    !/\.filters\s*\{[^}]*top:\s*\d+px/.test(page),
+    'the filters must not pin to a hardcoded pixel offset',
+  )
 })
