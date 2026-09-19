@@ -103,8 +103,11 @@ jobs:
       # ghcr.io specifically: github.actor + GITHUB_TOKEN authenticate
       # to GitHub's registry and nothing else. Pointing image.repository
       # at ECR or Docker Hub means replacing this step with that
-      # registry's login action and a stored credential - and note
-      # `homelabctl init --overwrite` rewrites this file from the
+      # registry's login action and a stored credential. The image NAME
+      # needs no edit here - it is read from config.yaml below - so this
+      # step is the only thing a registry change touches.
+      #
+      # Note `homelabctl init --overwrite` rewrites this file from the
       # template, which would discard that edit.
       - uses: docker/login-action@v3
         if: github.event_name != 'pull_request'
@@ -113,10 +116,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Asked, not remembered.
+      #
+      # This used to be the literal image name, written once by `init`
+      # and never regenerated - while config.yaml, which names the same
+      # image, is regenerated on every `render`. Renaming the image
+      # therefore moved the manifests and left CI pushing the old name,
+      # and nothing reported it: the build was green because it pushed
+      # SOMETHING, render was clean because the manifests matched the
+      # config, and Argo said Synced because it applied what it was
+      # given. The only symptom was ImagePullBackOff - and on a first
+      # deploy there is no previous image to fall back to, so the
+      # service never started at all.
+      #
+      # Reading it here means config.yaml is the only place the image is
+      # named, so the two cannot disagree. `homelabctl image` exits
+      # non-zero if it is unset, which fails the job here rather than
+      # pushing an untagged image.
+      - id: image
+        run: echo "ref=$(./homelabctl image)" >> "$GITHUB_OUTPUT"
+
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/christopherscot/pokemon-pokedex
+          images: ${{ steps.image.outputs.ref }}
           # Full SHA: an abbreviated one is not a registry tag and gives
           # ImagePullBackOff.
           tags: |
@@ -163,17 +186,17 @@ jobs:
           # Tag whenever the CURRENT version has no tag, rather than when
           # THIS push changed it.
           #
-          # The diff-based version of this check skipped a release
-          # permanently whenever a build failed: needs.build gates this
-          # job, so the commit that bumped 0.3.0 to 0.4.0 never reached
-          # here, and every later push was "unchanged". The spec went to
-          # 0.6.0 while npm sat on 0.3.0 and nothing reported an error -
-          # the clients just silently kept resolving an old package.
+          # The diff-based form of this check skips a release permanently
+          # whenever a build fails. needs.build gates this job, so the
+          # commit that bumped the version never reaches here, and every
+          # later push reports "unchanged". A spec ran three versions
+          # ahead of its published client that way, with no failure to
+          # point at - consumers just kept resolving the old package.
           #
-          # Asking "is the current version released" instead makes the
-          # job idempotent: a green build after a red one recovers the
-          # release by itself, and a push that changes nothing is a
-          # no-op because the tag already exists.
+          # Asking "is the current version released" makes the job
+          # idempotent: a green build after a red one recovers the
+          # release on its own, and a push that changes nothing is a
+          # no-op because the tag is already there.
           # Against the REMOTE, not the local clone. actions/checkout
           # does not fetch tags, so `git rev-parse` here knows about
           # none of them and happily re-tags a version that is already
