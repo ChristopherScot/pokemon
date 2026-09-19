@@ -175,3 +175,65 @@ test('a spectator gets a board instead of an endless spinner', async () => {
   assert.match(board.innerHTML, /someone-else/,
     'the spectator board should show the trainer already waiting')
 })
+
+// A battle that no longer exists must stop the polling loop.
+//
+// A 404 makes res.ok false, so the old loop skipped the body and called
+// setTimeout anyway - forever, with no counter and no ceiling. Battles
+// live in the server's memory, so a deploy ends every one of them, and
+// a tab left open on a finished battle polled once a second for five
+// hours. Loki recorded ~1,760 requests per 30 minutes, unbroken, and
+// that traffic is what pushed this service past its memory limit and
+// got it OOMKilled.
+//
+// Runs the real browser script so the counting is what actually ships.
+test('polling stops once the battle is gone', async () => {
+  const { battlePage } = await import('./battle.ts')
+  const page = battlePage({ id: 'abc123', trainer: 'someone' })
+
+  const open = page.match(/<script[^>]*>/)
+  assert.ok(open, 'the battle page should ship a script')
+  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+
+  const board = { innerHTML: 'loading…', className: '', scrollTop: 0 }
+  let fetches = 0
+  const pending: Array<() => void> = []
+
+  const sandbox = {
+    document: {
+      getElementById: (id: string) => (id === 'board' || id === 'log' ? board : null),
+      addEventListener: () => {},
+    },
+    location: { pathname: '/battle/abc123', reload: () => {} },
+    // Always gone.
+    fetch: async () => { fetches++; return { ok: false, status: 404, json: async () => ({}) } },
+    // Captured rather than timed, so the test drives the loop.
+    setTimeout: (fn: () => void) => { pending.push(fn); return 0 },
+    setInterval: () => 0,
+    requestAnimationFrame: () => 0,
+    console,
+  }
+
+  const run = new Function(...Object.keys(sandbox), script + '\n;return {};') as
+    (...a: unknown[]) => unknown
+  run(...Object.values(sandbox))
+
+  // Drive far more turns than the miss ceiling; it must stop on its own.
+  //
+  // A tick is yielded before each one because poll() is async: the
+  // setTimeout it schedules is queued a microtask after its fetch
+  // resolves, so draining immediately finds the queue still empty and
+  // the loop looks like it stopped when it has not started.
+  for (let i = 0; i < 50; i++) {
+    await new Promise((r) => setImmediate(r))
+    const next = pending.shift()
+    if (!next) break
+    next()
+  }
+  await new Promise((r) => setImmediate(r))
+
+  assert.ok(fetches < 20,
+    `polled ${fetches} times against a battle that is gone; the loop never stops`)
+  assert.match(board.innerHTML, /this battle is over/,
+    'the player is left on a spinner with no explanation')
+})

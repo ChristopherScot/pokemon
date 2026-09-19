@@ -407,12 +407,40 @@ async function attack() {
   poll()
 }
 
+// A battle that is gone stops the loop.
+//
+// This used to retry forever: a 404 makes res.ok false, the body was
+// skipped, and setTimeout was called anyway with no counter and no
+// ceiling. Battles live in the server's memory, so a deploy ends every
+// one of them - and a tab left open on a finished battle then polled
+// once a second for five hours. That traffic is what pushed the web
+// service past its memory limit and got it OOMKilled.
+//
+// Gone is not the same as unreachable: a dropped request or a restart
+// mid-rollout should still retry, which is why it takes several
+// consecutive misses rather than one.
+const MAX_MISSES = 5
+let misses = 0
+
 async function poll() {
   try {
     const res = await fetch('/battle/' + ID + '/state')
     if (res.ok) {
+      misses = 0
       const b = await res.json()
       if (b.version !== seen) { seen = b.version; render(b) }
+    } else if (res.status === 404) {
+      if (++misses >= MAX_MISSES) {
+        const board = document.getElementById('board')
+        if (board) {
+          board.innerHTML = '<div class="banner over">this battle is over — ' +
+            'the server restarted and battles do not survive it</div>' +
+            '<div class="pick"><div class="moves">' +
+            '<a href="/battle"><button>back to the lobby</button></a>' +
+            '</div></div>'
+        }
+        return
+      }
     }
   } catch { /* a dropped poll is not worth showing; the next one retries */ }
   setTimeout(poll, 1000)
