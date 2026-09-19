@@ -24,8 +24,19 @@ ingress:
 #   vaultPath: <name>/config      # one Vault path per service
 #   keys: [SOME_TOKEN]
 
-# Two replicas, now that state is in Postgres rather than in the
-# process.
+# ONE replica, temporarily.
+#
+# The code supports two - state is in Postgres and a turn is a
+# SERIALIZABLE transaction - but the container cannot reach the
+# database yet. DATABASE_URL comes from the secret CNPG generates,
+# and the only way config.yaml could express that was a `patches:`
+# block, which replaced the whole container and stripped its image:
+# Argo refused every sync with "spec.template.spec.containers[0].
+# image: Required value" until it was removed.
+#
+# Two replicas WITHOUT the database is the split-brain the note below
+# describes, so this stays at one until homelabctl can render an env
+# var that reads a key from an existing secret.
 #
 # This waited on persistence, and the reason is worth keeping: with
 # state in a map behind a mutex, a second pod made every request a
@@ -41,40 +52,10 @@ ingress:
 # SERIALIZABLE transaction that retries when two players move at
 # once. Verified with ten concurrent writers against one battle -
 # every write lands.
-replicas: 2
+replicas: 1
 
 # The NetworkPolicy this service owns. Raw Kubernetes, because a
 # policy is about the cluster rather than about the service.
 manifests:
   - networkpolicy.yaml
   - db.yaml
-
-# DATABASE_URL, from the secret CNPG generates for the cluster above.
-#
-# A patch rather than `secrets:`, which generates an ExternalSecret
-# reading from Vault. This credential is not in Vault: CNPG mints it
-# with the cluster and rotates it there, so copying it into Vault
-# would create a second copy to go stale.
-#
-# `uri` is the key CNPG writes a full connection string to - the same
-# secret also carries host, port, user and password separately, but
-# one env var beats reassembling five.
-#
-# PORT is repeated here because a patched list REPLACES the generated
-# one rather than merging into it - maps merge, sequences do not. Left
-# out, the container starts with no PORT and serves on the wrong one.
-patches:
-  Deployment: |
-    spec:
-      template:
-        spec:
-          containers:
-            - name: pokedex
-              env:
-                - name: PORT
-                  value: "3000"
-                - name: DATABASE_URL
-                  valueFrom:
-                    secretKeyRef:
-                      name: pokedex-db-app
-                      key: uri
