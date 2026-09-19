@@ -74,6 +74,17 @@ func (m model) browseKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.joining = ""
 		m.status = "opening a battle…"
 		return m, m.startBattle()
+
+	case "g":
+		// Back to the battle in progress. Browsing the pokedex
+		// mid-battle is normal - checking what a move does, or what
+		// the opponent is weak to - and esc was a one-way door.
+		if m.lastBattle == "" {
+			m.status = "no battle to go back to"
+			return m, nil
+		}
+		m.status = "resuming " + m.lastBattle + "…"
+		return m, m.resumeBattle()
 	}
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
@@ -90,6 +101,15 @@ func (m model) lobbyKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "r":
 		return m, fetchLobby(m.bc)
+	case "g":
+		// Back into the battle you walked out of. Nothing else can get
+		// you there: the list below holds only battles still waiting.
+		if m.lastBattle == "" {
+			m.status = "no battle to go back to"
+			return m, nil
+		}
+		m.status = "resuming " + m.lastBattle + "..."
+		return m, m.resumeBattle()
 	case "up", "k":
 		if m.lobbyIdx > 0 {
 			m.lobbyIdx--
@@ -174,6 +194,22 @@ func (m model) startBattle() tea.Cmd {
 		} else {
 			b, err = bc.Join(ctx, id, team)
 		}
+		return startedMsg{battle: b, err: err}
+	}
+}
+
+// resumeBattle walks back into a battle already in progress.
+//
+// It reuses startedMsg, because "here is the battle you are now on" is
+// the same event however it was reached - opened, joined, or returned
+// to. The lobby cannot offer this: it lists only WAITING battles, and
+// the one you walked out of is active.
+func (m model) resumeBattle() tea.Cmd {
+	id, bc := m.lastBattle, m.bc
+	return func() tea.Msg {
+		ctx, cancel := shortCtx()
+		defer cancel()
+		b, err := bc.Get(ctx, id)
 		return startedMsg{battle: b, err: err}
 	}
 }

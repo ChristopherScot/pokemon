@@ -347,7 +347,7 @@ func (bs *battleState) logView(height int) string {
 
 func (bs *battleState) help(b *api.Battle) string {
 	if b.Status == api.BattleStatusFinished {
-		return dimStyle.Render("  esc back to the pokedex · q quit")
+		return dimStyle.Render("  esc back to the lobby · q quit")
 	}
 	if !bs.client.MyTurn(b) {
 		return dimStyle.Render("  waiting · esc back · q quit")

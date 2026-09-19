@@ -37,7 +37,11 @@ func (m model) lobbyView() string {
 		}
 	}
 
-	sb.WriteString("\n" + dimStyle.Render("  ↑/↓ choose · enter join · n new battle · r refresh · esc back · q quit"))
+	hint := "  ↑/↓ choose · enter join · n new battle · r refresh · esc back · q quit"
+	if m.lastBattle != "" {
+		hint = "  ↑/↓ choose · enter join · n new battle · g back to battle · r refresh · esc back · q quit"
+	}
+	sb.WriteString("\n" + dimStyle.Render(hint))
 	return sb.String()
 }
 

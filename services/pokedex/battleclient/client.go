@@ -312,13 +312,36 @@ func (c *Client) MyTurn(b *api.Battle) bool {
 //
 // Returns false while a battle is still waiting for its second trainer.
 func (c *Client) SideFor(b *api.Battle) (mine, theirs api.Side, ok bool) {
-	if len(b.Sides) < 2 {
+	mi, ti, ok := c.SideIndex(b)
+	if !ok {
 		return mine, theirs, false
 	}
-	if b.Sides[0].Trainer == c.Name {
-		return b.Sides[0], b.Sides[1], true
+	return b.Sides[mi], b.Sides[ti], true
+}
+
+// SideIndex is SideFor when the caller needs the positions rather than
+// the sides - to index a parallel array of cursors, say.
+//
+// It exists because callers were recomputing it: the TUI called SideFor
+// and then wrote `mineIdx, theirsIdx := 0, 1; if Sides[1].Trainer ==
+// name {...}` three lines later, which is the same decision made twice
+// and the kind that drifts.
+//
+// ok is false for a SPECTATOR as well as for a battle still waiting.
+// It used to be true: a name matching neither side fell through to the
+// "must be side 1" branch and got the two sides back swapped, so
+// watching someone else's battle labelled a stranger's team "you".
+func (c *Client) SideIndex(b *api.Battle) (mine, theirs int, ok bool) {
+	if len(b.Sides) < 2 {
+		return 0, 0, false
 	}
-	return b.Sides[1], b.Sides[0], true
+	switch c.Name {
+	case b.Sides[0].Trainer:
+		return 0, 1, true
+	case b.Sides[1].Trainer:
+		return 1, 0, true
+	}
+	return 0, 0, false
 }
 
 // StageLabel renders a Pokemon's stat changes as something short enough

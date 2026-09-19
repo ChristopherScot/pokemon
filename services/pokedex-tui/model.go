@@ -103,6 +103,17 @@ type model struct {
 	// joining is the battle id being joined, empty when opening a new one.
 	joining string
 
+	// lastBattle is the battle this session was most recently in, kept
+	// so leaving the screen is not a one-way trip.
+	//
+	// esc drops the battle state deliberately - it is a screenful of
+	// animation and cursors, not something to keep warm - but the ID is
+	// all that is needed to walk back in. The lobby lists only WAITING
+	// battles, so once yours goes active it is no longer there, and
+	// before this the comment on esc ("can be rejoined from the lobby")
+	// was simply untrue for the case that matters.
+	lastBattle string
+
 	// status is a transient line: an error from an action, or a hint.
 	status string
 }
@@ -263,6 +274,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, fetchLobby(m.bc)
 		}
 		bs := &battleState{client: m.bc, id: msg.battle.ID, shown: map[slot]int{}}
+		m.lastBattle = msg.battle.ID
 		bs.applyBattle(msg.battle)
 		m.battle = bs
 		m.screen = screenBattle
@@ -516,6 +528,11 @@ func (m model) browseView() string {
 	hint := "  enter pick · backspace undo · / filter · q quit"
 	if m.bc != nil {
 		hint = fmt.Sprintf("  enter pick · ctrl+r battle as %s · b lobby · / filter · q quit", m.trainer)
+		// Only offered when there is somewhere to go back TO, so the
+		// hint never advertises a key that answers "no battle".
+		if m.lastBattle != "" {
+			hint = fmt.Sprintf("  enter pick · g back to battle · ctrl+r battle as %s · b lobby · / filter · q quit", m.trainer)
+		}
 	}
 	return joined + "\n  team " + strings.Join(slots, " ") + "\n" + labelStyle.Render(hint)
 }

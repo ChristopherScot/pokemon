@@ -210,3 +210,52 @@ func TestUnauthorizedIsAStaleIdentity(t *testing.T) {
 		})
 	}
 }
+
+// A spectator is not a participant, and must not be told otherwise.
+//
+// SideFor used to check only Sides[0]: a name matching neither side
+// fell through to "then it must be side 1" and returned ok=true with
+// the sides swapped. The CLI's `watch <id>` and `battle <id>` accept
+// any battle id, so pasting a link someone shared labelled a stranger's
+// team "you" - and MyTurn was coincidentally false, so it printed
+// "waiting on X" and looked plausible.
+func TestSideForRefusesANonParticipant(t *testing.T) {
+	b := &api.Battle{Sides: []api.Side{
+		{Trainer: "ash"}, {Trainer: "misty"},
+	}}
+
+	c := &Client{Name: "brock"} // watching, in neither side
+	if _, _, ok := c.SideFor(b); ok {
+		t.Error("a spectator was reported as a participant")
+	}
+	if _, _, ok := c.SideIndex(b); ok {
+		t.Error("SideIndex reported a spectator as a participant")
+	}
+}
+
+// Both participants still resolve, in the right order.
+func TestSideForOrientsEachParticipant(t *testing.T) {
+	b := &api.Battle{Sides: []api.Side{
+		{Trainer: "ash"}, {Trainer: "misty"},
+	}}
+
+	for _, tc := range []struct{ name, mine, theirs string; mi, ti int }{
+		{"ash", "ash", "misty", 0, 1},
+		{"misty", "misty", "ash", 1, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Client{Name: tc.name}
+			mine, theirs, ok := c.SideFor(b)
+			if !ok {
+				t.Fatalf("%s is in this battle but SideFor said otherwise", tc.name)
+			}
+			if mine.Trainer != tc.mine || theirs.Trainer != tc.theirs {
+				t.Errorf("SideFor = (%s, %s), want (%s, %s)", mine.Trainer, theirs.Trainer, tc.mine, tc.theirs)
+			}
+			mi, ti, ok := c.SideIndex(b)
+			if !ok || mi != tc.mi || ti != tc.ti {
+				t.Errorf("SideIndex = (%d, %d, %v), want (%d, %d, true)", mi, ti, ok, tc.mi, tc.ti)
+			}
+		})
+	}
+}
