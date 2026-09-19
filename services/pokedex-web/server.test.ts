@@ -465,45 +465,6 @@ test('lobby requests report the UI version', async () => {
   }
 })
 
-// The server sends a raw multiplier; the web decides what it MEANS.
-// That decision used to live at two call sites with different
-// thresholds: the battle log guarded `e > 0 && e < 1`, the floating
-// damage number wrote `e < 1`. So a 0x hit - immune - was dimmed as
-// "not very effective" next to a log line that correctly refused to
-// call it weak. Same event, same screen, two answers.
-//
-// Zero is the case worth pinning, because it is the one that was wrong
-// and the one a type chart exists to express. This runs the real
-// classifier out of the shipped page rather than a copy of it.
-async function effectBandFromPage() {
-  const { lobbyPage } = await import('./battle.ts')
-  const page = lobbyPage({ me: { name: 'ash', token: 't' }, waiting: [] as never })
-  const open = page.match(/<script[^>]*>/)!
-  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
-  const run = new Function('document', 'location', script + '\n;return effectBand;')
-  return run(
-    { getElementById: () => null, addEventListener: () => {}, querySelectorAll: () => [], hidden: false },
-    { pathname: '/battle', href: '' },
-  ) as (e: number | undefined | null) => string
-}
-
-test('an immune hit is immune, not weak', async () => {
-  const effectBand = await effectBandFromPage()
-  assert.equal(effectBand(0), 'immune')
-})
-
-test('effectiveness bands match the server chart', async () => {
-  const effectBand = await effectBandFromPage()
-  assert.equal(effectBand(4), 'super', '4x is super effective')
-  assert.equal(effectBand(2), 'super', '2x is super effective')
-  assert.equal(effectBand(1), 'normal', 'neutral is unstyled')
-  assert.equal(effectBand(0.5), 'weak', 'half damage is weak')
-  assert.equal(effectBand(0.25), 'weak', 'quarter damage is weak')
-  // A status move carries no multiplier at all.
-  assert.equal(effectBand(undefined), 'normal')
-  assert.equal(effectBand(null), 'normal')
-})
-
 // Runs the battle page's real render() and returns the float elements
 // it appended for a newly-arrived log entry.
 //
@@ -596,6 +557,32 @@ test('a normal hit still floats its damage', async () => {
   })
   assert.equal(floats.length, 1)
   assert.equal(floats[0].textContent, '-7')
+})
+
+// The full band table, asserted through the same rendering path rather
+// than against the classifier in isolation.
+//
+// An earlier version of this called effectBand() directly out of the
+// LOBBY script, which was wrong twice over: it tested the layer below
+// the bug, and evaluating that script without stubbing setTimeout left
+// the lobby poll re-arming forever, so `node --test` never exited.
+test('effectiveness bands match the server chart', async () => {
+  const cases: Array<[number, string, string]> = [
+    [4, 'super', '-9 !!'],
+    [2, 'super', '-9 !!'],
+    [1, 'normal', '-9'],
+    // No suffix on a weak hit: the web marks only super-effective.
+    [0.5, 'weak', '-9'],
+    [0.25, 'weak', '-9'],
+  ]
+  for (const [eff, band, text] of cases) {
+    const floats = await floatsForEvent({
+      turnNumber: 1, text: 'hit', target: 'gastly', damage: 9, effectiveness: eff,
+    })
+    assert.equal(floats.length, 1, `${eff}x should float`)
+    assert.match(floats[0].className, new RegExp(band), `${eff}x should be ${band}`)
+    assert.equal(floats[0].textContent, text, `${eff}x text`)
+  }
 })
 
 test('a status move with no damage floats nothing', async () => {
