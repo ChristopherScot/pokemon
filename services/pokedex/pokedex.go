@@ -162,13 +162,6 @@ func loadPokedex() (*pokedex, error) {
 		p.moveByName[m.Name] = mv
 	}
 	for _, e := range raw {
-		// A missing baseHp decodes to 0, which would give every Pokemon
-		// a flat level+10 HP and make every battle identical - a failure
-		// that is invisible until someone notices the numbers never
-		// differ. Refuse to start instead.
-		if e.BaseHp <= 0 || e.BaseAttack <= 0 || e.BaseDefense <= 0 || e.BaseSpeed <= 0 {
-			return nil, fmt.Errorf("pokedex entry #%d %q is missing a base stat", e.ID, e.Name)
-		}
 		p.stats[e.ID] = baseStats{
 			hp:      e.BaseHp,
 			attack:  e.BaseAttack,
@@ -217,8 +210,40 @@ func loadPokedex() (*pokedex, error) {
 		p.ordered = append(p.ordered, mon)
 		p.byName[strings.ToLower(mon.Name)] = mon
 	}
-	sort.Slice(p.ordered, func(i, j int) bool { return p.ordered[i].ID < p.ordered[j].ID })
+	if err := p.finish(); err != nil {
+		return nil, err
+	}
 	return p, nil
+}
+
+// finish enforces the invariants every pokedex must satisfy, whatever
+// built it, and puts entries in dex order.
+//
+// It exists because there are two loaders - one from the embedded JSON,
+// one from Postgres - and the checks were written into only the first.
+// The DB path is the one production runs (server.go), so the guard that
+// mattered was the guard that was missing. Anything true of "a pokedex"
+// rather than of "a JSON file" belongs here, where neither loader can
+// return without it.
+func (p *pokedex) finish() error {
+	for _, mon := range p.ordered {
+		// A missing base stat arrives as 0, which would give every
+		// Pokemon a flat level+10 HP and make every battle identical -
+		// a failure that is invisible until someone notices the numbers
+		// never differ. Refuse to start instead.
+		st, ok := p.stats[mon.ID]
+		if !ok {
+			return fmt.Errorf("pokedex entry #%d %q has no base stats", mon.ID, mon.Name)
+		}
+		if st.hp <= 0 || st.attack <= 0 || st.defense <= 0 || st.speed <= 0 {
+			return fmt.Errorf("pokedex entry #%d %q is missing a base stat", mon.ID, mon.Name)
+		}
+	}
+	// Dex order, not insertion order: the file path sorted and the DB
+	// path leaned on the query's ORDER BY, so /pokemon would have
+	// silently changed shape if that clause were ever dropped.
+	sort.Slice(p.ordered, func(i, j int) bool { return p.ordered[i].ID < p.ordered[j].ID })
+	return nil
 }
 
 // allMoves returns the whole catalogue, in name order.

@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -296,5 +297,38 @@ func TestBannerPulsesWhenTheTurnArrives(t *testing.T) {
 	}
 	if bs.bannerPulse != 0 {
 		t.Errorf("banner still pulsing after 40 frames: %d", bs.bannerPulse)
+	}
+}
+
+// An immune hit must not read as a hit that landed.
+//
+// renderFloat had no case for effect == 0, so a 0x hit fell through to
+// the default hpDanger style and printed "-0" in damage red. logView,
+// three functions away in this same file, already gave 0 its own case -
+// so one event was styled two different ways on one screen. That is the
+// same split the web had between its log and its floating number.
+func TestAnImmuneHitDoesNotFloatAsDamage(t *testing.T) {
+	got := renderFloat(damageFloat{slot: slot{0, 0}, amount: 0, effect: 0, life: floatLife})
+	if strings.Contains(got, "-0") {
+		t.Errorf("immune float = %q, want it to say what happened rather than -0", got)
+	}
+	if !strings.Contains(got, "no effect") {
+		t.Errorf("immune float = %q, want it to name the immunity", got)
+	}
+}
+
+// The ordinary bands still read as they did.
+func TestFloatsKeepTheirEffectivenessMarkers(t *testing.T) {
+	super := renderFloat(damageFloat{slot: slot{0, 0}, amount: 30, effect: 2, life: floatLife})
+	if !strings.Contains(super, "-30") || !strings.Contains(super, "!!") {
+		t.Errorf("super float = %q, want the damage and its marker", super)
+	}
+	weak := renderFloat(damageFloat{slot: slot{0, 0}, amount: 3, effect: 0.5, life: floatLife})
+	if !strings.Contains(weak, "-3") || !strings.Contains(weak, "...") {
+		t.Errorf("weak float = %q, want the damage and its marker", weak)
+	}
+	normal := renderFloat(damageFloat{slot: slot{0, 0}, amount: 12, effect: 1, life: floatLife})
+	if !strings.Contains(normal, "-12") {
+		t.Errorf("normal float = %q, want the damage", normal)
 	}
 }

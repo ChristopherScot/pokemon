@@ -488,3 +488,50 @@ func TestTokensDoNotFollowTheSeed(t *testing.T) {
 		}
 	}
 }
+
+// A team that names a Pokemon the dex does not have is the caller's
+// error, and it is reported as 400 before any transaction opens.
+//
+// This path had no test at all. It is also the reason the response
+// switch used to be order-dependent: the team failure was carried out
+// of update()'s closure in a captured variable, so `badTeam != nil` had
+// to be checked after errNoBattle and before the conflict cases. The
+// team is now built before update() is called, so the switch tests only
+// the returned error and this case cannot be reordered into the wrong
+// answer.
+
+// The 400 path itself still works: a team naming a Pokemon the dex does
+// not have is the caller's error, and it is reported before any
+// transaction opens.
+func TestJoiningWithAnUnknownPokemonIsABadRequest(t *testing.T) {
+	s := testService(t)
+	ctx := context.Background()
+
+	host, err := s.battles.registerTrainer(ctx, "ash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	joiner, err := s.battles.registerTrainer(ctx, "gary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.CreateBattle(ctx, &api.CreateBattle{}, api.CreateBattleParams{XTrainerToken: host})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := created.(*api.Battle)
+
+	res, err := s.JoinBattle(ctx, &api.JoinBattle{Team: []string{"missingno"}}, api.JoinBattleParams{
+		ID: b.ID, XTrainerToken: joiner,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad, ok := res.(*api.JoinBattleBadRequest)
+	if !ok {
+		t.Fatalf("JoinBattle returned %T, want *api.JoinBattleBadRequest", res)
+	}
+	if !strings.Contains(bad.Message, "missingno") {
+		t.Errorf("message = %q, want it to name the pokemon that was wrong", bad.Message)
+	}
+}

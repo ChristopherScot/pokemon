@@ -244,5 +244,8 @@ func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error
 		p.byName[strings.ToLower(mon.Name)] = mon
 		p.learnable[strings.ToLower(mon.Name)] = learnMoves[e.ID]
 	}
+	if err := p.finish(); err != nil {
+		return nil, err
+	}
 	return p, nil
 }

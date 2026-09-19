@@ -86,7 +86,10 @@ function card(p: Pokemon) {
     </article>`
 }
 
-function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: TypeSummary[]; active: string }) {
+// Exported like battlePage/lobbyPage so a test can assert on the real
+// markup. The route itself 502s without a live API behind it, so
+// testing through inject() cannot see the page at all.
+export function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: TypeSummary[]; active: string }) {
   const filters = [
     `<a href="/" class="${active ? '' : 'on'}">all</a>`,
     ...types.map((t) =>
@@ -242,7 +245,12 @@ function page({ pokemon, types, active }: { pokemon: Pokemon[]; types: TypeSumma
   <header class="topbar">
     <div class="title">
       <h1>Pokedex</h1>
-      <p class="sub">${pokemon.length} pokemon &middot; served from a generated client</p>
+      <!-- The lobby had no link in. "Ready to battle" below OPENS a
+           battle, so without this you could create one and never see
+           or join anyone else's - the lobby was reachable only by
+           typing /battle. Both battle pages already link back here. -->
+      <p class="sub">${pokemon.length} pokemon &middot; served from a generated client
+        &middot; <a class="battle-link" href="/battle">Battle lobby &rarr;</a></p>
     </div>
 
     <!-- Filters narrow by type; this narrows by name, which is faster

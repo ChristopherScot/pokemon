@@ -105,28 +105,40 @@ func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api
 	if !ok {
 		return &api.JoinBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
-	// The whole join happens inside update(), including the checks.
-	// Two players racing for the last seat would both pass a check
-	// made outside it, and the second would overwrite the first.
-	var (
-		out     *api.Battle
-		badTeam error
-	)
-	err := s.battles.update(ctx, params.ID, func(b *battle) error {
+	// Built before update() and not inside it, matching CreateBattle.
+	//
+	// A team is valid or not on its own: it depends on the dex, which
+	// is immutable after startup, and on nothing about the battle. So
+	// it does not belong in a closure that update() documents as
+	// runnable more than once. Doing it inside meant carrying the
+	// failure back out through a captured variable that nothing reset,
+	// and then ordering the response switch around that variable -
+	// `badTeam != nil` had to sit after errNoBattle and before the
+	// conflict cases, an invariant nothing stated or tested.
+	//
+	// That was not a live bug: newCombatants fails only on a name the
+	// caller supplied or a wrong count, both deterministic, so every
+	// attempt failed the same way and the stale value always matched.
+	// It was one refactor away from being one, and the ordering was
+	// load-bearing for no reason. Hoisting it also stops a retry from
+	// rerolling the random fill the player was about to be given.
+	//
+	// The seat race stays inside update(), which is what it was always
+	// guarding: two players racing for the last seat would both pass a
+	// check made outside it, and the second would overwrite the first.
+	names := fillTeam(s.dex, req.Team, s.rng)
+	team, err := newCombatants(s.dex, names)
+	if err != nil {
+		return &api.JoinBattleBadRequest{Message: err.Error()}, nil
+	}
+
+	var out *api.Battle
+	err = s.battles.update(ctx, params.ID, func(b *battle) error {
 		if b.status != "waiting" {
 			return errBattleFull
 		}
 		if b.sides[0].token == params.XTrainerToken {
 			return errAlreadyIn
-		}
-		names := fillTeam(s.dex, req.Team, s.rng)
-		team, err := newCombatants(s.dex, names)
-		if err != nil {
-			// Not a conflict: the request itself is wrong, and
-			// retrying would fail the same way. Carried out rather
-			// than returned so the caller can tell 400 from 409.
-			badTeam = err
-			return err
 		}
 
 		b.sides = append(b.sides, &side{
@@ -153,8 +165,6 @@ func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api
 		return out, nil
 	case errors.Is(err, errNoBattle):
 		return &api.JoinBattleNotFound{Message: "no such battle"}, nil
-	case badTeam != nil:
-		return &api.JoinBattleBadRequest{Message: badTeam.Error()}, nil
 	case errors.Is(err, errBattleFull), errors.Is(err, errAlreadyIn):
 		return &api.JoinBattleConflict{Message: err.Error()}, nil
 	default:

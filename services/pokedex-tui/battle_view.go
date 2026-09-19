@@ -158,19 +158,26 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 // renderFloat styles a damage number by effectiveness and fades it as it
 // expires, which is what makes a big hit feel different from a chip.
 func renderFloat(f damageFloat) string {
+	// An immune hit deals 0, so "-0" in damage red reads as a hit that
+	// landed. logView already treats 0 as its own case; this switch did
+	// not, so the same event was styled two ways on one screen.
 	text := fmt.Sprintf("-%d", f.amount)
 	switch {
+	case f.effect == 0:
+		text = "no effect"
 	case f.effect >= 2:
 		text += " !!"
-	case f.effect > 0 && f.effect < 1:
+	case f.effect < 1:
 		text += " ..."
 	}
 
 	style := hpDanger
 	switch {
+	case f.effect == 0:
+		style = dimStyle
 	case f.effect >= 2:
 		style = superStyle
-	case f.effect > 0 && f.effect < 1:
+	case f.effect < 1:
 		style = weakStyle
 	}
 	// Past the halfway point the number dims, so it reads as leaving

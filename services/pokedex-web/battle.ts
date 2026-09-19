@@ -102,6 +102,22 @@ const TERMINAL = new Set([410, 501, 505])
 
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => (
   { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]))
+
+// The one place the web decides what a multiplier MEANS. The server
+// sends a raw number; every display that wants a word or a colour asks
+// here rather than re-deriving thresholds.
+//
+// Zero is immune, not weak. That distinction was wrong in one of the
+// two places this replaces: the battle log excluded 0 with an explicit
+// > 0 guard, the floating damage number did not, so the same immune hit
+// was styled two different ways on the same screen.
+const effectBand = (e) => {
+  if (e === undefined || e === null) return 'normal'
+  if (e === 0) return 'immune'
+  if (e >= 2) return 'super'
+  if (e < 1) return 'weak'
+  return 'normal'
+}
 `
 
 // The battle page. Everything below the initial render is done by the
@@ -154,6 +170,8 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
            text-shadow:0 2px 8px rgba(0,0,0,.6); }
   .float.super { color:var(--warn); text-shadow:0 0 12px rgba(251,191,36,.6); }
   .float.weak  { color:var(--dim); font-size:14px; }
+  /* Immune reads as text, not a number, so it is sized like a word. */
+  .float.immune{ color:var(--dim); font-size:13px; font-style:italic; }
   .float.normal{ color:var(--danger); }
   /* A super-effective hit shakes the card it landed on. */
   @keyframes shake {
@@ -180,6 +198,7 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
   .log div { padding:2px 0; animation:fadeIn .4s ease; }
   .log div.super { color:var(--warn); font-weight:600; }
   .log div.weak { color:var(--dim); }
+  .log div.immune { color:var(--dim); font-style:italic; }
   @keyframes fadeIn { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:none; } }
   .moves { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 0; }
   button { font:inherit; color:inherit; background:#252a38; border:1px solid #333a4d;
@@ -367,7 +386,8 @@ function render(b) {
   }
 
   html += '<div class="log" id="log">' + b.log.slice(-8).map((e) => {
-    const k = e.effectiveness >= 2 ? ' class="super"' : (e.effectiveness > 0 && e.effectiveness < 1 ? ' class="weak"' : '')
+    const band = effectBand(e.effectiveness)
+    const k = band === 'normal' ? '' : ' class="' + band + '"'
     return '<div' + k + '>' + esc(e.text) + '</div>'
   }).join('') + '</div>'
 
@@ -411,7 +431,11 @@ function render(b) {
   if (lastLogLen < 0) lastLogLen = b.log.length
   else if (b.log.length > lastLogLen) {
     for (const e of b.log.slice(lastLogLen)) {
-      if (!e.damage || !e.target) continue
+      // A plain truthiness test would skip a 0-damage hit, which is
+      // exactly the immune case that most deserves a float saying so.
+      // Only an event with no damage field at all - a status move or
+      // pure narration - has nothing to show here.
+      if (e.damage === undefined || e.damage === null || !e.target) continue
       for (const [si, s] of b.sides.entries()) {
         const i = s.team.findIndex((p) => p.name === e.target)
         if (i < 0) continue
@@ -419,13 +443,17 @@ function render(b) {
         const el = board.querySelector('[data-slot="' + key + '"]')
         if (!el) continue
         const f = document.createElement('div')
-        f.className = 'float ' + (e.effectiveness >= 2 ? 'super' : e.effectiveness < 1 ? 'weak' : 'normal')
-        f.textContent = '-' + e.damage + (e.effectiveness >= 2 ? ' !!' : '')
+        const band = effectBand(e.effectiveness)
+        f.className = 'float ' + band
+        // An immune hit deals 0, so "-0" says nothing. Name it instead.
+        f.textContent = band === 'immune'
+          ? 'no effect'
+          : '-' + e.damage + (band === 'super' ? ' !!' : '')
         el.appendChild(f)
         // Every hit shakes; a super-effective one shakes harder. Only
         // animating 2x meant most turns had no feedback at all beyond a
         // bar moving.
-        el.classList.add(e.effectiveness >= 2 ? 'hit-hard' : 'hit')
+        if (band !== 'immune') el.classList.add(band === 'super' ? 'hit-hard' : 'hit')
         setTimeout(() => el.classList.remove('hit', 'hit-hard'), 500)
         setTimeout(() => f.remove(), 2400)
       }

@@ -464,3 +464,154 @@ test('lobby requests report the UI version', async () => {
     assert.equal(r.headers['Client-Version'], UI_VERSION, `${r.url} sent no version`)
   }
 })
+
+// The server sends a raw multiplier; the web decides what it MEANS.
+// That decision used to live at two call sites with different
+// thresholds: the battle log guarded `e > 0 && e < 1`, the floating
+// damage number wrote `e < 1`. So a 0x hit - immune - was dimmed as
+// "not very effective" next to a log line that correctly refused to
+// call it weak. Same event, same screen, two answers.
+//
+// Zero is the case worth pinning, because it is the one that was wrong
+// and the one a type chart exists to express. This runs the real
+// classifier out of the shipped page rather than a copy of it.
+async function effectBandFromPage() {
+  const { lobbyPage } = await import('./battle.ts')
+  const page = lobbyPage({ me: { name: 'ash', token: 't' }, waiting: [] as never })
+  const open = page.match(/<script[^>]*>/)!
+  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+  const run = new Function('document', 'location', script + '\n;return effectBand;')
+  return run(
+    { getElementById: () => null, addEventListener: () => {}, querySelectorAll: () => [], hidden: false },
+    { pathname: '/battle', href: '' },
+  ) as (e: number | undefined | null) => string
+}
+
+test('an immune hit is immune, not weak', async () => {
+  const effectBand = await effectBandFromPage()
+  assert.equal(effectBand(0), 'immune')
+})
+
+test('effectiveness bands match the server chart', async () => {
+  const effectBand = await effectBandFromPage()
+  assert.equal(effectBand(4), 'super', '4x is super effective')
+  assert.equal(effectBand(2), 'super', '2x is super effective')
+  assert.equal(effectBand(1), 'normal', 'neutral is unstyled')
+  assert.equal(effectBand(0.5), 'weak', 'half damage is weak')
+  assert.equal(effectBand(0.25), 'weak', 'quarter damage is weak')
+  // A status move carries no multiplier at all.
+  assert.equal(effectBand(undefined), 'normal')
+  assert.equal(effectBand(null), 'normal')
+})
+
+// Runs the battle page's real render() and returns the float elements
+// it appended for a newly-arrived log entry.
+//
+// Asserting on effectBand alone would have missed the bug this covers:
+// the float loop skipped events with `!e.damage`, and an immune hit
+// deals exactly 0, so the "no effect" branch was unreachable. The
+// classifier was right and the screen still showed nothing.
+async function floatsForEvent(ev: Record<string, unknown>) {
+  const { battlePage } = await import('./battle.ts')
+  const page = battlePage({ id: 'abc123', trainer: 'ash' })
+  const open = page.match(/<script[^>]*>/)!
+  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+
+  const appended: Array<{ className: string; textContent: string }> = []
+  const slot = {
+    appendChild: (c: { className: string; textContent: string }) => appended.push(c),
+    classList: { add: () => {}, remove: () => {} },
+    querySelector: () => null,
+  }
+  const board = {
+    innerHTML: '',
+    querySelector: () => slot,
+    querySelectorAll: () => [],
+  }
+  const mkEl = () => ({ className: '', textContent: '', style: {}, appendChild: () => {}, remove: () => {} })
+
+  const mon = (name: string) => ({ name, types: ['normal'], hp: 20, maxHp: 20, moves: [] })
+  const battle = (log: unknown[]) => ({
+    version: log.length + 1,
+    status: 'active',
+    turn: 'ash',
+    sides: [
+      { trainer: 'ash', active: 0, team: [mon('pikachu')] },
+      { trainer: 'misty', active: 0, team: [mon('gastly')] },
+    ],
+    log,
+  })
+
+  let frame: (() => void) | null = null
+  const sandbox = {
+    document: {
+      // render() also writes to #log and #banner; a null here surfaces
+      // as "Cannot set properties of null" rather than a useful failure.
+      getElementById: (id: string) =>
+        id === 'board' ? board : {
+          innerHTML: '', textContent: '', className: '',
+          scrollTop: 0, scrollHeight: 0,
+          addEventListener: () => {}, querySelectorAll: () => [],
+          classList: { add: () => {}, remove: () => {} },
+        },
+      addEventListener: () => {},
+      createElement: mkEl,
+      hidden: false,
+    },
+    location: { pathname: '/battle/abc123', href: '', reload: () => {} },
+    fetch: async () => ({ ok: true, status: 200, json: async () => battle([]) }),
+    setTimeout: () => 0,
+    setInterval: () => 0,
+    requestAnimationFrame: (fn: () => void) => { frame = fn; return 0 },
+    alert: () => {},
+    console,
+  }
+
+  const run = new Function(...Object.keys(sandbox), script + '\n;return { render };')
+  const { render } = run(...Object.values(sandbox)) as { render: (b: unknown) => void }
+
+  // First render sets the log baseline; the second delivers the new
+  // event, which is the only one that animates.
+  render(battle([]))
+  appended.length = 0
+  render(battle([ev]))
+  if (frame) (frame as () => void)()
+  return appended
+}
+
+test('an immune hit shows "no effect" rather than "-0"', async () => {
+  const floats = await floatsForEvent({
+    turnNumber: 1, text: 'gastly is immune', target: 'gastly',
+    damage: 0, effectiveness: 0,
+  })
+  assert.equal(floats.length, 1, 'an immune hit should still float something')
+  assert.equal(floats[0].textContent, 'no effect')
+  assert.match(floats[0].className, /immune/)
+})
+
+test('a normal hit still floats its damage', async () => {
+  const floats = await floatsForEvent({
+    turnNumber: 1, text: 'pikachu hits', target: 'gastly',
+    damage: 7, effectiveness: 1,
+  })
+  assert.equal(floats.length, 1)
+  assert.equal(floats[0].textContent, '-7')
+})
+
+test('a status move with no damage floats nothing', async () => {
+  const floats = await floatsForEvent({
+    turnNumber: 1, text: 'pikachu used growl', target: 'gastly',
+  })
+  assert.equal(floats.length, 0, 'no damage field means nothing to float')
+})
+
+// The lobby was unreachable from the pokedex. A `.battle-link` rule was
+// defined in the CSS and never used by any element, so the only ways in
+// were knowing the URL or pressing "Ready to battle" - which opens a
+// battle rather than showing you the ones already waiting. Both battle
+// pages link back to the pokedex, so the navigation was one-directional.
+test('the pokedex links to the battle lobby', async () => {
+  const { page } = await import('./pokedex.ts')
+  const html = page({ pokemon: [], types: [], active: '' })
+  assert.match(html, /href="\/battle"/, 'the pokedex must offer a way into the lobby')
+})
