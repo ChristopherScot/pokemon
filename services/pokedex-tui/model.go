@@ -27,6 +27,7 @@ import (
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
+	"github.com/christopherscot/pokemon/services/pokedex/battletext"
 )
 
 // listWidth is how much of the window the list takes; the detail pane
@@ -67,7 +68,7 @@ func (e errMsg) Error() string { return e.err.Error() }
 // wording as the "no trainer" case a few lines into keys.go, so one
 // situation does not get two different instructions.
 func statusFor(err error) string {
-	if battleclient.IdentityAdvice(err) != "" {
+	if battletext.IdentityAdvice(err) != "" {
 		return "this trainer is no longer registered — run `pokedex-cli register <name>` again"
 	}
 	return err.Error()

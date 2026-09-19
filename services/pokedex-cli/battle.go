@@ -20,6 +20,7 @@ import (
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
+	"github.com/christopherscot/pokemon/services/pokedex/battletext"
 )
 
 // battleClient loads the stored trainer and points it at the same API
@@ -280,7 +281,7 @@ func index1(s, what string) (int, error) {
 //
 // Events with no glyph still get the indent, so the prose stays aligned.
 func printEvent(ev api.BattleEvent) {
-	if icon := battleclient.EventIcon(ev); icon != "" {
+	if icon := battletext.EventIcon(ev); icon != "" {
 		fmt.Printf(" %s %s\n", icon, ev.Text)
 		return
 	}
@@ -373,10 +374,10 @@ func printSide(label string, s api.Side) {
 		// say - a battle where nothing has been buffed prints nothing
 		// extra.
 		var notes []string
-		if st := battleclient.StageLabel(p); st != "" {
+		if st := battletext.StageLabel(p); st != "" {
 			notes = append(notes, st)
 		}
-		notes = append(notes, battleclient.Conditions(p)...)
+		notes = append(notes, battletext.Conditions(p)...)
 		if len(notes) > 0 {
 			fmt.Printf("    %s\n", strings.Join(notes, " · "))
 		}

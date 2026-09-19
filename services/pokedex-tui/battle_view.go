@@ -10,6 +10,7 @@ import (
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
+	"github.com/christopherscot/pokemon/services/pokedex/battletext"
 )
 
 var (
@@ -137,10 +138,10 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 
 	// Stat changes and conditions, after the types. Only when there is
 	// something to say, so an ordinary battle draws no extra clutter.
-	if st := battleclient.StageLabel(p); st != "" {
+	if st := battletext.StageLabel(p); st != "" {
 		line += "  " + stageStyle.Render(st)
 	}
-	for _, cond := range battleclient.Conditions(p) {
+	for _, cond := range battletext.Conditions(p) {
 		line += "  " + condStyle.Render(cond)
 	}
 
@@ -336,7 +337,7 @@ func (bs *battleState) logView(height int) string {
 		// Glyph as well as colour. Colour alone cannot say "fainted" or
 		// "that was a status move", and it is the first thing lost to a
 		// screenshot, a pipe, or a colourblind reader.
-		if icon := battleclient.EventIcon(ev); icon != "" {
+		if icon := battletext.EventIcon(ev); icon != "" {
 			sb.WriteString(" " + icon + " " + text + "\n")
 			continue
 		}
