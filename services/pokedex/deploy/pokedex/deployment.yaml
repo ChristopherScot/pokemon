@@ -7,7 +7,7 @@ metadata:
     app: pokedex
     team: me-myself-and-i
 spec:
-  replicas: 1
+  replicas: 2
   # At one replica the default rolling update takes the only pod down
   # first; surging instead keeps the service up across a deploy.
   strategy:
@@ -39,44 +39,14 @@ spec:
           type: RuntimeDefault
       containers:
         - name: pokedex
-          image: ghcr.io/christopherscot/pokemon-pokedex:latest
-          ports:
-            - containerPort: 3000
           env:
             - name: PORT
               value: "3000"
-          resources:
-            requests:
-              cpu: 10m
-              memory: 32Mi
-            limits:
-              memory: 64Mi
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: 65532
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-          readinessProbe:
-            httpGet:
-              path: /healthz
-              port: 3000
-            initialDelaySeconds: 2
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
-          livenessProbe:
-            httpGet:
-              path: /healthz
-              port: 3000
-            initialDelaySeconds: 10
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 5
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: pokedex-db-app
+                  key: uri
       volumes:
         - name: tmp
           emptyDir: {}

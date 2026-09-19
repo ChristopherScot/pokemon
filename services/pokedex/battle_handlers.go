@@ -102,39 +102,61 @@ func (s service) JoinBattle(_ context.Context, req *api.JoinBattle, params api.J
 	if !ok {
 		return &api.JoinBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
-	b, ok := s.battles.get(params.ID)
-	if !ok {
-		return &api.JoinBattleNotFound{Message: "no such battle"}, nil
-	}
-	if b.status != "waiting" {
-		return &api.JoinBattleConflict{Message: errBattleFull.Error()}, nil
-	}
-	if b.sides[0].token == params.XTrainerToken {
-		return &api.JoinBattleConflict{Message: errAlreadyIn.Error()}, nil
-	}
-	names := fillTeam(s.dex, req.Team, s.rng)
-	team, err := newCombatants(s.dex, names)
-	if err != nil {
-		return &api.JoinBattleBadRequest{Message: err.Error()}, nil
-	}
+	// The whole join happens inside update(), including the checks.
+	// Two players racing for the last seat would both pass a check
+	// made outside it, and the second would overwrite the first.
+	var (
+		out     *api.Battle
+		badTeam error
+	)
+	err := s.battles.update(params.ID, func(b *battle) error {
+		if b.status != "waiting" {
+			return errBattleFull
+		}
+		if b.sides[0].token == params.XTrainerToken {
+			return errAlreadyIn
+		}
+		names := fillTeam(s.dex, req.Team, s.rng)
+		team, err := newCombatants(s.dex, names)
+		if err != nil {
+			// Not a conflict: the request itself is wrong, and
+			// retrying would fail the same way. Carried out rather
+			// than returned so the caller can tell 400 from 409.
+			badTeam = err
+			return err
+		}
 
-	b.sides = append(b.sides, &side{
-		trainer: trainer,
-		token:   params.XTrainerToken,
-		team:    team,
+		b.sides = append(b.sides, &side{
+			trainer: trainer,
+			token:   params.XTrainerToken,
+			team:    team,
+		})
+		b.status = "active"
+		// The player who waited moves first: a small reward for
+		// opening the invitation, and it makes turn order
+		// deterministic rather than a coin flip nobody can see.
+		b.turn = 0
+		b.version++
+		b.touched = time.Now()
+		b.log = append(b.log, api.BattleEvent{
+			TurnNumber: 0,
+			Text:       fmt.Sprintf("%s joined. %s moves first!", trainer, b.sides[0].trainer),
+		})
+		out = b.toAPI()
+		return nil
 	})
-	b.status = "active"
-	// The player who waited moves first: a small reward for opening the
-	// invitation, and it makes turn order deterministic rather than a
-	// coin flip nobody can see.
-	b.turn = 0
-	b.version++
-	b.touched = time.Now()
-	b.log = append(b.log, api.BattleEvent{
-		TurnNumber: 0,
-		Text:       fmt.Sprintf("%s joined. %s moves first!", trainer, b.sides[0].trainer),
-	})
-	return b.toAPI(), nil
+	switch {
+	case err == nil:
+		return out, nil
+	case errors.Is(err, errNoBattle):
+		return &api.JoinBattleNotFound{Message: "no such battle"}, nil
+	case badTeam != nil:
+		return &api.JoinBattleBadRequest{Message: badTeam.Error()}, nil
+	case errors.Is(err, errBattleFull), errors.Is(err, errAlreadyIn):
+		return &api.JoinBattleConflict{Message: err.Error()}, nil
+	default:
+		return nil, err
+	}
 }
 
 // TakeTurn resolves one attack.
@@ -142,15 +164,23 @@ func (s service) TakeTurn(_ context.Context, req *api.TakeTurn, params api.TakeT
 	if _, ok := s.battles.trainerByToken(params.XTrainerToken); !ok {
 		return &api.TakeTurnUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
-	b, ok := s.battles.get(params.ID)
-	if !ok {
-		return &api.TakeTurnNotFound{Message: "no such battle"}, nil
-	}
-
-	err := b.takeTurn(params.XTrainerToken, req.Attacker, req.Move, req.Target, s.rng)
+	// The turn resolves inside the transaction that reads and writes
+	// the battle. Two players moving at once used to be impossible
+	// because one process held a mutex; with several replicas this is
+	// what replaces it.
+	var out *api.Battle
+	err := s.battles.update(params.ID, func(b *battle) error {
+		if err := b.takeTurn(params.XTrainerToken, req.Attacker, req.Move, req.Target, s.rng); err != nil {
+			return err
+		}
+		out = b.toAPI()
+		return nil
+	})
 	switch {
 	case err == nil:
-		return b.toAPI(), nil
+		return out, nil
+	case errors.Is(err, errNoBattle):
+		return &api.TakeTurnNotFound{Message: "no such battle"}, nil
 	case errors.Is(err, errNotYourTurn),
 		errors.Is(err, errIllegalMove),
 		errors.Is(err, errTargetFainted),

@@ -24,27 +24,57 @@ ingress:
 #   vaultPath: <name>/config      # one Vault path per service
 #   keys: [SOME_TOKEN]
 
-# replicas: 1, and it has to stay 1 until battles leave memory.
+# Two replicas, now that state is in Postgres rather than in the
+# process.
 #
-# Trainers and battles live in this process (a map behind a mutex), and
-# the Service has sessionAffinity: None - so with two pods every request
-# round-robins to whichever one happens to answer. register mints a
-# token on pod A; the next command hits pod B and is told the token is
-# unknown. open creates a battle on A; the opponent's join hits B and
-# gets "no such battle" for one the lobby just listed. Clients poll
-# every second, so the board would flicker between the real battle and
-# a 404 indefinitely.
+# This waited on persistence, and the reason is worth keeping: with
+# state in a map behind a mutex, a second pod made every request a
+# coin flip. register minted a token on pod A and the next command
+# hit pod B and was told the token was unknown; a battle opened on A
+# 404'd when its opponent joined via B. One replica loses everything
+# on a deploy - total, obvious, over in a rollout - where two would
+# have lost about half of every operation, continuously, and looked
+# like a flaky network rather than missing shared state.
 #
-# That is WORSE than the current failure, not better. One replica loses
-# everything on a deploy - total, obvious, over in a rollout. Two would
-# lose about half of every operation, continuously, and look like a
-# flaky network rather than missing shared state.
-#
-# Scaling up is a change that waits on persistence, not a change that
-# improves availability on its own.
+# What makes two safe now: trainers and battles are rows, a name is
+# claimed by a UNIQUE index rather than a mutex, and a turn is one
+# SERIALIZABLE transaction that retries when two players move at
+# once. Verified with ten concurrent writers against one battle -
+# every write lands.
+replicas: 2
 
 # The NetworkPolicy this service owns. Raw Kubernetes, because a
 # policy is about the cluster rather than about the service.
 manifests:
   - networkpolicy.yaml
   - db.yaml
+
+# DATABASE_URL, from the secret CNPG generates for the cluster above.
+#
+# A patch rather than `secrets:`, which generates an ExternalSecret
+# reading from Vault. This credential is not in Vault: CNPG mints it
+# with the cluster and rotates it there, so copying it into Vault
+# would create a second copy to go stale.
+#
+# `uri` is the key CNPG writes a full connection string to - the same
+# secret also carries host, port, user and password separately, but
+# one env var beats reassembling five.
+#
+# PORT is repeated here because a patched list REPLACES the generated
+# one rather than merging into it - maps merge, sequences do not. Left
+# out, the container starts with no PORT and serves on the wrong one.
+patches:
+  Deployment: |
+    spec:
+      template:
+        spec:
+          containers:
+            - name: pokedex
+              env:
+                - name: PORT
+                  value: "3000"
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: pokedex-db-app
+                      key: uri
