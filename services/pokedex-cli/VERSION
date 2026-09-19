@@ -1,3 +1,13 @@
-v0.0.1
+v0.1.2
+
+v0.1.2 First release. The CLI has been buildable since it was
+       scaffolded but never had its VERSION bumped, so the release
+       gate - which fires only on a change to this file - never
+       opened and no assets were ever published.
+
+       Numbered v0.1.2 rather than v0.1.0 because tags are shared
+       with the TUI, which already holds v0.1.0 and v0.1.1. Reusing
+       one would attach these assets to that release and overwrite
+       its checksums.txt, since both tools write that name.
 
 v0.0.1 Initial release
