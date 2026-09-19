@@ -11,6 +11,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
@@ -330,5 +332,53 @@ func TestFloatsKeepTheirEffectivenessMarkers(t *testing.T) {
 	normal := renderFloat(damageFloat{slot: slot{0, 0}, amount: 12, effect: 1, life: floatLife})
 	if !strings.Contains(normal, "-12") {
 		t.Errorf("normal float = %q, want the damage", normal)
+	}
+}
+
+// Pressing enter on a disabled move must not send it.
+//
+// battle_view strikes a disabled move through, but the move cursor only
+// bounds-checked against the move count - so the screen said the move
+// was unusable and enter used it anyway, producing a 409. The cursor
+// skipping fainted Pokemon is an affordance; this is the enforcement.
+func TestEnterRefusesADisabledMove(t *testing.T) {
+	bs := testBattleState(t)
+	mine := mon("pikachu", 20, 20, false)
+	mine.Moves = []api.Move{
+		{Name: "tackle", Type: "normal", Power: 40},
+		{Name: "swords-dance", Type: "normal"},
+	}
+	mine.DisabledMove = api.NewOptInt(1)
+
+	b := twoSided(1, []api.BattlePokemon{mine}, []api.BattlePokemon{mon("staryu", 20, 20, false)})
+	bs.battle = b
+	bs.pickAttacker, bs.pickMove, bs.pickTarget = 0, 1, 0
+	bs.focus = focusMove
+
+	m := model{screen: screenBattle, battle: bs, bc: bs.client}
+	got, cmd := m.battleKey(tea.KeyPressMsg{Code: '\r'})
+
+	if cmd != nil {
+		t.Error("enter sent a disabled move instead of refusing it")
+	}
+	if s := got.(model).status; s == "" {
+		t.Error("refusing silently is worse than refusing: say why")
+	} else if !strings.Contains(s, "disabled") {
+		t.Errorf("status = %q, want it to name the reason", s)
+	}
+}
+
+// An allowed move still goes through, or the guard is just a wall.
+func TestEnterStillSendsALegalMove(t *testing.T) {
+	bs := testBattleState(t)
+	b := twoSided(1,
+		[]api.BattlePokemon{mon("pikachu", 20, 20, false)},
+		[]api.BattlePokemon{mon("staryu", 20, 20, false)})
+	bs.battle = b
+	bs.pickAttacker, bs.pickMove, bs.pickTarget = 0, 0, 0
+
+	m := model{screen: screenBattle, battle: bs, bc: bs.client}
+	if _, cmd := m.battleKey(tea.KeyPressMsg{Code: '\r'}); cmd == nil {
+		t.Error("a legal move was refused")
 	}
 }

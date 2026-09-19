@@ -6,6 +6,7 @@ package main
 
 import (
 	"errors"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 	"strings"
 	"testing"
 
@@ -148,6 +149,33 @@ func TestPanesFillTheWindowWidth(t *testing.T) {
 	for i, line := range strings.Split(u.(model).View().Content, "\n") {
 		if w := lipgloss.Width(line); w > 96 {
 			t.Errorf("line %d is %d wide, window is 96", i, w)
+		}
+	}
+}
+
+// A player who never registered is not "no longer registered".
+//
+// statusFor called battletext.IdentityAdvice purely as a boolean and
+// then hardcoded the STALE-token wording for both cases, so someone who
+// had never registered was told their account had expired. The shared
+// function distinguishes them; the call site discarded that.
+func TestStatusForTellsTheTwoIdentityFailuresApart(t *testing.T) {
+	never := statusFor(battleclient.ErrNoIdentity)
+	stale := statusFor(battleclient.ErrStaleIdentity)
+
+	if never == stale {
+		t.Fatalf("both identity failures say the same thing: %q", never)
+	}
+	if strings.Contains(never, "no longer") {
+		t.Errorf("a player who never registered was told %q", never)
+	}
+	if !strings.Contains(stale, "no longer") {
+		t.Errorf("a stale token should say the server forgot them, got %q", stale)
+	}
+	// Both must still say what to do about it.
+	for _, s := range []string{never, stale} {
+		if !strings.Contains(s, "register") {
+			t.Errorf("status %q does not say how to fix it", s)
 		}
 	}
 }

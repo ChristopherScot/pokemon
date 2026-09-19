@@ -89,7 +89,10 @@ func lobbyCmd() *cobra.Command {
 // argument limits and the TAB completer cannot disagree about it - they
 // were two separate literals, and a completer that offers a fourth name
 // the parser then rejects is worse than no completer.
-const teamSize = 3
+//
+// Aliased from battleclient rather than declared: the same reasoning
+// applies one package over, where the TUI had three more copies.
+const teamSize = battleclient.TeamSize
 
 func openCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -257,8 +260,30 @@ func attackCmd() *cobra.Command {
 
 			ctx, cancel := withTimeout()
 			defer cancel()
+
+			// Check before sending. The board this CLI prints already
+			// skips fainted Pokemon and marks disabled moves, so it
+			// knows these rules - it just was not acting on them, and
+			// an illegal turn became a 409 naming nothing. CheckTurn
+			// reports the same first reason the server would, using
+			// the names the player just read.
+			//
+			// The extra Get is the cost. It buys "geodude has fainted"
+			// in place of "illegal move", and it is the same round trip
+			// the board below makes anyway.
+			turn := battleclient.Turn{Attacker: attacker, Move: move, Target: target}
+			cur, err := c.Get(ctx, args[0])
+			if err != nil {
+				return err
+			}
+			if err := c.CheckTurn(cur, turn); err != nil {
+				return err
+			}
+
 			b, err := c.Attack(ctx, args[0], attacker, move, target)
 			if err != nil {
+				// Still possible: the state moved between the check and
+				// the send. The server remains the authority.
 				return err
 			}
 			for _, ev := range lastTurn(b) {

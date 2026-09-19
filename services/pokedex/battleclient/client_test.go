@@ -203,3 +203,134 @@ func TestSideForOrientsEachParticipant(t *testing.T) {
 		})
 	}
 }
+
+// mon builds a battle Pokemon with the given moves, none disabled.
+func testMon(name string, fainted bool, moves ...string) api.BattlePokemon {
+	p := api.BattlePokemon{Name: name, Hp: 10, MaxHp: 10, Fainted: fainted}
+	if fainted {
+		p.Hp = 0
+	}
+	for _, m := range moves {
+		p.Moves = append(p.Moves, api.Move{Name: m})
+	}
+	return p
+}
+
+func activeBattleFor(mine, theirs []api.BattlePokemon, turn string) *api.Battle {
+	return &api.Battle{
+		ID:     "abc123",
+		Status: api.BattleStatusActive,
+		Turn:   api.NewOptString(turn),
+		Sides: []api.Side{
+			{Trainer: "ash", Team: mine},
+			{Trainer: "misty", Team: theirs},
+		},
+	}
+}
+
+// A legal turn is legal.
+func TestCheckTurnAllowsALegalTurn(t *testing.T) {
+	b := activeBattleFor(
+		[]api.BattlePokemon{testMon("pikachu", false, "thunderbolt")},
+		[]api.BattlePokemon{testMon("staryu", false, "bubble")},
+		"ash",
+	)
+	c := &Client{Name: "ash"}
+	if err := c.CheckTurn(b, Turn{0, 0, 0}); err != nil {
+		t.Errorf("a legal turn was refused: %v", err)
+	}
+}
+
+// Each rule, in isolation.
+func TestCheckTurnCatchesEachIllegalCase(t *testing.T) {
+	alive := func() []api.BattlePokemon {
+		return []api.BattlePokemon{testMon("pikachu", false, "thunderbolt", "quick-attack")}
+	}
+	foe := func() []api.BattlePokemon {
+		return []api.BattlePokemon{testMon("staryu", false, "bubble")}
+	}
+
+	for _, tc := range []struct {
+		name string
+		mut  func(*api.Battle)
+		turn Turn
+		want error
+	}{
+		{"battle over", func(b *api.Battle) { b.Status = api.BattleStatusFinished }, Turn{0, 0, 0}, ErrBattleOver},
+		{"not started", func(b *api.Battle) { b.Status = api.BattleStatusWaiting }, Turn{0, 0, 0}, ErrNotActive},
+		{"other player's turn", func(b *api.Battle) { b.Turn = api.NewOptString("misty") }, Turn{0, 0, 0}, ErrNotYourTurn},
+		{"no such attacker", nil, Turn{3, 0, 0}, ErrNoSuchMon},
+		{"no such target", nil, Turn{0, 0, 3}, ErrNoSuchMon},
+		{"attacker has fainted", func(b *api.Battle) { b.Sides[0].Team[0] = testMon("pikachu", true, "thunderbolt") }, Turn{0, 0, 0}, ErrFainted},
+		{"no such move", nil, Turn{0, 9, 0}, ErrNoSuchMove},
+		{"target already down", func(b *api.Battle) { b.Sides[1].Team[0] = testMon("staryu", true, "bubble") }, Turn{0, 0, 0}, ErrTargetDown},
+		{"move disabled", func(b *api.Battle) { b.Sides[0].Team[0].DisabledMove = api.NewOptInt(1) }, Turn{0, 1, 0}, ErrDisabled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := activeBattleFor(alive(), foe(), "ash")
+			if tc.mut != nil {
+				tc.mut(b)
+			}
+			c := &Client{Name: "ash"}
+			err := c.CheckTurn(b, tc.turn)
+			if !errors.Is(err, tc.want) {
+				t.Errorf("CheckTurn = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+// A spectator gets the same answer the server gives them.
+func TestCheckTurnRefusesASpectator(t *testing.T) {
+	b := activeBattleFor(
+		[]api.BattlePokemon{testMon("pikachu", false, "thunderbolt")},
+		[]api.BattlePokemon{testMon("staryu", false, "bubble")},
+		"ash",
+	)
+	c := &Client{Name: "brock"}
+	if err := c.CheckTurn(b, Turn{0, 0, 0}); !errors.Is(err, ErrNotYourTurn) {
+		t.Errorf("a spectator got %v, want ErrNotYourTurn", err)
+	}
+}
+
+// The ORDER is the point, not just the set.
+//
+// A client that reports a different FIRST reason than the server would
+// teach the player a rule that is not the rule. With several things
+// wrong at once, the earliest server check must win: here the battle is
+// over AND it is not this player's turn AND the attacker has fainted -
+// the answer is "this battle is over".
+func TestCheckTurnReportsTheSameFirstReasonAsTheServer(t *testing.T) {
+	c := &Client{Name: "ash"}
+
+	over := activeBattleFor(
+		[]api.BattlePokemon{testMon("pikachu", true, "thunderbolt")},
+		[]api.BattlePokemon{testMon("staryu", true, "bubble")},
+		"misty",
+	)
+	over.Status = api.BattleStatusFinished
+	if err := c.CheckTurn(over, Turn{9, 9, 9}); !errors.Is(err, ErrBattleOver) {
+		t.Errorf("everything wrong at once = %v, want ErrBattleOver first", err)
+	}
+
+	// Not your turn outranks a bad index, as it does on the server.
+	notYours := activeBattleFor(
+		[]api.BattlePokemon{testMon("pikachu", false, "thunderbolt")},
+		[]api.BattlePokemon{testMon("staryu", false, "bubble")},
+		"misty",
+	)
+	if err := c.CheckTurn(notYours, Turn{9, 9, 9}); !errors.Is(err, ErrNotYourTurn) {
+		t.Errorf("bad indices on someone else's turn = %v, want ErrNotYourTurn", err)
+	}
+
+	// A fainted ATTACKER outranks a bad move index, as it does on the
+	// server - attacker.fainted() is checked before the move range.
+	downed := activeBattleFor(
+		[]api.BattlePokemon{testMon("pikachu", true, "thunderbolt")},
+		[]api.BattlePokemon{testMon("staryu", false, "bubble")},
+		"ash",
+	)
+	if err := c.CheckTurn(downed, Turn{0, 9, 0}); !errors.Is(err, ErrFainted) {
+		t.Errorf("fainted attacker with a bad move = %v, want ErrFainted first", err)
+	}
+}

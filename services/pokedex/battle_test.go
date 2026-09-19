@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 func testService(t *testing.T) service {
@@ -533,5 +534,75 @@ func TestJoiningWithAnUnknownPokemonIsABadRequest(t *testing.T) {
 	}
 	if !strings.Contains(bad.Message, "missingno") {
 		t.Errorf("message = %q, want it to name the pokemon that was wrong", bad.Message)
+	}
+}
+
+// The client's CheckTurn must refuse exactly what the server refuses,
+// and for the same reason first.
+//
+// battleclient.CheckTurn exists so a client can reject an illegal turn
+// without a round trip. That is only worth having if it agrees with the
+// authority: a client that refuses a LEGAL turn breaks the game, and
+// one that reports a different first reason teaches a rule that is not
+// the rule. This drives the real takeTurn and the real CheckTurn over
+// the same scenarios and requires they agree.
+//
+// It lives here, in the server package, because this is where the
+// authority is. If someone reorders takeTurn's checks, this fails -
+// which is the point.
+func TestClientTurnCheckAgreesWithTheServer(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		turn  battleclient.Turn
+		mut   func(*battle)
+		legal bool
+	}{
+		{"a legal turn", battleclient.Turn{Attacker: 0, Move: 0, Target: 0}, nil, true},
+		{"no such attacker", battleclient.Turn{Attacker: 7, Move: 0, Target: 0}, nil, false},
+		{"no such target", battleclient.Turn{Attacker: 0, Move: 0, Target: 7}, nil, false},
+		{"no such move", battleclient.Turn{Attacker: 0, Move: 7, Target: 0}, nil, false},
+		{"attacker fainted", battleclient.Turn{Attacker: 0, Move: 0, Target: 0},
+			func(b *battle) { b.sides[0].team[0].hp = 0 }, false},
+		{"target fainted", battleclient.Turn{Attacker: 0, Move: 0, Target: 0},
+			func(b *battle) { b.sides[1].team[0].hp = 0 }, false},
+		{"move disabled", battleclient.Turn{Attacker: 0, Move: 1, Target: 0},
+			func(b *battle) { b.sides[0].team[0].disabled = 1 }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// A service per case: activeBattle registers fixed trainer
+			// names, so a shared one collides on the second subtest.
+			s := testService(t)
+			b, tokenA, _ := activeBattle(t, s)
+			if tc.mut != nil {
+				tc.mut(b)
+			}
+
+			// Snapshot BEFORE the server runs: a successful takeTurn
+			// flips b.turn to the opponent, so asking the client
+			// afterwards asks about a different battle.
+			before := b.toAPI()
+			c := &battleclient.Client{Name: b.sides[0].trainer}
+			clientErr := c.CheckTurn(before, tc.turn)
+
+			// What the authority says, from the real engine.
+			serverErr := b.takeTurn(tokenA, tc.turn.Attacker, tc.turn.Move, tc.turn.Target, s.rng)
+
+			if tc.legal {
+				if serverErr != nil {
+					t.Fatalf("the scenario is wrong: the server refused it with %v", serverErr)
+				}
+				if clientErr != nil {
+					t.Errorf("the client refused a turn the server allowed: %v", clientErr)
+				}
+				return
+			}
+
+			if serverErr == nil {
+				t.Fatalf("the scenario is wrong: the server allowed it")
+			}
+			if clientErr == nil {
+				t.Errorf("the client allowed a turn the server refused with %q", serverErr)
+			}
+		})
 	}
 }

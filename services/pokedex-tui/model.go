@@ -67,8 +67,14 @@ func (e errMsg) Error() string { return e.err.Error() }
 // wording as the "no trainer" case a few lines into keys.go, so one
 // situation does not get two different instructions.
 func statusFor(err error) string {
-	if battletext.IdentityAdvice(err) != "" {
-		return "this trainer is no longer registered — run `pokedex-cli register <name>` again"
+	// Use the advice, do not just test it. This called IdentityAdvice
+	// as a boolean and then hardcoded the STALE wording for both cases
+	// - so a player who had never registered was told they were "no
+	// longer registered", about an account they never had. The shared
+	// function already tells the two apart; the call site was throwing
+	// that away.
+	if advice := battletext.IdentityAdvice(err); advice != "" {
+		return advice + " — run `pokedex-cli register <name>`"
 	}
 	return err.Error()
 }

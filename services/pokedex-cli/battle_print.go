@@ -129,7 +129,11 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 				fmt.Printf("      %d %-16s %-9s %s%s\n", j+1, mv.Name, mv.Type, power, note)
 			}
 		}
-		fmt.Printf("\nyour move: pokedex-cli attack %s <your 1-3> <move 1-6> <their 1-3>\n", b.ID)
+		// Ranges from the board above, not from constants: "<move 1-6>"
+		// was advertised against every team regardless of how many
+		// moves a Pokemon actually has.
+		fmt.Printf("\nyour move: pokedex-cli attack %s <your 1-%d> <move 1-%d> <their 1-%d>\n",
+			b.ID, len(mine.Team), len(mine.Team[0].Moves), len(theirs.Team))
 	default:
 		fmt.Printf("\nwaiting on %s. `watch %s` to block until it is your turn.\n", b.Turn.Value, b.ID)
 	}

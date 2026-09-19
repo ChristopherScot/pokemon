@@ -360,3 +360,94 @@ func MoveUsable(p api.BattlePokemon, moveIdx int) bool {
 	i, ok := p.DisabledMove.Get()
 	return !ok || i != moveIdx
 }
+
+// The reasons a turn cannot be played. They mirror the server's checks
+// in services/pokedex/battle.go takeTurn, which is the authority; these
+// exist so a client can refuse a turn locally instead of learning about
+// it from a 409 that names nothing.
+//
+// Sentinels rather than a (bool, string): a caller that wants to branch
+// uses errors.Is, one that wants to show the player something returns
+// the error, and one that only wants a yes/no compares against nil. A
+// string that is empty on success is the same in-band trap in a
+// different costume.
+var (
+	ErrBattleOver  = errors.New("this battle is over")
+	ErrNotActive   = errors.New("this battle has not started")
+	ErrNotYourTurn = errors.New("not your turn")
+	ErrNoSuchMon   = errors.New("no such pokemon")
+	ErrNoSuchMove  = errors.New("no such move")
+	ErrFainted     = errors.New("that pokemon has fainted")
+	ErrTargetDown  = errors.New("that target has already fainted")
+	ErrDisabled    = errors.New("that move is disabled this turn")
+)
+
+// TeamSize is how many Pokemon a side holds.
+//
+// Shared because it is a rule of the game, not a client's taste: the
+// server enforces it, the CLI limits its arguments by it, the TUI
+// auto-starts a battle when the picker reaches it. It was a named
+// constant in the CLI - with a comment about keeping two literals from
+// disagreeing - and three bare 3s in the TUI, which is the same problem
+// that comment describes, one package over.
+const TeamSize = 3
+
+// Turn is one proposed attack: 0-based indices, matching what Attack
+// sends and what the API expects. A CLI that shows 1-based positions
+// converts at its own edge.
+type Turn struct {
+	Attacker int
+	Move     int
+	Target   int
+}
+
+// CheckTurn reports why t cannot be played now, or nil if it can.
+//
+// The check ORDER matters and is not arbitrary: it is the same order as
+// the server's takeTurn. A client that reports a different first reason
+// than the server would teach the player a rule that is not the rule -
+// "your pokemon has fainted" when the server would have said "not your
+// turn" is worse than saying nothing, because it is confidently wrong.
+//
+// This does not make the server's checks redundant. A client's view is
+// up to PollInterval stale and two players race, so a locally-legal
+// turn can still be rejected. Callers must keep handling that error.
+// What this removes is the common case: the turn that was knowably
+// illegal before it was ever sent.
+func (c *Client) CheckTurn(b *api.Battle, t Turn) error {
+	switch b.Status {
+	case api.BattleStatusFinished:
+		return ErrBattleOver
+	case api.BattleStatusActive:
+	default:
+		return ErrNotActive
+	}
+	mine, theirs, ok := c.SideFor(b)
+	if !ok || !c.MyTurn(b) {
+		// A spectator and the player whose turn it is not are the same
+		// answer from here, exactly as the server treats them.
+		return ErrNotYourTurn
+	}
+
+	if t.Attacker < 0 || t.Attacker >= len(mine.Team) {
+		return fmt.Errorf("%w: you have no pokemon %d", ErrNoSuchMon, t.Attacker+1)
+	}
+	if t.Target < 0 || t.Target >= len(theirs.Team) {
+		return fmt.Errorf("%w: they have no pokemon %d", ErrNoSuchMon, t.Target+1)
+	}
+
+	attacker := mine.Team[t.Attacker]
+	if attacker.Fainted {
+		return fmt.Errorf("%w: %s", ErrFainted, attacker.Name)
+	}
+	if t.Move < 0 || t.Move >= len(attacker.Moves) {
+		return fmt.Errorf("%w: %s has no move %d", ErrNoSuchMove, attacker.Name, t.Move+1)
+	}
+	if target := theirs.Team[t.Target]; target.Fainted {
+		return fmt.Errorf("%w: %s", ErrTargetDown, target.Name)
+	}
+	if !MoveUsable(attacker, t.Move) {
+		return fmt.Errorf("%w: %s", ErrDisabled, attacker.Moves[t.Move].Name)
+	}
+	return nil
+}

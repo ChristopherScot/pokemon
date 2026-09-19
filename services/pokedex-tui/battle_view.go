@@ -215,10 +215,14 @@ func (bs *battleState) view(width, height int) string {
 		return sb.String()
 	}
 
-	mineIdx, theirsIdx := 0, 1
-	if b.Sides[1].Trainer == bs.client.Name {
-		mineIdx, theirsIdx = 1, 0
-	}
+	// SideIndex rather than recomputing: this was a verbatim copy of
+	// the code SideIndex was extracted to replace, still sitting four
+	// lines below a SideFor call. It also predated SideIndex's
+	// spectator fix - a name matching neither side fell through to
+	// mineIdx=0 - which was unreachable here only because SideFor
+	// returned above. Safe by construction now rather than by luck of
+	// ordering; the ok is discarded because SideFor already gated it.
+	mineIdx, theirsIdx, _ := bs.client.SideIndex(b)
 
 	sb.WriteString("  " + bs.banner(b) + "\n\n")
 

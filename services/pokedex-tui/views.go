@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 var (
@@ -61,7 +63,7 @@ func (m model) teamView() string {
 	// as "incomplete, keep going" rather than "this will be random".
 	// The web picker uses the same die for the same reason.
 	picked := "  "
-	for i := 0; i < 3; i++ {
+	for i := 0; i < battleclient.TeamSize; i++ {
 		if i < len(m.team) {
 			picked += selStyle.Render(fmt.Sprintf("%d. %-14s", i+1, m.team[i]))
 			continue

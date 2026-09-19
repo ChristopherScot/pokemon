@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 // shortCtx bounds a request. Battle actions are interactive: one that
@@ -40,7 +41,7 @@ func (m model) browseKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		if len(m.team) < 3 {
+		if len(m.team) < battleclient.TeamSize {
 			m.team = append(m.team, it.p.Name)
 		} else {
 			m.status = "three is a full team — press enter on one to drop it"
@@ -155,10 +156,10 @@ func (m model) teamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "enter", "\r":
-		if it, ok := m.list.SelectedItem().(item); ok && len(m.team) < 3 {
+		if it, ok := m.list.SelectedItem().(item); ok && len(m.team) < battleclient.TeamSize {
 			m.team = append(m.team, it.p.Name)
 		}
-		if len(m.team) == 3 {
+		if len(m.team) == battleclient.TeamSize {
 			return m, m.startBattle()
 		}
 		return m, nil
@@ -233,6 +234,20 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			bs.pickMove++
 		}
 	case "enter", "\r":
+		// The cursor skips fainted Pokemon, but nothing stopped it
+		// landing on a DISABLED move: battle_view struck the label
+		// through and enter sent it anyway, so the screen said the move
+		// was unusable and then used it. CheckTurn is the same rule the
+		// label is drawn from, applied at the point of action.
+		turn := battleclient.Turn{
+			Attacker: bs.pickAttacker,
+			Move:     bs.pickMove,
+			Target:   bs.pickTarget,
+		}
+		if err := m.bc.CheckTurn(bs.battle, turn); err != nil {
+			m.status = err.Error()
+			return m, nil
+		}
 		return m, m.attack()
 	}
 	return m, nil
