@@ -248,6 +248,7 @@ func (p *pgStore) attemptUpdate(ctx context.Context, id string, fn func(*battle)
 		return err
 	}
 
+	sidesBefore := len(b.sides)
 	if err := fn(b); err != nil {
 		return err
 	}
@@ -267,14 +268,30 @@ func (p *pgStore) attemptUpdate(ctx context.Context, id string, fn func(*battle)
 		return fmt.Errorf("writing battle %s: %w", id, err)
 	}
 
-	// Sides can change: joining a waiting battle adds one.
-	for i, s := range b.sides {
-		if err := q.AddBattleSide(ctx, dbgen.AddBattleSideParams{
-			BattleID:     b.id,
-			Idx:          int32(i),
-			TrainerToken: s.token,
+	// Sides change only on a join, so this runs then and not on every
+	// turn. It was re-upserting every side on every update - write
+	// amplification for a table whose only query, ActiveBattleForTrainer,
+	// has no callers yet. Kept correct rather than deleted because the
+	// reconnect endpoint it exists for is worth having, and a table
+	// that is wrong when that lands is worse than one that is absent.
+	if len(b.sides) != sidesBefore {
+		for i, s := range b.sides {
+			if err := q.AddBattleSide(ctx, dbgen.AddBattleSideParams{
+				BattleID:     b.id,
+				Idx:          int32(i),
+				TrainerToken: s.token,
+			}); err != nil {
+				return fmt.Errorf("writing side %d of %s: %w", i, id, err)
+			}
+		}
+		// Nothing shrinks a side list today, but an upsert-only loop
+		// would leave a stale row if one ever did - and a stale row
+		// here means reconnecting into a battle you are not in.
+		if err := q.DeleteBattleSidesFrom(ctx, dbgen.DeleteBattleSidesFromParams{
+			BattleID: b.id,
+			Idx:      int32(len(b.sides)),
 		}); err != nil {
-			return fmt.Errorf("writing side %d of %s: %w", i, id, err)
+			return fmt.Errorf("pruning sides of %s: %w", id, err)
 		}
 	}
 

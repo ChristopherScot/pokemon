@@ -21,6 +21,10 @@ type Querier interface {
 	BattleSidesFor(ctx context.Context, battleID string) ([]BattleSide, error)
 	CountPokemon(ctx context.Context) (int64, error)
 	CreateBattle(ctx context.Context, arg CreateBattleParams) error
+	// Prune sides at or beyond idx, so a side list that shrinks does not
+	// leave a stale row behind. Nothing shrinks one today; this keeps the
+	// table honest if anything ever does.
+	DeleteBattleSidesFrom(ctx context.Context, arg DeleteBattleSidesFromParams) error
 	// Clears a Pokemon's links before re-seeding them, so a move dropped
 	// upstream does not linger. Scoped to one Pokemon rather than
 	// truncating the table, which would break the foreign key for every
@@ -46,6 +50,15 @@ type Querier interface {
 	// per Pokemon: it is one query instead of a hundred.
 	ListPokemonMoves(ctx context.Context) ([]PokemonMove, error)
 	// The lobby: open invitations, newest first.
+	//
+	// LIMIT, because every row here has its state JSONB deserialised in
+	// Go. Unbounded, a busy lobby decodes the whole table on every
+	// request, and the decoding is the cliff rather than the scan.
+	//
+	// The LIMIT also changes the plan: without one the planner picks a
+	// bitmap scan and sorts afterwards, so the DESC in the index buys
+	// nothing. Measured at 200k battles - 17ms with a sort, 0.1ms with
+	// this plus the partial index from migration 003.
 	ListWaitingBattles(ctx context.Context) ([]Battle, error)
 	// Game state: trainers and battles.
 	//
