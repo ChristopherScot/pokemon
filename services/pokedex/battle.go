@@ -32,6 +32,13 @@ const (
 	// A trainer in a battle is never swept, whatever this says.
 	trainerTTL = 7 * 24 * time.Hour
 
+	// maxOpenBattlesPerTrainer caps how many battles one trainer can
+	// have waiting at once. One, because a trainer can only play the
+	// battle they are in - a second open battle is useless to its own
+	// owner and, since the lobby is the newest 100, crowds everyone
+	// else out of the only discovery mechanism the clients have.
+	maxOpenBattlesPerTrainer = 1
+
 	damageSpread = 0.15
 
 	damageScale = 0.85
@@ -257,6 +264,9 @@ type store interface {
 	// like an auth bug to whoever debugs it.
 	trainerByToken(ctx context.Context, token string) (string, error)
 	registerTrainer(ctx context.Context, name string) (string, error)
+	// openBattlesFor counts the waiting battles a trainer already has,
+	// so one trainer cannot fill the lobby.
+	openBattlesFor(ctx context.Context, token string) (int, error)
 
 	update(ctx context.Context, id string, fn func(*battle) error) error
 }
@@ -387,6 +397,21 @@ func (m *memStore) waiting(_ context.Context) ([]api.WaitingBattle, error) {
 	})
 	// Cannot fail: the error exists for the Postgres implementation.
 	return out, nil
+}
+
+func (m *memStore) openBattlesFor(_ context.Context, token string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sweepLocked()
+
+	n := 0
+	for _, b := range m.battles {
+		if b.status == api.BattleStatusWaiting && len(b.sides) > 0 && b.sides[0].token == token {
+			n++
+		}
+	}
+	// Cannot fail: the error exists for the Postgres implementation.
+	return n, nil
 }
 
 func (b *battle) toWaiting() api.WaitingBattle {

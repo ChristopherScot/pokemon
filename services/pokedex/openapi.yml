@@ -341,6 +341,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '409':
+          description: >-
+            This trainer already has a battle waiting for an opponent.
+            One at a time: a trainer can only play the battle they are
+            in, and without the limit one client can fill the lobby and
+            keep it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error.
           content:

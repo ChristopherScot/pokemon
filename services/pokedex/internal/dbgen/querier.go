@@ -19,6 +19,16 @@ type Querier interface {
 	ActiveBattleForTrainer(ctx context.Context, trainerToken string) (Battle, error)
 	AddBattleSide(ctx context.Context, arg AddBattleSideParams) error
 	BattleSidesFor(ctx context.Context, battleID string) ([]BattleSide, error)
+	// How many battles this trainer already has waiting for an opponent.
+	//
+	// Guards the lobby: without a cap one trainer can open hundreds in a
+	// second, and because ListWaitingBattles is ORDER BY created_at DESC
+	// LIMIT 100 they do not merely crowd the lobby, they own all of it and
+	// keep owning it. Every real player becomes invisible.
+	//
+	// Counts side 0 only, the trainer who opened it. A joiner is side 1 and
+	// the battle is no longer waiting by then.
+	CountOpenBattlesFor(ctx context.Context, trainerToken string) (int64, error)
 	CountPokemon(ctx context.Context) (int64, error)
 	CreateBattle(ctx context.Context, arg CreateBattleParams) error
 	// Prune sides at or beyond idx, so a side list that shrinks does not

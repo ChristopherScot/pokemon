@@ -44,6 +44,28 @@ func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params
 	if errors.Is(err, errNoTrainer) {
 		return &api.CreateBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
+	// One waiting battle per trainer.
+	//
+	// Nothing stopped a trainer opening hundreds - measured, 50 in 52ms
+	// from one token - and because the lobby is ORDER BY created_at
+	// DESC LIMIT 100 they do not merely crowd it, they take all of it
+	// and keep it. Every other player becomes invisible, from one
+	// unauthenticated client, on a service reachable from the internet.
+	//
+	// One is the honest limit rather than a generous cap: a trainer can
+	// only play the battle they are in, so a second open battle has no
+	// use even to its owner.
+	open, err := s.battles.openBattlesFor(ctx, params.XTrainerToken)
+	if err != nil {
+		return nil, fmt.Errorf("counting open battles: %w", err)
+	}
+	if open >= maxOpenBattlesPerTrainer {
+		return &api.CreateBattleConflict{
+			Message: "you already have a battle waiting for an opponent; " +
+				"play it or let it expire before opening another",
+		}, nil
+	}
+
 	names := fillTeam(s.dex, req.Team, s.rng)
 	team, err := newCombatants(s.dex, names)
 	if err != nil {

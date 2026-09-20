@@ -86,6 +86,28 @@ func (q *Queries) BattleSidesFor(ctx context.Context, battleID string) ([]Battle
 	return items, nil
 }
 
+const countOpenBattlesFor = `-- name: CountOpenBattlesFor :one
+SELECT count(*) FROM battles b
+JOIN battle_sides s ON s.battle_id = b.id AND s.idx = 0
+WHERE b.status = 'waiting' AND s.trainer_token = $1
+`
+
+// How many battles this trainer already has waiting for an opponent.
+//
+// Guards the lobby: without a cap one trainer can open hundreds in a
+// second, and because ListWaitingBattles is ORDER BY created_at DESC
+// LIMIT 100 they do not merely crowd the lobby, they own all of it and
+// keep owning it. Every real player becomes invisible.
+//
+// Counts side 0 only, the trainer who opened it. A joiner is side 1 and
+// the battle is no longer waiting by then.
+func (q *Queries) CountOpenBattlesFor(ctx context.Context, trainerToken string) (int64, error) {
+	row := q.db.QueryRow(ctx, countOpenBattlesFor, trainerToken)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createBattle = `-- name: CreateBattle :exec
 INSERT INTO battles (
     id, status, version, turn, turn_number, winner, state

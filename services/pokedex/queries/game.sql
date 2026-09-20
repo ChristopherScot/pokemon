@@ -136,3 +136,16 @@ LIMIT 1;
 -- leave a stale row behind. Nothing shrinks one today; this keeps the
 -- table honest if anything ever does.
 DELETE FROM battle_sides WHERE battle_id = $1 AND idx >= $2;
+-- name: CountOpenBattlesFor :one
+-- How many battles this trainer already has waiting for an opponent.
+--
+-- Guards the lobby: without a cap one trainer can open hundreds in a
+-- second, and because ListWaitingBattles is ORDER BY created_at DESC
+-- LIMIT 100 they do not merely crowd the lobby, they own all of it and
+-- keep owning it. Every real player becomes invisible.
+--
+-- Counts side 0 only, the trainer who opened it. A joiner is side 1 and
+-- the battle is no longer waiting by then.
+SELECT count(*) FROM battles b
+JOIN battle_sides s ON s.battle_id = b.id AND s.idx = 0
+WHERE b.status = 'waiting' AND s.trainer_token = $1;
