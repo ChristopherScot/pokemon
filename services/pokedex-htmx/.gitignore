@@ -1,0 +1,5 @@
+node_modules/
+# The bundle is a build artifact: CI builds it into the image, and a
+# committed copy goes stale silently. pokedex-web has one checked in by
+# accident; this one does not.
+dist/

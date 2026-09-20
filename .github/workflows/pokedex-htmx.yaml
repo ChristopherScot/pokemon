@@ -1,0 +1,187 @@
+# Builds and pushes the image. Deployment happens in-cluster:
+# argocd-image-updater watches the registry and commits the new digest to
+# the homelab repo itself, so this workflow needs no homelab credential -
+# GITHUB_TOKEN is issued per run and can only push packages.
+name: build pokedex-htmx
+
+on:
+  push:
+    branches: [main]
+    paths: ['services/pokedex-htmx/**', '.github/workflows/pokedex-htmx.yaml']
+  pull_request:
+    paths: ['services/pokedex-htmx/**']
+  workflow_dispatch:
+
+# Two pushes in quick succession otherwise race to publish :latest, and
+# whichever loses is the digest image-updater may pick up.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: services/pokedex-htmx
+    steps:
+      - uses: actions/checkout@v4
+
+      # cache-dependency-path is an ACTION INPUT and resolves from the
+      # repository root, not from defaults.run.working-directory. Without
+      # it, a monorepo service fails with "Dependencies lock file is not
+      # found in /home/runner/work/<repo>/<repo>" before installing
+      # anything.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: services/pokedex-htmx/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Not --if-present: the scaffold always ships tests, so a missing
+      # script means someone removed them, and CI should say so rather
+      # than skip silently.
+      # Before the tests, because a type error is a faster and clearer
+      # failure than whatever it causes at runtime.
+      #
+      # --if-present, because not every node service consumes a generated
+      # client and one without a typecheck script should not fail here.
+      # A service that HAS one gets its API contract checked: this is
+      # what catches a client that has drifted from the spec, which
+      # otherwise shows up as a 404 in production or not at all.
+      - name: Typecheck
+        run: npm run typecheck --if-present
+
+      - name: Test
+        run: npm test
+
+      # Build the bundle AND run it.
+      #
+      # Locally this service runs `node server.ts`; the image runs a Vite
+      # bundle. Those are two paths, and a bundler that drops something -
+      # a dynamic import, a package whose ESM entry differs from its
+      # CommonJS one - produces an artifact that only fails in
+      # production. Building proves it compiles; starting it and getting
+      # a 200 proves it runs.
+      - name: Build the production bundle
+        run: npm run build
+
+      # Copied OUT of the repo first, because the image contains
+      # dist/server.js and nothing else - no node_modules, no vendor/,
+      # no source. Run from here, a file this bundle reads at runtime
+      # still resolves, CI passes, and the container 500s on its first
+      # request. That has happened once already.
+      - name: Smoke-test the bundle as the image lays it out
+        run: |
+          rm -rf /tmp/imagelike && mkdir -p /tmp/imagelike
+          cp services/pokedex-htmx/dist/server.js /tmp/imagelike/
+          ( cd /tmp/imagelike && PORT=8099 node server.js ) &
+          pid=$!
+          ok=0
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8099/healthz >/dev/null 2>&1; then
+              ok=1; break
+            fi
+            sleep 1
+          done
+          if [ "$ok" != 1 ]; then
+            echo "::error::the bundle did not answer /healthz within 20s"
+            kill $pid 2>/dev/null || true
+            exit 1
+          fi
+          # The browser scripts are served from strings compiled into
+          # the bundle. Fetching each one from HERE - an empty directory
+          # with no vendor/ and no node_modules - is what proves they are
+          # in the bundle rather than read off a disk the image lacks.
+          for asset in $(curl -fsS --max-time 5 http://127.0.0.1:8099/assets); do
+            if ! curl -fsS --max-time 5 "http://127.0.0.1:8099$asset" >/dev/null; then
+              echo "::error::$asset is not served by the bundle"
+              kill $pid 2>/dev/null || true
+              exit 1
+            fi
+            echo "the bundle serves $asset"
+          done
+          kill $pid 2>/dev/null || true
+              exit 1
+            fi
+            echo "the bundle serves $asset"
+          done
+          kill $pid 2>/dev/null || true
+
+      - name: Check deploy manifests
+        run: |
+          curl -fsSL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
+          ./homelabctl check deploy
+
+      # ghcr.io specifically: github.actor + GITHUB_TOKEN authenticate
+      # to GitHub's registry and nothing else. Pointing image.repository
+      # at ECR or Docker Hub means replacing this step with that
+      # registry's login action and a stored credential. The image NAME
+      # needs no edit here - it is read from config.yaml below - so this
+      # step is the only thing a registry change touches.
+      #
+      # Note `homelabctl init --overwrite` rewrites this file from the
+      # template, which would discard that edit.
+      # buildx, because cache-from/cache-to type=gha below need it: the
+      # default docker driver cannot export a cache and fails the build
+      # with "Cache export is not supported for the docker driver".
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Asked, not remembered.
+      #
+      # This used to be the literal image name, written once by `init`
+      # and never regenerated - while config.yaml, which names the same
+      # image, is regenerated on every `render`. Renaming the image
+      # therefore moved the manifests and left CI pushing the old name,
+      # and nothing reported it: the build was green because it pushed
+      # SOMETHING, render was clean because the manifests matched the
+      # config, and Argo said Synced because it applied what it was
+      # given. The only symptom was ImagePullBackOff - and on a first
+      # deploy there is no previous image to fall back to, so the
+      # service never started at all.
+      #
+      # Reading it here means config.yaml is the only place the image is
+      # named, so the two cannot disagree. `homelabctl image` exits
+      # non-zero if it is unset, which fails the job here rather than
+      # pushing an untagged image.
+      - id: image
+        run: echo "ref=$(./homelabctl image)" >> "$GITHUB_OUTPUT"
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.ref }}
+          # Full SHA: an abbreviated one is not a registry tag and gives
+          # ImagePullBackOff.
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+
+      - uses: docker/build-push-action@v6
+        with:
+          # The REPOSITORY root, so a `file:` dependency on a generated
+          # client in a sibling directory is inside the context. The
+          # Dockerfile changes into this service's directory itself.
+          context: .
+          file: services/pokedex-htmx/Dockerfile
+          # Stamps the commit into the image so log lines name their build.
+          build-args: |
+            VERSION=${{ github.sha }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

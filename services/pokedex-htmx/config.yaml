@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=config.schema.json
+# The single source of truth for this service. `homelabctl render`
+# regenerates every manifest from it, so change things here rather than
+# editing deploy/ by hand.
+name: pokedex-htmx
+team: me-myself-and-i
+runtime: node-service
+spec: false
+image:
+    repository: ghcr.io/christopherscot/pokemon-pokedex-htmx
+port: 3000
+resources:
+    cpuRequest: 10m
+    memoryRequest: 96Mi
+    memoryLimit: 256Mi
+hardened: true
+metrics: true
+
+# LAN only. There is deliberately no `public: true` host here: this is a
+# port of pokedex-web kept for comparison, not a second front door. The
+# name resolves to 192.168.50.225, which only the internal controller
+# serves.
+ingress:
+    hosts:
+        - pokedex-htmx.home.chrisscotmartin.com
+
+# The NetworkPolicy this service owns.
+manifests:
+  - networkpolicy.yaml
+
+# secrets:
+#   vaultPath: <name>/config      # one Vault path per service
+#   keys: [SOME_TOKEN]

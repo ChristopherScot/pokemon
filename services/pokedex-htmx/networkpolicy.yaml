@@ -1,0 +1,64 @@
+# What pokedex-htmx may talk to, and who may talk to it.
+#
+# Unlike pokedex-web this is LAN-only, so ingress-nginx-public is absent:
+# config.yaml declares one .home. host and nothing routes to this pod
+# from the internet-facing controller.
+#
+# Egress is the pokedex API, DNS, and HTTPS. The HTTPS rule is the one
+# real difference from pokedex-web: there the browser fetched the release
+# list from GitHub directly, but a hypermedia server renders that footer
+# itself, so the POD makes that call. Sprite images are still fetched by
+# the browser, not from here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pokedex-htmx
+spec:
+  podSelector:
+    matchLabels:
+      app: pokedex-htmx
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pokedex
+      ports:
+        - protocol: TCP
+          port: 3000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # api.github.com, for the downloads footer. Cluster-internal ranges
+    # are excluded so this cannot become a path to another service.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443

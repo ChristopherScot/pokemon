@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pokedex-htmx
+  namespace: pokedex-htmx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: external
+  tls:
+    - hosts: [pokedex-htmx.home.chrisscotmartin.com]
+      secretName: pokedex-htmx-tls
+  rules:
+    - host: pokedex-htmx.home.chrisscotmartin.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pokedex-htmx
+                port:
+                  number: 80

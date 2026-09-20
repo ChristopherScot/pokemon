@@ -1,0 +1,29 @@
+{
+  "name": "pokedex-htmx",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --preserve-symlinks server.ts",
+    "build": "vite build",
+    "start:dist": "node dist/server.js",
+    "dev": "concurrently -n vite,node -c cyan,green \"vite build --watch\" \"node --watch dist/server.js\"",
+    "dev:fast": "node --watch --preserve-symlinks server.ts",
+    "test": "npm run typecheck && POKEDEX_NO_RETRY=1 node --preserve-symlinks --test",
+    "typecheck": "tsc --noEmit",
+    "vendor": "node vendor/build.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0"
+  },
+  "dependencies": {
+    "@christopherscot/pokedex-client": "file:../pokedex/clients/ts",
+    "@fastify/formbody": "^9.0.0",
+    "fastify": "^5.12.5",
+    "openapi-fetch": "^0.17.0",
+    "prom-client": "^15.1.3"
+  }
+}
