@@ -20,7 +20,7 @@ Battles are `POST /battles`, `POST /battles/{id}/join` and
 `X-Trainer-Token` from `POST /trainers`. `openapi.yml` is the full
 list.
 
-## The spec is the source of truth
+### The spec is the source of truth
 
 `openapi.yml` describes this API. Everything else is generated from it:
 
@@ -40,7 +40,34 @@ That is the point — the code cannot drift from the spec, because it will
 not compile if it does. CI runs `homelabctl regen` and fails on a diff, so
 a spec change cannot merge without the code that matches it.
 
-## Layout
+### Calling this service
+
+```go
+c, err := api.NewClient(url, api.WithClient(api.NewHTTPClient(api.HTTPOptions{})))
+```
+
+The zero value is the intended default: a 5s timeout, one retry, no
+breaker. One retry rather than five, because five can mean five times the
+traffic to a dependency that is already struggling. Pass
+`api.ExponentialRetry{}` or `api.NoRetry{}`, and a `Breaker`, when a
+specific call wants something else.
+
+## Build
+
+```sh
+docker compose up -d             # postgres, on :15432
+make run                         # PORT=3000 by default
+wgo run .                        # the same, restarted on every save
+homelabctl regen                 # after editing openapi.yml
+homelabctl check deploy          # deploy manifests and spec problems
+homelabctl diff                  # what would change in the GitOps repo
+```
+
+Run it with `DATABASE_URL` set, or you get the in-memory store and the
+pokédex compiled into the binary — which is not what production does.
+The startup log says which one you got.
+
+### Layout
 
 ```
 openapi.yml          the API contract
@@ -63,75 +90,7 @@ a replacement has to keep.
 purpose: a consumer imports that package, and getting the protocol client
 without the defaults would be worse than useless.
 
-## Build
-
-```sh
-docker compose up -d             # postgres, on :15432
-make run                         # PORT=3000 by default
-wgo run .                        # the same, restarted on every save
-homelabctl regen                 # after editing openapi.yml
-homelabctl check deploy          # deploy manifests and spec problems
-homelabctl diff                  # what would change in the GitOps repo
-```
-
-Run it with `DATABASE_URL` set, or you get the in-memory store and the
-pokédex compiled into the binary — which is not what production does.
-The startup log says which one you got.
-
-## Testing
-
-```sh
-make test                        # what CI runs
-```
-
-### Why a real database matters here
-
-Battle state round-trips through postgres as JSON, so a field the
-encoder cannot see is lost there and nowhere else. That is not
-hypothetical: `baseStats` had unexported fields, every reloaded
-combatant fought with zero attack and defense, and every move in the
-game dealt exactly 1 damage. The in-memory store never serialises
-anything, so nothing caught it.
-
-The tests that need a database skip without a DSN, **and a skip reads as
-a pass**:
-
-```sh
-docker compose up -d
-POKEDEX_TEST_DSN=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable \
-  go test ./...
-```
-
-That includes `TestAWholeGameOverPostgres`, which plays a battle from
-registration to a winner. CI runs the same image with the same settings
-and fails if that test skips.
-
-The same container also closes the gap between a local run and a
-deployed one. `DATABASE_URL` switches BOTH halves together — the pokedex
-is loaded from the database instead of the embedded JSON, and battles go
-to the postgres store instead of memory — so this is what production
-does, not an approximation of it:
-
-```sh
-docker compose up -d
-DATABASE_URL=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable go run . seed
-DATABASE_URL=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable go run .
-```
-
-Without `DATABASE_URL` the server still starts — embedded pokedex, state
-in memory — which is fine for a quick look at an endpoint, and the log
-line says which one you got. It is not where you confirm a battle works.
-
-Bump `info.version` in `openapi.yml` when the API changes, then
-`homelabctl regen` — it syncs the version the clients report. CI tags the
-repo on a version change, and that tag is how both clients are released:
-
-```sh
-go get github.com/christopherscot/pokedex@v0.2.0
-npm install git+https://github.com/christopherscot/pokedex#v0.2.0
-```
-
-## Changing the API and its consumers in one commit
+### Changing the API and its consumers in one commit
 
 Every consumer in this repo builds against the client in this directory,
 not against a published one. So an API change is testable across all four
@@ -243,17 +202,58 @@ whatever the spec currently says, so the dependency range never needs
 editing - which is what previously let pokedex-web sit on `^0.6.0` while
 the spec had moved to 0.7.0.
 
-## Calling this service
+## Testing
 
-```go
-c, err := api.NewClient(url, api.WithClient(api.NewHTTPClient(api.HTTPOptions{})))
+```sh
+make test                        # what CI runs
 ```
 
-The zero value is the intended default: a 5s timeout, one retry, no
-breaker. One retry rather than five, because five can mean five times the
-traffic to a dependency that is already struggling. Pass
-`api.ExponentialRetry{}` or `api.NoRetry{}`, and a `Breaker`, when a
-specific call wants something else.
+### Why a real database matters here
+
+Battle state round-trips through postgres as JSON, so a field the
+encoder cannot see is lost there and nowhere else. That is not
+hypothetical: `baseStats` had unexported fields, every reloaded
+combatant fought with zero attack and defense, and every move in the
+game dealt exactly 1 damage. The in-memory store never serialises
+anything, so nothing caught it.
+
+The tests that need a database skip without a DSN, **and a skip reads as
+a pass**:
+
+```sh
+docker compose up -d
+POKEDEX_TEST_DSN=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable \
+  go test ./...
+```
+
+That includes `TestAWholeGameOverPostgres`, which plays a battle from
+registration to a winner. CI runs the same image with the same settings
+and fails if that test skips.
+
+The same container also closes the gap between a local run and a
+deployed one. `DATABASE_URL` switches BOTH halves together — the pokedex
+is loaded from the database instead of the embedded JSON, and battles go
+to the postgres store instead of memory — so this is what production
+does, not an approximation of it:
+
+```sh
+docker compose up -d
+DATABASE_URL=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable go run . seed
+DATABASE_URL=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable go run .
+```
+
+Without `DATABASE_URL` the server still starts — embedded pokedex, state
+in memory — which is fine for a quick look at an endpoint, and the log
+line says which one you got. It is not where you confirm a battle works.
+
+Bump `info.version` in `openapi.yml` when the API changes, then
+`homelabctl regen` — it syncs the version the clients report. CI tags the
+repo on a version change, and that tag is how both clients are released:
+
+```sh
+go get github.com/christopherscot/pokedex@v0.2.0
+npm install git+https://github.com/christopherscot/pokedex#v0.2.0
+```
 
 ## Deploy
 

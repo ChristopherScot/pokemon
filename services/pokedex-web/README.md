@@ -15,6 +15,12 @@ open or join a battle, and play it out against another trainer.
 
 Everything it shows comes from the `pokedex` API; it has no database.
 
+[`../pokedex-htmx`](../pokedex-htmx) is the same application, feature
+for feature, written as server-rendered HTML with almost no JavaScript.
+The two render near identically on purpose — a pixel diff of the battle
+board between them is zero. Reading them side by side is the point of
+having both.
+
 ## Build
 
 ```sh
@@ -31,7 +37,7 @@ API client and the server dies on the first import.
 
 While editing, `npm run dev:fast` restarts on save.
 
-## How it is put together
+### How it is put together
 
 The server renders the page shell and ships the first payload in a
 `<script type="application/json" id="boot">` island; React mounts over
@@ -68,11 +74,3 @@ argocd-image-updater rolls it out. Manifests are generated from
 homelabctl check deploy   # manifests and config
 homelabctl status         # what Argo made of it
 ```
-
-## Compare it with the htmx port
-
-[`../pokedex-htmx`](../pokedex-htmx) is the same application, feature for
-feature, written as server-rendered HTML with almost no JavaScript. The
-two render near identically on purpose — a pixel diff of the battle
-board between them is zero. Reading them side by side is the point of
-having both.
