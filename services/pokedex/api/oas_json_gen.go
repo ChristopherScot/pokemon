@@ -506,19 +506,44 @@ func (s *BattlePokemon) encodeFields(e *jx.Encoder) {
 			s.DisabledMove.Encode(e)
 		}
 	}
+	{
+		if s.CanAct.Set {
+			e.FieldStart("canAct")
+			s.CanAct.Encode(e)
+		}
+	}
+	{
+		if s.CanBeTargeted.Set {
+			e.FieldStart("canBeTargeted")
+			s.CanBeTargeted.Encode(e)
+		}
+	}
+	{
+		if s.UsableMoves != nil {
+			e.FieldStart("usableMoves")
+			e.ArrStart()
+			for _, elem := range s.UsableMoves {
+				e.Bool(elem)
+			}
+			e.ArrEnd()
+		}
+	}
 }
 
-var jsonFieldsNameOfBattlePokemon = [10]string{
-	0: "name",
-	1: "types",
-	2: "hp",
-	3: "maxHp",
-	4: "fainted",
-	5: "sprite",
-	6: "moves",
-	7: "stages",
-	8: "confused",
-	9: "disabledMove",
+var jsonFieldsNameOfBattlePokemon = [13]string{
+	0:  "name",
+	1:  "types",
+	2:  "hp",
+	3:  "maxHp",
+	4:  "fainted",
+	5:  "sprite",
+	6:  "moves",
+	7:  "stages",
+	8:  "confused",
+	9:  "disabledMove",
+	10: "canAct",
+	11: "canBeTargeted",
+	12: "usableMoves",
 }
 
 // Decode decodes BattlePokemon from json.
@@ -657,6 +682,45 @@ func (s *BattlePokemon) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"disabledMove\"")
+			}
+		case "canAct":
+			if err := func() error {
+				s.CanAct.Reset()
+				if err := s.CanAct.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"canAct\"")
+			}
+		case "canBeTargeted":
+			if err := func() error {
+				s.CanBeTargeted.Reset()
+				if err := s.CanBeTargeted.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"canBeTargeted\"")
+			}
+		case "usableMoves":
+			if err := func() error {
+				s.UsableMoves = make([]bool, 0)
+				if err := d.Arr(func(d *jx.Decoder) error {
+					var elem bool
+					v, err := d.Bool()
+					elem = bool(v)
+					if err != nil {
+						return err
+					}
+					s.UsableMoves = append(s.UsableMoves, elem)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"usableMoves\"")
 			}
 		default:
 			return d.Skip()

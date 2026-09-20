@@ -23,6 +23,7 @@ import (
 	"gioui.org/widget/material"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 func (a *ui) battleScreen(gtx layout.Context, th *material.Theme) layout.Dimensions {
@@ -263,7 +264,9 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 	case !a.sel.haveAttacker:
 		return a.pickRow(gtx, th, len(mine.Team), a.monBtns, func(i int) (string, bool) {
 			m := mine.Team[i]
-			return title(m.Name), !m.Fainted
+			// CanAct, not !Fainted: whether a button is tappable is
+			// a rule, and the server owns the rules.
+			return title(m.Name), battleclient.CanAct(m)
 		})
 	case !a.sel.haveMove:
 		mon := mine.Team[a.sel.attacker]
@@ -276,7 +279,7 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 		return withBack(func(gtx layout.Context) layout.Dimensions {
 			return a.pickRow(gtx, th, len(theirs.Team), a.tgtBtns, func(i int) (string, bool) {
 				m := theirs.Team[i]
-				return title(m.Name), !m.Fainted
+				return title(m.Name), battleclient.CanBeTargeted(m)
 			})
 		})
 	}
@@ -314,7 +317,10 @@ func (a *ui) handleBattleTaps(gtx layout.Context, b *api.Battle, mine, theirs ap
 	switch {
 	case !a.sel.haveAttacker:
 		for i := range mine.Team {
-			if i < len(a.monBtns) && a.monBtns[i].Clicked(gtx) && !mine.Team[i].Fainted {
+			// The button is already disabled for anything the
+			// server says cannot act; this is the same check on the
+			// tap itself, so a stale frame cannot slip one through.
+			if i < len(a.monBtns) && a.monBtns[i].Clicked(gtx) && battleclient.CanAct(mine.Team[i]) {
 				a.sel.attacker = i
 				a.sel.haveAttacker = true
 			}
@@ -334,7 +340,7 @@ func (a *ui) handleBattleTaps(gtx layout.Context, b *api.Battle, mine, theirs ap
 		}
 	default:
 		for i := range theirs.Team {
-			if i < len(a.tgtBtns) && a.tgtBtns[i].Clicked(gtx) && !theirs.Team[i].Fainted {
+			if i < len(a.tgtBtns) && a.tgtBtns[i].Clicked(gtx) && battleclient.CanBeTargeted(theirs.Team[i]) {
 				a.sel.target = i
 				a.send(b)
 			}

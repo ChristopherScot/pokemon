@@ -263,9 +263,34 @@ func (c *Client) SideIndex(b *api.Battle) (mine, theirs int, ok bool) {
 	return 0, 0, false
 }
 
+// MoveUsable reports whether a move can be selected.
+//
+// Reads usableMoves, which the server computes. The DisabledMove
+// fallback is for a battle fetched from a server older than that
+// field - it is the previous rule, kept only so a mixed deployment
+// degrades rather than lighting up every move.
 func MoveUsable(p api.BattlePokemon, moveIdx int) bool {
+	if u := p.UsableMoves; len(u) > 0 {
+		return moveIdx >= 0 && moveIdx < len(u) && u[moveIdx]
+	}
 	i, ok := p.DisabledMove.Get()
 	return !ok || i != moveIdx
+}
+
+// CanAct reports whether a Pokemon may be chosen as the attacker.
+func CanAct(p api.BattlePokemon) bool {
+	if v, ok := p.CanAct.Get(); ok {
+		return v
+	}
+	return !p.Fainted
+}
+
+// CanBeTargeted reports whether a Pokemon is a legal target.
+func CanBeTargeted(p api.BattlePokemon) bool {
+	if v, ok := p.CanBeTargeted.Get(); ok {
+		return v
+	}
+	return !p.Fainted
 }
 
 var (
@@ -287,6 +312,16 @@ type Turn struct {
 	Target   int
 }
 
+// CheckTurn reports whether a turn is legal, so a client can refuse a
+// tap instead of sending a request it knows will 409.
+//
+// It READS the server's answer rather than recomputing it. The
+// previous version re-implemented all nine of takeTurn's checks, in
+// the same order, with its own error values - two copies of the rules
+// that a test existed solely to hold together, and which the
+// TypeScript client could not share at all because it cannot import
+// Go. The server now publishes canAct, canBeTargeted and usableMoves
+// in the battle itself.
 func (c *Client) CheckTurn(b *api.Battle, t Turn) error {
 	switch b.Status {
 	case api.BattleStatusFinished:
@@ -300,6 +335,8 @@ func (c *Client) CheckTurn(b *api.Battle, t Turn) error {
 		return ErrNotYourTurn
 	}
 
+	// Index checks stay: they guard the slice access below, and an
+	// out-of-range index is a client bug rather than a game rule.
 	if t.Attacker < 0 || t.Attacker >= len(mine.Team) {
 		return fmt.Errorf("%w: you have no pokemon %d", ErrNoSuchMon, t.Attacker+1)
 	}
@@ -307,14 +344,18 @@ func (c *Client) CheckTurn(b *api.Battle, t Turn) error {
 		return fmt.Errorf("%w: they have no pokemon %d", ErrNoSuchMon, t.Target+1)
 	}
 
+	// Order matches takeTurn's: a fainted attacker is reported before
+	// a bad move index, so the two agree on the FIRST reason a turn
+	// is illegal and not merely on whether it is.
 	attacker := mine.Team[t.Attacker]
-	if attacker.Fainted {
+	if !CanAct(attacker) {
 		return fmt.Errorf("%w: %s", ErrFainted, attacker.Name)
 	}
 	if t.Move < 0 || t.Move >= len(attacker.Moves) {
 		return fmt.Errorf("%w: %s has no move %d", ErrNoSuchMove, attacker.Name, t.Move+1)
 	}
-	if target := theirs.Team[t.Target]; target.Fainted {
+
+	if target := theirs.Team[t.Target]; !CanBeTargeted(target) {
 		return fmt.Errorf("%w: %s", ErrTargetDown, target.Name)
 	}
 	if !MoveUsable(attacker, t.Move) {

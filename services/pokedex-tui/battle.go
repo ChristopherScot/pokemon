@@ -267,11 +267,13 @@ func clampAlive(team []api.BattlePokemon, i int) int {
 	if len(team) == 0 {
 		return 0
 	}
-	if i >= 0 && i < len(team) && !team[i].Fainted {
+	// CanAct rather than !Fainted: this keeps the cursor on something
+	// the player may actually choose, which is a rule the server owns.
+	if i >= 0 && i < len(team) && battleclient.CanAct(team[i]) {
 		return i
 	}
 	for j, p := range team {
-		if !p.Fainted {
+		if battleclient.CanAct(p) {
 			return j
 		}
 	}

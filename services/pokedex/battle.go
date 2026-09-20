@@ -415,20 +415,22 @@ func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng
 		return fmt.Errorf("%w: no target %d", errIllegalMove, targetIdx)
 	}
 
+	// The same predicates toAPI projects, so what a client is told is
+	// legal and what the server accepts cannot drift apart.
 	attacker := me.team[attackerIdx]
-	if attacker.fainted() {
+	if !attacker.canAct() {
 		return fmt.Errorf("%w: %s has fainted", errIllegalMove, attacker.mon.Name)
 	}
 	if moveIdx < 0 || moveIdx >= len(attacker.mon.Moves) {
 		return fmt.Errorf("%w: %s has no move %d", errIllegalMove, attacker.mon.Name, moveIdx)
 	}
 	target := opponent.team[targetIdx]
-	if target.fainted() {
+	if !target.canBeTargeted() {
 		return fmt.Errorf("%w: %s", errTargetFainted, target.mon.Name)
 	}
 
 	move := attacker.mon.Moves[moveIdx]
-	if moveIdx == attacker.disabled {
+	if !attacker.moveUsable(moveIdx) {
 		return fmt.Errorf("%w: %s is disabled", errIllegalMove, move.Name)
 	}
 
@@ -556,6 +558,36 @@ func title(s string) string {
 	return strings.Join(parts, " ")
 }
 
+// canAct reports whether this Pokemon could be chosen as the
+// attacker, ignoring whose turn it is.
+//
+// These three predicates are the rules takeTurn enforces, named so
+// that the projection and the enforcement cannot disagree: toAPI
+// calls them, takeTurn calls them, and there is nowhere else to put
+// a fourth opinion.
+func (c *combatant) canAct() bool { return !c.fainted() }
+
+// canBeTargeted reports whether this Pokemon is a legal target.
+func (c *combatant) canBeTargeted() bool { return !c.fainted() }
+
+// usableMoves answers, per move and in order, whether it can be
+// selected. The clients used to derive this from disabledMove.
+func (c *combatant) usableMoves() []bool {
+	out := make([]bool, len(c.mon.Moves))
+	for i := range c.mon.Moves {
+		out[i] = c.moveUsable(i)
+	}
+	return out
+}
+
+// moveUsable is the single definition of "this move can be selected".
+func (c *combatant) moveUsable(i int) bool {
+	if i < 0 || i >= len(c.mon.Moves) {
+		return false
+	}
+	return i != c.disabled
+}
+
 func (b *battle) toAPI() *api.Battle {
 	out := &api.Battle{
 		ID:      b.id,
@@ -569,8 +601,11 @@ func (b *battle) toAPI() *api.Battle {
 	if b.winner != "" {
 		out.Winner = api.NewOptString(b.winner)
 	}
-	for _, s := range b.sides {
+	for i, s := range b.sides {
 		side := api.Side{Trainer: s.trainer}
+		// Whose side may act at all. Computed once here rather than
+		// per Pokemon, and the clients no longer compute it at all.
+		sideActive := b.status == "active" && b.turn == i
 		for _, c := range s.team {
 			bp := api.BattlePokemon{
 				Name:    c.mon.Name,
@@ -580,6 +615,14 @@ func (b *battle) toAPI() *api.Battle {
 				Fainted: c.fainted(),
 				Sprite:  c.mon.Sprite,
 				Moves:   c.mon.Moves,
+
+				// The rules, answered by the only thing that gets to
+				// decide them. A client that recomputes these has a
+				// second copy that drifts - which is exactly what
+				// CheckTurn and MoveUsable were.
+				CanAct:        api.NewOptBool(sideActive && c.canAct()),
+				CanBeTargeted: api.NewOptBool(!sideActive && c.canBeTargeted()),
+				UsableMoves:   c.usableMoves(),
 			}
 			if c.stages != (stages{}) {
 				bp.Stages = api.NewOptStatStages(api.StatStages{
