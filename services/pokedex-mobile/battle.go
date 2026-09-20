@@ -133,32 +133,43 @@ func (a *ui) monLine(gtx layout.Context, th *material.Theme, p api.BattlePokemon
 		name = withAlpha(m3.onSurface, 0x61)
 	}
 	return layout.Inset{Bottom: gapS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 			rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						txt := title(p.Name)
-						if selected {
-							txt = "▸ " + txt
-						}
-						if extra := summarise(p); extra != p.Name {
-							txt += "  " + strings.TrimPrefix(extra, p.Name)
-						}
-						l := material.Label(th, unit.Sp(15), txt)
-						l.Color = name
-						l.MaxLines = 1
-						return l.Layout(gtx)
-					}),
+				return layout.Inset{Right: gapS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return a.spriteOrMonogram(gtx, th, p.Sprite,
+						strings.ToUpper(p.Name[:1]), unit.Dp(36), selected)
+				})
+			}),
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(th, unit.Sp(13), strconv.Itoa(p.Hp)+" / "+strconv.Itoa(p.MaxHp))
-						l.Color = m3.onSurfaceVariant
-						return l.Layout(gtx)
+						return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+								txt := title(p.Name)
+								if selected {
+									txt = "▸ " + txt
+								}
+								if extra := summarise(p); extra != p.Name {
+									txt += "  " + strings.TrimPrefix(extra, p.Name)
+								}
+								l := material.Label(th, unit.Sp(15), txt)
+								l.Color = name
+								l.MaxLines = 1
+								return l.Layout(gtx)
+							}),
+							rigid(func(gtx layout.Context) layout.Dimensions {
+								l := material.Label(th, unit.Sp(13),
+									strconv.Itoa(p.Hp)+" / "+strconv.Itoa(p.MaxHp))
+								l.Color = m3.onSurfaceVariant
+								return l.Layout(gtx)
+							}),
+						)
+					}),
+					rigid(layout.Spacer{Height: gapXS}.Layout),
+					rigid(func(gtx layout.Context) layout.Dimensions {
+						return hpBar(gtx, hpFraction(p))
 					}),
 				)
-			}),
-			rigid(layout.Spacer{Height: gapXS}.Layout),
-			rigid(func(gtx layout.Context) layout.Dimensions {
-				return hpBar(gtx, hpFraction(p))
 			}),
 		)
 	})

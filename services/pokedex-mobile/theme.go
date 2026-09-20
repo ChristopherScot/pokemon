@@ -126,6 +126,79 @@ func card(gtx layout.Context, bg color.NRGBA, w layout.Widget) layout.Dimensions
 	return dims
 }
 
+// typeColour is the conventional colour for a Pokemon type.
+//
+// Not an M3 role: these are the franchise's own palette, which
+// players read faster than any label. Kept as containers - a
+// saturated fill behind small text fails contrast.
+func typeColour(t string) (bg, fg color.NRGBA) {
+	switch t {
+	case "fire":
+		return rgb(0xFFDAD4), rgb(0x410002)
+	case "water":
+		return rgb(0xD3E4FF), rgb(0x001B3D)
+	case "grass":
+		return rgb(0xC8EFC0), rgb(0x00210B)
+	case "electric":
+		return rgb(0xFBE38A), rgb(0x241A00)
+	case "psychic":
+		return rgb(0xFFD9E2), rgb(0x3E001D)
+	case "ice":
+		return rgb(0xCDEDF6), rgb(0x001F26)
+	case "dragon":
+		return rgb(0xE0DDFF), rgb(0x18005D)
+	case "dark":
+		return rgb(0xDCC3B4), rgb(0x2B1709)
+	case "fairy":
+		return rgb(0xFFD8ED), rgb(0x3A0025)
+	case "fighting":
+		return rgb(0xFFDAD6), rgb(0x410002)
+	case "poison":
+		return rgb(0xF0D9FF), rgb(0x2D0050)
+	case "ground":
+		return rgb(0xF5E0B8), rgb(0x261A00)
+	case "flying":
+		return rgb(0xE2E0F9), rgb(0x1B1B2C)
+	case "bug":
+		return rgb(0xDBE8B4), rgb(0x191E00)
+	case "rock":
+		return rgb(0xE9E0CF), rgb(0x211B10)
+	case "ghost":
+		return rgb(0xE6DEFF), rgb(0x21005D)
+	case "steel":
+		return rgb(0xDEE3EB), rgb(0x171C22)
+	default: // normal
+		return m3.surfaceVariant, m3.onSurfaceVariant
+	}
+}
+
+// typeChips lays out a Pokemon's types as M3 assist chips.
+func typeChips(gtx layout.Context, th *material.Theme, types []string) layout.Dimensions {
+	var children []layout.FlexChild
+	for _, t := range types {
+		t := t
+		children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Right: gapXS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				bg, fg := typeColour(t)
+				macro := op.Record(gtx.Ops)
+				d := layout.Inset{
+					Left: gapS, Right: gapS, Top: unit.Dp(2), Bottom: unit.Dp(2),
+				}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					l := material.Label(th, unit.Sp(11), t)
+					l.Color = fg
+					l.MaxLines = 1
+					return l.Layout(gtx)
+				})
+				call := macro.Stop()
+				fillRRect(gtx, bg, cornerSmall, d.Size)
+				call.Add(gtx.Ops)
+				return d
+			})
+		}))
+	}
+	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, children...)
+}
+
 // --- M3 components --------------------------------------------------
 
 // topBar is M3's small top app bar: a surface-container strip with the
@@ -234,6 +307,12 @@ func withAlpha(c color.NRGBA, a uint8) color.NRGBA {
 // listItem is an M3 list row: a tappable container with a leading
 // slot, a two-line body and an optional trailing label.
 func listItem(gtx layout.Context, th *material.Theme, c *widget.Clickable, leading, title, supporting, trailing string, selected bool) layout.Dimensions {
+	return listItemWith(gtx, th, c, nil, leading, title, supporting, trailing, selected)
+}
+
+// listItemWith is listItem with a custom leading widget - a sprite,
+// where listItem draws a lettered circle.
+func listItemWith(gtx layout.Context, th *material.Theme, c *widget.Clickable, lead layout.Widget, leading, title, supporting, trailing string, selected bool) layout.Dimensions {
 	bg := m3.surface
 	fg := m3.onSurface
 	if selected {
@@ -257,10 +336,13 @@ func listItem(gtx layout.Context, th *material.Theme, c *widget.Clickable, leadi
 		}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				rigid(func(gtx layout.Context) layout.Dimensions {
-					if leading == "" {
+					if lead == nil && leading == "" {
 						return layout.Dimensions{}
 					}
 					return layout.Inset{Right: gapM}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						if lead != nil {
+							return lead(gtx)
+						}
 						return avatar(gtx, th, leading, selected)
 					})
 				}),
@@ -296,24 +378,80 @@ func listItem(gtx layout.Context, th *material.Theme, c *widget.Clickable, leadi
 	})
 }
 
+// listItemTyped is a list item whose supporting line is type chips
+// rather than text. Type colour is the strongest visual convention in
+// this franchise - "electric" as grey prose throws that away.
+func listItemTyped(gtx layout.Context, th *material.Theme, c *widget.Clickable, lead layout.Widget, name string, types []string, trailing string, selected bool) layout.Dimensions {
+	bg, fg := m3.surface, m3.onSurface
+	if selected {
+		bg, fg = m3.primaryContainer, m3.onPrimaryContainer
+	}
+	b := material.ButtonLayoutStyle{Background: bg, CornerRadius: cornerMedium, Button: c}
+	gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(72)) // M3 two-line list item
+	gtx.Constraints.Min.X = gtx.Constraints.Max.X
+	return b.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		semantic.Button.Add(gtx.Ops)
+		semantic.DescriptionOp(name).Add(gtx.Ops)
+		if selected {
+			semantic.SelectedOp(true).Add(gtx.Ops)
+		}
+		return layout.Inset{Left: gapM, Right: gapL, Top: gapS, Bottom: gapS}.Layout(gtx,
+			func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+					rigid(func(gtx layout.Context) layout.Dimensions {
+						return layout.Inset{Right: gapM}.Layout(gtx, lead)
+					}),
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+							rigid(func(gtx layout.Context) layout.Dimensions {
+								l := material.Label(th, unit.Sp(16), name)
+								l.Color = fg
+								l.MaxLines = 1
+								return l.Layout(gtx)
+							}),
+							rigid(layout.Spacer{Height: gapXS}.Layout),
+							rigid(func(gtx layout.Context) layout.Dimensions {
+								return typeChips(gtx, th, types)
+							}),
+						)
+					}),
+					rigid(func(gtx layout.Context) layout.Dimensions {
+						if trailing == "" {
+							return layout.Dimensions{}
+						}
+						l := material.Label(th, unit.Sp(12), trailing)
+						l.Color = m3.onSurfaceVariant
+						return l.Layout(gtx)
+					}),
+				)
+			})
+	})
+}
+
 // avatar is the circular leading slot of a list item - M3 calls it a
 // monogram, and it is what makes a list read as rows rather than as a
 // wall of text.
 func avatar(gtx layout.Context, th *material.Theme, s string, selected bool) layout.Dimensions {
-	d := gtx.Dp(unit.Dp(40))
+	return avatarSized(gtx, th, s, unit.Dp(40), selected)
+}
+
+// avatarSized is the monogram at an explicit size, which the sprite
+// fallback needs so a missing image occupies the same slot.
+func avatarSized(gtx layout.Context, th *material.Theme, s string, size unit.Dp, selected bool) layout.Dimensions {
+	d := gtx.Dp(size)
 	bg := m3.secondaryContainer
 	fg := m3.onSecondaryContainer
 	if selected {
 		bg, fg = m3.primary, m3.onPrimary
 	}
-	size := image.Pt(d, d)
-	fillRRect(gtx, bg, cornerFull, size)
-	gtx.Constraints = layout.Exact(size)
+	box := image.Pt(d, d)
+	fillRRect(gtx, bg, cornerFull, box)
+	gtx.Constraints = layout.Exact(box)
 	layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		l := material.Label(th, unit.Sp(15), s)
 		l.Color = fg
 		l.MaxLines = 1
 		return l.Layout(gtx)
 	})
-	return layout.Dimensions{Size: size}
+	return layout.Dimensions{Size: box}
 }
