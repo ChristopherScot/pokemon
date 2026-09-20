@@ -39,9 +39,11 @@ test('with ?join the button joins THAT battle, carrying the team', async () => {
   const user = userEvent.setup()
   const loc = { href: '', reload: vi.fn() }
   vi.stubGlobal('location', loc)
+  // Only the battle call. <Downloads> fetches GitHub releases on
+  // mount, and counting that too made this assert on the wrong thing.
   const calls: Array<{ url: string; body: string }> = []
   vi.stubGlobal('fetch', async (url: string, init?: { body?: string }) => {
-    calls.push({ url, body: init?.body ?? '' })
+    if (url.startsWith('/battle')) calls.push({ url, body: init?.body ?? '' })
     return { ok: true, status: 200, json: async () => ({ id: 'ignored' }) }
   })
 
@@ -65,7 +67,7 @@ test('without ?join the same button opens a new battle', async () => {
   vi.stubGlobal('location', loc)
   const calls: string[] = []
   vi.stubGlobal('fetch', async (url: string) => {
-    calls.push(url)
+    if (url.startsWith('/battle')) calls.push(url)
     return { ok: true, status: 200, json: async () => ({ id: 'new123' }) }
   })
 

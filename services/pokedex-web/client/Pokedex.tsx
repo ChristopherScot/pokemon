@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { components } from '@christopherscot/pokedex-client'
 
 import { colour } from '../types.ts'
+import { Downloads } from './Downloads.tsx'
 import { TEAM_SIZE, V } from './shared.ts'
 import { useTeam, type Pick } from './useTeam.ts'
 
@@ -110,6 +111,8 @@ export function Pokedex({
         ))}
         {shown.length === 0 && <p className="empty">nothing matches “{query}”.</p>}
       </main>
+
+      <Downloads />
     </>
   )
 }
