@@ -227,6 +227,30 @@ paths:
   # client and an ingress that negotiates upgrades; polling is what the
   # generated client already does well.
 
+  /readyz:
+    get:
+      operationId: getReadyz
+      summary: Readiness probe. Checks the database.
+      responses:
+        '200':
+          description: The service can reach its database.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: The database is unreachable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /trainers:
     post:
       operationId: registerTrainer

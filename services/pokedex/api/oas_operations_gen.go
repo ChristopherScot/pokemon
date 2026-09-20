@@ -11,6 +11,7 @@ const (
 	GetHealthzOperation          OperationName = "GetHealthz"
 	GetMoveOperation             OperationName = "GetMove"
 	GetPokemonOperation          OperationName = "GetPokemon"
+	GetReadyzOperation           OperationName = "GetReadyz"
 	GetRootOperation             OperationName = "GetRoot"
 	JoinBattleOperation          OperationName = "JoinBattle"
 	ListMovesOperation           OperationName = "ListMoves"

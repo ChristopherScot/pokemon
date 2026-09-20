@@ -410,6 +410,7 @@ func (s *Error) SetMessage(val string) {
 func (*Error) getBattleRes()        {}
 func (*Error) getMoveRes()          {}
 func (*Error) getPokemonRes()       {}
+func (*Error) getReadyzRes()        {}
 func (*Error) listPokemonMovesRes() {}
 func (*Error) registerTrainerRes()  {}
 
@@ -453,6 +454,8 @@ func (s *Health) GetStatus() HealthStatus {
 func (s *Health) SetStatus(val HealthStatus) {
 	s.Status = val
 }
+
+func (*Health) getReadyzRes() {}
 
 type HealthStatus string
 
