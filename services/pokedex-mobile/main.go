@@ -4,23 +4,19 @@ package main
 // A Gio app: one Go binary that builds for a phone and for your desktop.
 //
 // THIS WHOLE REPO IS YOURS. A mobile app has no config.yaml, so
-// `regen`, `render`, `check` and `vault` do not apply to it - `init`
-// scaffolded these files once and nothing rewrites any of them.
+// `regen`, `render`, `check` and `vault` do not apply to it.
 //
-// Two couplings survive that, and neither is checked at build time:
-//
-//   - VERSION drives releases. CI publishes only when its first line
-//     changes on main, tagging what it says and attaching the APK.
-//   - The app id (com.github.christopherscot.pokemon.services.pokedex_mobile) is what Android uses to decide whether
-//     an install is an UPGRADE or a different app. Change it and a
-//     phone treats the next build as a separate app, keeping the old
-//     one installed alongside.
+// The game protocol is battleclient's, shared with pokedex-cli and
+// pokedex-tui through a replace directive, and the wording is
+// battletext's. This file is the UI: what a thumb can reach, and when
+// to ask the server something. It reimplements no game logic.
 //
 // Run it on your desktop with `go run .` - the same code, in a window.
 // That is the whole reason to write a phone app in Gio rather than in
 // Kotlin: the edit-run loop does not involve a device.
 
 import (
+	"image/color"
 	"log"
 	"os"
 
@@ -34,6 +30,7 @@ import (
 	"gioui.org/widget/material"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 // version is set at build time via ldflags; "dev" for a local build.
@@ -42,15 +39,15 @@ var version = "dev"
 func main() {
 	go func() {
 		w := new(app.Window)
-		w.Option(app.Title("Pokedex Mobile"))
+		w.Option(app.Title("Pokedex"))
 		if err := loop(w); err != nil {
 			log.Fatal(err)
 		}
 		os.Exit(0)
 	}()
 	// app.Main blocks forever and must run on the main goroutine: on
-	// Android and iOS it IS the platform's UI thread, and the window
-	// above only starts once it is running.
+	// Android it IS the platform's UI thread, and the window above
+	// only starts once it is running.
 	app.Main()
 }
 
@@ -58,60 +55,254 @@ func loop(w *app.Window) error {
 	th := material.NewTheme()
 	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
 
-	var ops op.Ops
-	ui := newUI()
+	a := newUI(w)
+	a.start()
 
+	var ops op.Ops
 	for {
 		switch e := w.Event().(type) {
 		case app.DestroyEvent:
 			return e.Err
 		case app.FrameEvent:
+			a.drain()
 			gtx := app.NewContext(&ops, e)
-			ui.layout(gtx, th)
+			a.layout(gtx, th)
 			e.Frame(gtx.Ops)
 		}
 	}
 }
 
-// ui is the app's state. Gio is immediate mode: layout runs every
-// frame and draws whatever this holds, so there is no widget tree to
-// keep in sync - change a field and the next frame shows it.
+// app is every piece of state the UI draws from.
+//
+// Gio is immediate mode: layout runs each frame and draws whatever
+// this holds, so there is no widget tree to keep in sync. Change a
+// field and the next frame shows it.
 type ui struct {
-	count  int
-	button widget.Clickable
+	w       *app.Window
+	results chan result
 
-	// A placeholder until this talks to the API. The TYPE is the point:
-	// it is the same api.BattlePokemon the CLI and TUI render, so the
-	// display code here is shared rather than reimplemented.
-	mon api.BattlePokemon
+	api *api.Client
+	bc  *battleclient.Client
+	id  battleclient.Identity
+
+	screen screen
+	busy   bool
+	status string
+
+	// browse
+	dex       []api.Pokemon
+	dexList   widget.List
+	dexClicks []widget.Clickable
+	filter    widget.Editor
+
+	// register
+	nameInput widget.Editor
+	regBtn    widget.Clickable
+
+	// team
+	joining  string
+	team     []string
+	startBtn widget.Clickable
+	teamBack widget.Clickable
+
+	// lobby
+	lobby      *api.WaitingList
+	lobbyList  widget.List
+	lobbyBtns  []widget.Clickable
+	newBattle  widget.Clickable
+	refreshBtn widget.Clickable
+
+	// battle
+	battle   *api.Battle
+	sel      pick
+	monBtns  []widget.Clickable
+	moveBtns []widget.Clickable
+	tgtBtns  []widget.Clickable
+	leaveBtn widget.Clickable
+	logList  widget.List
+	watching bool
+	lastSeen int
+
+	// nav
+	navBtns [4]widget.Clickable
 }
 
-func newUI() *ui {
-	return &ui{mon: api.BattlePokemon{Name: "pikachu", Types: []string{"electric"}}}
+func newUI(w *app.Window) *ui {
+	a := &ui{w: w, results: make(chan result, 8)}
+	a.dexList.Axis = layout.Vertical
+	a.lobbyList.Axis = layout.Vertical
+	a.logList.Axis = layout.Vertical
+	a.filter.SingleLine = true
+	a.nameInput.SingleLine = true
+	a.monBtns = make([]widget.Clickable, 8)
+	a.moveBtns = make([]widget.Clickable, 8)
+	a.tgtBtns = make([]widget.Clickable, 8)
+	return a
 }
 
-func (u *ui) layout(gtx layout.Context, th *material.Theme) layout.Dimensions {
-	// Clicked() is drained here rather than watched elsewhere: the
-	// event is consumed by asking, and asking twice in one frame
-	// reports one click as two.
-	for u.button.Clicked(gtx) {
-		u.count++
+// start restores a saved trainer, or asks for a name.
+//
+// The identity file is the same one the CLI writes, so a phone and a
+// terminal share a trainer when they share a home directory - which on
+// Android they do not, hence the register screen.
+func (a *ui) start() {
+	id, err := battleclient.LoadIdentity()
+	if err == nil {
+		a.useIdentity(id)
+		a.screen = screenBrowse
+	} else {
+		a.screen = screenRegister
 	}
+	c, cerr := api.NewClient(defaultAPI)
+	if cerr == nil {
+		a.api = c
+		a.loadDex()
+	}
+}
 
-	return layout.UniformInset(unit.Dp(24)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical, Spacing: layout.SpaceAround}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.H4(th, "Pokedex Mobile").Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Body1(th, summarise(u.mon)).Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Button(th, &u.button, "Tap me").Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Caption(th, "version "+version).Layout(gtx)
-			}),
-		)
+func (a *ui) useIdentity(id battleclient.Identity) {
+	a.id = id
+	if bc, err := battleclient.New(id); err == nil {
+		a.bc = bc
+	}
+}
+
+func (a *ui) invalidate() { a.w.Invalidate() }
+
+// drain applies everything the background goroutines finished.
+//
+// Called once per frame before layout, so a frame never renders a
+// half-applied result.
+func (a *ui) drain() {
+	for {
+		select {
+		case r := <-a.results:
+			a.apply(r)
+		default:
+			return
+		}
+	}
+}
+
+func (a *ui) apply(r result) {
+	a.busy = false
+	if r.err != nil {
+		a.status = statusFor(r.err)
+		// A failed watch should not stop us watching, or the battle
+		// silently stops updating and looks frozen.
+		if r.kind == resBattle {
+			a.watching = false
+		}
+		return
+	}
+	a.status = ""
+	switch r.kind {
+	case resDex:
+		a.dex = r.dex
+		a.dexClicks = make([]widget.Clickable, len(r.dex))
+	case resRegistered:
+		a.useIdentity(r.ident)
+		a.screen = screenBrowse
+	case resLobby:
+		a.lobby = r.lobby
+		if r.lobby != nil {
+			a.lobbyBtns = make([]widget.Clickable, len(r.lobby.Waiting))
+		}
+	case resBattle:
+		a.battle = r.battle
+		a.watching = false
+		a.sel.reset()
+		if r.battle != nil {
+			a.screen = screenBattle
+			a.lastSeen = len(r.battle.Log)
+		}
+	}
+}
+
+// statusFor turns an error into the one line the UI has room for.
+func statusFor(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	// Keep it to something that fits a phone.
+	if len(msg) > 120 {
+		msg = msg[:117] + "..."
+	}
+	return msg
+}
+
+// --- layout ---------------------------------------------------------
+
+var (
+	accent = color.NRGBA{R: 0xD3, G: 0x2F, B: 0x2F, A: 0xFF}
+	dim    = color.NRGBA{R: 0x77, G: 0x77, B: 0x77, A: 0xFF}
+)
+
+// tapTarget is the minimum height of anything tappable.
+//
+// 48dp is Android's accessibility floor - below it people miss, and on
+// a battle screen a missed tap can cost a turn.
+const tapTarget = unit.Dp(48)
+
+func (a *ui) layout(gtx layout.Context, th *material.Theme) layout.Dimensions {
+	a.handleNav(gtx)
+
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return a.header(gtx, th)
+		}),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				switch a.screen {
+				case screenRegister:
+					return a.registerScreen(gtx, th)
+				case screenLobby:
+					return a.lobbyScreen(gtx, th)
+				case screenTeam:
+					return a.teamScreen(gtx, th)
+				case screenBattle:
+					return a.battleScreen(gtx, th)
+				default:
+					return a.browseScreen(gtx, th)
+				}
+			})
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return a.statusBar(gtx, th)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			if a.screen == screenRegister {
+				return layout.Dimensions{}
+			}
+			return a.navBar(gtx, th)
+		}),
+	)
+}
+
+func (a *ui) header(gtx layout.Context, th *material.Theme) layout.Dimensions {
+	return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		t := "Pokedex"
+		if a.id.Name != "" {
+			t = "Pokedex — " + a.id.Name
+		}
+		l := material.H6(th, t)
+		l.Color = accent
+		return l.Layout(gtx)
+	})
+}
+
+func (a *ui) statusBar(gtx layout.Context, th *material.Theme) layout.Dimensions {
+	msg := a.status
+	if msg == "" && a.busy {
+		msg = "working…"
+	}
+	if msg == "" {
+		return layout.Dimensions{}
+	}
+	return layout.UniformInset(unit.Dp(8)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		l := material.Body2(th, msg)
+		l.Color = accent
+		return l.Layout(gtx)
 	})
 }
