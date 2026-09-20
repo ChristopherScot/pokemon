@@ -13,14 +13,14 @@ package main
 
 import (
 	"image"
+	"image/png"
+	"os"
 	"testing"
 	"time"
 
-	"gioui.org/app"
 	"gioui.org/f32"
 	"gioui.org/font/gofont"
 	"gioui.org/gpu/headless"
-	"gioui.org/io/event"
 	"gioui.org/io/input"
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
@@ -53,6 +53,9 @@ func newHarness(t *testing.T) *harness {
 
 	th := material.NewTheme()
 	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
+	// The app calls this too. Without it the screenshots render in
+	// Gio's stock purple and lie about what ships.
+	applyScheme(th)
 
 	// newUI, not &ui{}: the constructor allocates the widget slices,
 	// and a harness that skips it renders a battle with no buttons -
@@ -214,6 +217,24 @@ func (h *harness) visible() []string {
 	return out
 }
 
+// shot writes a screenshot when SHOTS is set, so a failure can be
+// looked at. One helper rather than four copies that discarded the
+// error from os.Create and then used the nil file.
+func (h *harness) shot(name string) {
+	h.t.Helper()
+	if os.Getenv("SHOTS") == "" {
+		return
+	}
+	f, err := os.Create("/tmp/shot-" + name + ".png")
+	if err != nil {
+		h.t.Fatalf("create screenshot: %v", err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, h.img); err != nil {
+		h.t.Fatalf("encode screenshot: %v", err)
+	}
+}
+
 // notBlank reports whether anything was drawn, so a test that taps into
 // a void fails rather than passing silently.
 func notBlank(img *image.RGBA) bool {
@@ -227,6 +248,3 @@ func notBlank(img *image.RGBA) bool {
 	}
 	return false
 }
-
-var _ = app.FrameEvent{} // the app package is what the UI is built on
-var _ event.Event = pointer.Event{}

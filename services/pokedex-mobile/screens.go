@@ -9,6 +9,7 @@ package main
 import (
 	"image"
 	"image/color"
+	"strconv"
 
 	"strings"
 
@@ -182,10 +183,10 @@ func (a *ui) dexRow(gtx layout.Context, th *material.Theme, p api.Pokemon, i int
 	// The leading slot carries the pick order when picked and the
 	// dex number otherwise, so a glance down the list reads as a team
 	// sheet rather than as a column of identical buttons.
-	leading := "#" + itoa(p.ID)
+	leading := "#" + strconv.Itoa(p.ID)
 	trailing := ""
 	if pos > 0 {
-		leading = itoa(pos)
+		leading = strconv.Itoa(pos)
 		trailing = "on team"
 	}
 	return layout.Inset{Bottom: gapXS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -219,25 +220,25 @@ func (a *ui) teamScreen(gtx layout.Context, th *material.Theme) layout.Dimension
 		a.screen = screenBrowse
 	}
 
-	title := "Start a battle"
+	heading := "Start a battle"
 	if a.joining != "" {
-		title = "Join battle"
+		heading = "Join battle"
 	}
 
 	children := []layout.FlexChild{
-		rigid(material.H6(th, title).Layout),
+		rigid(material.H6(th, heading).Layout),
 		spacer(12),
 	}
 	for i, n := range a.team {
 		n := n
 		i := i
 		children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
-			return material.Body1(th, itoa(i+1)+".  "+n).Layout(gtx)
+			return material.Body1(th, strconv.Itoa(i+1)+".  "+title(n)).Layout(gtx)
 		}), spacer(4))
 	}
 	if !teamReady(a.team) {
 		children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Body2(th, "Pick "+itoa(teamSize-len(a.team))+" more on the Pokedex tab.")
+			l := material.Body2(th, "Pick "+strconv.Itoa(teamSize-len(a.team))+" more on the Pokedex tab.")
 			l.Color = dim
 			return l.Layout(gtx)
 		}))

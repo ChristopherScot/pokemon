@@ -13,6 +13,7 @@ package main
 
 import (
 	"image"
+	"strconv"
 	"strings"
 
 	"gioui.org/layout"
@@ -149,7 +150,7 @@ func (a *ui) monLine(gtx layout.Context, th *material.Theme, p api.BattlePokemon
 						return l.Layout(gtx)
 					}),
 					rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(th, unit.Sp(13), itoa(p.Hp)+" / "+itoa(p.MaxHp))
+						l := material.Label(th, unit.Sp(13), strconv.Itoa(p.Hp)+" / "+strconv.Itoa(p.MaxHp))
 						l.Color = m3.onSurfaceVariant
 						return l.Layout(gtx)
 					}),
@@ -210,6 +211,15 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 	if b.Status == "finished" {
 		return tapBtn(gtx, th, &a.leaveBtn, "Back to lobby")
 	}
+	// A turn already sent: the controls stay visible so the screen
+	// does not jump, but they are dead until the server answers.
+	// Otherwise a laggy connection invites a second tap that becomes
+	// a second turn.
+	if a.busy {
+		l := material.Label(th, unit.Sp(14), "Sending…")
+		l.Color = m3.onSurfaceVariant
+		return l.Layout(gtx)
+	}
 	if !a.bc.MyTurn(b) {
 		l := material.Label(th, unit.Sp(14), "Waiting for the other trainer…")
 		l.Color = m3.onSurfaceVariant
@@ -222,6 +232,22 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 		)
 	}
 
+	// An undo above the options, so a mis-tap costs one tap to fix
+	// rather than a whole unwanted turn.
+	withBack := func(w layout.Widget) layout.Dimensions {
+		if !a.sel.canGoBack() {
+			return w(gtx)
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Bottom: gapS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return m3Button(gtx, th, &a.backBtn, "Back", btnOutlined, true)
+				})
+			}),
+			rigid(w),
+		)
+	}
+
 	switch {
 	case !a.sel.haveAttacker:
 		return a.pickRow(gtx, th, len(mine.Team), a.monBtns, func(i int) (string, bool) {
@@ -230,13 +256,17 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 		})
 	case !a.sel.haveMove:
 		mon := mine.Team[a.sel.attacker]
-		return a.pickRow(gtx, th, len(mon.Moves), a.moveBtns, func(i int) (string, bool) {
-			return moveLabel(mon.Moves[i]), canAttack(b, a.bc, mon, i)
+		return withBack(func(gtx layout.Context) layout.Dimensions {
+			return a.pickRow(gtx, th, len(mon.Moves), a.moveBtns, func(i int) (string, bool) {
+				return moveLabel(mon.Moves[i]), canAttack(b, a.bc, mon, i)
+			})
 		})
 	default:
-		return a.pickRow(gtx, th, len(theirs.Team), a.tgtBtns, func(i int) (string, bool) {
-			m := theirs.Team[i]
-			return title(m.Name), !m.Fainted
+		return withBack(func(gtx layout.Context) layout.Dimensions {
+			return a.pickRow(gtx, th, len(theirs.Team), a.tgtBtns, func(i int) (string, bool) {
+				m := theirs.Team[i]
+				return title(m.Name), !m.Fainted
+			})
 		})
 	}
 }
@@ -263,7 +293,11 @@ func (a *ui) pickRow(gtx layout.Context, th *material.Theme, n int, btns []widge
 // handleBattleTaps advances the three-stage selection and sends the
 // turn once it is complete.
 func (a *ui) handleBattleTaps(gtx layout.Context, b *api.Battle, mine, theirs api.Side) {
-	if !a.bc.MyTurn(b) || b.Status == "finished" {
+	if !a.bc.MyTurn(b) || b.Status == "finished" || a.busy {
+		return
+	}
+	if a.backBtn.Clicked(gtx) {
+		a.sel.back()
 		return
 	}
 	switch {
@@ -298,6 +332,9 @@ func (a *ui) handleBattleTaps(gtx layout.Context, b *api.Battle, mine, theirs ap
 }
 
 func (a *ui) send(b *api.Battle) {
+	// Recorded before the reset so a test can assert which turn went
+	// out, not merely that something did.
+	a.lastSent = a.sel
 	a.attack(b.ID, a.sel.attacker, a.sel.move, a.sel.target)
 	a.sel.reset()
 }
