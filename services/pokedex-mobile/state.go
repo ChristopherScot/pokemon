@@ -118,9 +118,9 @@ func hpFraction(p api.BattlePokemon) float32 {
 // deliberate absence.
 func moveLabel(m api.Move) string {
 	if m.Power == 0 {
-		return m.Name + "  —"
+		return title(m.Name) + "  ·  —"
 	}
-	return m.Name + "  " + itoa(m.Power)
+	return title(m.Name) + "  ·  " + itoa(m.Power)
 }
 
 func itoa(n int) string {

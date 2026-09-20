@@ -13,11 +13,10 @@ package main
 
 import (
 	"image"
-	"image/color"
+	"strings"
 
 	"gioui.org/layout"
-	"gioui.org/op/clip"
-	"gioui.org/op/paint"
+	"gioui.org/op"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -63,7 +62,10 @@ func (a *ui) battleScreen(gtx layout.Context, th *material.Theme) layout.Dimensi
 		}),
 		spacer(6),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return a.logPane(gtx, th, b)
+			gtx.Constraints.Min = gtx.Constraints.Max
+			return card(gtx, m3.surfaceContainer, func(gtx layout.Context) layout.Dimensions {
+				return a.logPane(gtx, th, b)
+			})
 		}),
 		spacer(6),
 		rigid(func(gtx layout.Context) layout.Dimensions {
@@ -82,46 +84,78 @@ func (a *ui) battleScreen(gtx layout.Context, th *material.Theme) layout.Dimensi
 // the stage rather than relying on a highlighted column.
 func (a *ui) banner(gtx layout.Context, th *material.Theme, b *api.Battle) layout.Dimensions {
 	txt := turnBanner(b, a.bc)
+	bg, fg := m3.secondaryContainer, m3.onSecondaryContainer
 	if a.bc.MyTurn(b) && b.Status != "finished" {
-		txt += " — " + a.sel.stage()
+		txt += " · " + a.sel.stage()
+		bg, fg = m3.primaryContainer, m3.onPrimaryContainer
 	}
-	l := material.Body1(th, txt)
-	l.Color = accent
-	return l.Layout(gtx)
+	gtx.Constraints.Min.X = gtx.Constraints.Max.X
+	macro := op.Record(gtx.Ops)
+	dims := layout.Inset{Left: gapM, Right: gapM, Top: gapS, Bottom: gapS}.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(th, unit.Sp(15), txt)
+			l.Color = fg
+			l.MaxLines = 1
+			return l.Layout(gtx)
+		})
+	call := macro.Stop()
+	fillRRect(gtx, bg, cornerSmall, dims.Size)
+	call.Add(gtx.Ops)
+	return dims
 }
 
 func (a *ui) sideRow(gtx layout.Context, th *material.Theme, s api.Side, label string, ours bool) layout.Dimensions {
-	children := []layout.FlexChild{
-		rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Caption(th, label+" — "+s.Trainer)
-			l.Color = dim
-			return l.Layout(gtx)
-		}),
-	}
-	for i := range s.Team {
-		i := i
-		children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.monLine(gtx, th, s.Team[i], ours && i == a.sel.attacker && a.sel.haveAttacker)
-		}))
-	}
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	gtx.Constraints.Min.X = gtx.Constraints.Max.X
+	return card(gtx, m3.surfaceContainer, func(gtx layout.Context) layout.Dimensions {
+		children := []layout.FlexChild{
+			rigid(func(gtx layout.Context) layout.Dimensions {
+				l := material.Label(th, unit.Sp(12), strings.ToUpper(label)+" · "+title(s.Trainer))
+				l.Color = m3.onSurfaceVariant
+				return l.Layout(gtx)
+			}),
+			rigid(layout.Spacer{Height: gapS}.Layout),
+		}
+		for i := range s.Team {
+			i := i
+			children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
+				return a.monLine(gtx, th, s.Team[i], ours && i == a.sel.attacker && a.sel.haveAttacker)
+			}))
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+	})
 }
 
 // monLine is one Pokemon: name, conditions, and an HP bar.
 func (a *ui) monLine(gtx layout.Context, th *material.Theme, p api.BattlePokemon, selected bool) layout.Dimensions {
-	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	name := m3.onSurface
+	if p.Fainted {
+		name = withAlpha(m3.onSurface, 0x61)
+	}
+	return layout.Inset{Bottom: gapS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			rigid(func(gtx layout.Context) layout.Dimensions {
-				txt := summarise(p) + "   " + itoa(p.Hp) + "/" + itoa(p.MaxHp)
-				if selected {
-					txt = "▶ " + txt
-				}
-				l := material.Body2(th, txt)
-				if p.Fainted {
-					l.Color = dim
-				}
-				return l.Layout(gtx)
+				return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						txt := title(p.Name)
+						if selected {
+							txt = "▸ " + txt
+						}
+						if extra := summarise(p); extra != p.Name {
+							txt += "  " + strings.TrimPrefix(extra, p.Name)
+						}
+						l := material.Label(th, unit.Sp(15), txt)
+						l.Color = name
+						l.MaxLines = 1
+						return l.Layout(gtx)
+					}),
+					rigid(func(gtx layout.Context) layout.Dimensions {
+						l := material.Label(th, unit.Sp(13), itoa(p.Hp)+" / "+itoa(p.MaxHp))
+						l.Color = m3.onSurfaceVariant
+						return l.Layout(gtx)
+					}),
+				)
 			}),
+			rigid(layout.Spacer{Height: gapXS}.Layout),
 			rigid(func(gtx layout.Context) layout.Dimensions {
 				return hpBar(gtx, hpFraction(p))
 			}),
@@ -133,22 +167,22 @@ func (a *ui) monLine(gtx layout.Context, th *material.Theme, p api.BattlePokemon
 // the length, so it reads at a glance and survives a colourblind eye
 // via the length alone.
 func hpBar(gtx layout.Context, frac float32) layout.Dimensions {
-	h := gtx.Dp(unit.Dp(6))
+	h := gtx.Dp(unit.Dp(8))
 	w := gtx.Constraints.Max.X
-	track := image.Rect(0, 0, w, h)
-	paint.FillShape(gtx.Ops, color.NRGBA{R: 0x33, G: 0x33, B: 0x33, A: 0xFF},
-		clip.Rect(track).Op())
+	// Rounded ends, M3's own progress-indicator shape - a square bar
+	// is the tell of a UI that was drawn rather than designed.
+	fillRRect(gtx, m3.surfaceVariant, cornerFull, image.Pt(w, h))
 
 	fillW := int(float32(w) * frac)
-	c := color.NRGBA{R: 0x3B, G: 0xA5, B: 0x55, A: 0xFF} // green
+	c := m3.success
 	switch {
 	case frac <= 0.2:
-		c = color.NRGBA{R: 0xD3, G: 0x2F, B: 0x2F, A: 0xFF} // red
+		c = m3.errorColor
 	case frac <= 0.5:
-		c = color.NRGBA{R: 0xE0, G: 0xA3, B: 0x2E, A: 0xFF} // amber
+		c = m3.warning
 	}
-	if fillW > 0 {
-		paint.FillShape(gtx.Ops, c, clip.Rect(image.Rect(0, 0, fillW, h)).Op())
+	if fillW > gtx.Dp(unit.Dp(2)) {
+		fillRRect(gtx, c, cornerFull, image.Pt(fillW, h))
 	}
 	return layout.Dimensions{Size: image.Pt(w, h)}
 }
@@ -160,8 +194,10 @@ func (a *ui) logPane(gtx layout.Context, th *material.Theme, b *api.Battle) layo
 		// rows side by side and the whole log reads as one run-on
 		// line, which is exactly what it did the first time.
 		gtx.Constraints.Min.X = gtx.Constraints.Max.X
-		return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			return material.Body2(th, eventLine(evs[i])).Layout(gtx)
+		return layout.Inset{Bottom: gapXS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			l := material.Label(th, unit.Sp(14), eventLine(evs[i]))
+			l.Color = m3.onSurfaceVariant
+			return l.Layout(gtx)
 		})
 	})
 }
@@ -175,13 +211,13 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 		return tapBtn(gtx, th, &a.leaveBtn, "Back to lobby")
 	}
 	if !a.bc.MyTurn(b) {
-		l := material.Body2(th, "Waiting for the other trainer…")
-		l.Color = dim
+		l := material.Label(th, unit.Sp(14), "Waiting for the other trainer…")
+		l.Color = m3.onSurfaceVariant
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			rigid(l.Layout),
 			spacer(8),
 			rigid(func(gtx layout.Context) layout.Dimensions {
-				return tapBtn(gtx, th, &a.leaveBtn, "Leave")
+				return m3Button(gtx, th, &a.leaveBtn, "Leave", btnOutlined, true)
 			}),
 		)
 	}
@@ -190,7 +226,7 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 	case !a.sel.haveAttacker:
 		return a.pickRow(gtx, th, len(mine.Team), a.monBtns, func(i int) (string, bool) {
 			m := mine.Team[i]
-			return m.Name, !m.Fainted
+			return title(m.Name), !m.Fainted
 		})
 	case !a.sel.haveMove:
 		mon := mine.Team[a.sel.attacker]
@@ -200,28 +236,24 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 	default:
 		return a.pickRow(gtx, th, len(theirs.Team), a.tgtBtns, func(i int) (string, bool) {
 			m := theirs.Team[i]
-			return m.Name, !m.Fainted
+			return title(m.Name), !m.Fainted
 		})
 	}
 }
 
 // pickRow lays out one stage's options as full-width buttons.
 func (a *ui) pickRow(gtx layout.Context, th *material.Theme, n int, btns []widget.Clickable, at func(int) (string, bool)) layout.Dimensions {
+	// The team cards above show the same names, so the control
+	// buttons get their own accessibility prefix: TalkBack then says
+	// "choose Pikachu" for the actionable one and just "Pikachu" for
+	// the status row, and a test can tell them apart.
 	var children []layout.FlexChild
 	for i := 0; i < n && i < len(btns); i++ {
 		i := i
 		label, enabled := at(i)
 		children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				if !enabled {
-					gtx = gtx.Disabled()
-				}
-				gtx.Constraints.Min.Y = gtx.Dp(tapTarget)
-				btn := material.Button(th, &btns[i], label)
-				if !enabled {
-					btn.Background = dim
-				}
-				return btn.Layout(gtx)
+			return layout.Inset{Bottom: gapS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return m3ButtonDesc(gtx, th, &btns[i], label, "choose "+label, btnTonal, enabled)
 			})
 		}))
 	}

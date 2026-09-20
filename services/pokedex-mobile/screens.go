@@ -7,9 +7,15 @@ package main
 // a turn - the terminal can afford a one-line row, a thumb cannot.
 
 import (
+	"image"
+	"image/color"
+
 	"strings"
 
 	"gioui.org/layout"
+	"gioui.org/op"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -19,8 +25,13 @@ import (
 
 // tapBtn is a button sized for a thumb.
 func tapBtn(gtx layout.Context, th *material.Theme, c *widget.Clickable, label string) layout.Dimensions {
-	gtx.Constraints.Min.Y = gtx.Dp(tapTarget)
-	return material.Button(th, c, label).Layout(gtx)
+	return m3Button(gtx, th, c, label, btnFilled, true)
+}
+
+// tonalBtn is a secondary action: prominent, but not the one thing
+// the screen wants you to do.
+func tonalBtn(gtx layout.Context, th *material.Theme, c *widget.Clickable, label string) layout.Dimensions {
+	return m3Button(gtx, th, c, label, btnTonal, true)
 }
 
 // rigid wraps a flex child so it sizes to its CONTENT.
@@ -96,31 +107,71 @@ func (a *ui) browseScreen(gtx layout.Context, th *material.Theme) layout.Dimensi
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		rigid(func(gtx layout.Context) layout.Dimensions {
-			gtx.Constraints.Min.Y = gtx.Dp(tapTarget)
-			return material.Editor(th, &a.filter, "search").Layout(gtx)
+			return searchField(gtx, th, &a.filter, "Search the Pokedex")
 		}),
-		spacer(8),
+		rigid(layout.Spacer{Height: gapM}.Layout),
 		rigid(func(gtx layout.Context) layout.Dimensions {
-			n := len(a.team)
-			t := "Team: none picked"
-			if n > 0 {
-				t = "Team: " + strings.Join(a.team, ", ")
-			}
-			l := material.Body2(th, t)
-			if teamReady(a.team) {
-				l.Color = accent
-			} else {
-				l.Color = dim
-			}
-			return l.Layout(gtx)
+			return a.teamChip(gtx, th)
 		}),
-		spacer(8),
+		rigid(layout.Spacer{Height: gapM}.Layout),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return material.List(th, &a.dexList).Layout(gtx, len(rows), func(gtx layout.Context, i int) layout.Dimensions {
+				gtx.Constraints.Min.X = gtx.Constraints.Max.X
 				return a.dexRow(gtx, th, rows[i], i)
 			})
 		}),
 	)
+}
+
+// searchField is an M3 filled text field: a rounded surfaceVariant
+// container, not a bare line of text.
+func searchField(gtx layout.Context, th *material.Theme, e *widget.Editor, hint string) layout.Dimensions {
+	gtx.Constraints.Min.X = gtx.Constraints.Max.X
+	macro := op.Record(gtx.Ops)
+	dims := layout.Inset{
+		Left: gapL, Right: gapL, Top: gapM, Bottom: gapM,
+	}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		ed := material.Editor(th, e, hint)
+		ed.Color = m3.onSurface
+		ed.HintColor = m3.onSurfaceVariant
+		return ed.Layout(gtx)
+	})
+	call := macro.Stop()
+	fillRRect(gtx, m3.surfaceVariant, cornerFull, dims.Size)
+	call.Add(gtx.Ops)
+	return dims
+}
+
+// teamChip shows the picked team as an M3 assist chip, coloured once
+// the team is complete so "ready" is visible without reading.
+func (a *ui) teamChip(gtx layout.Context, th *material.Theme) layout.Dimensions {
+	txt := "No team picked — tap three"
+	bg, fg := m3.surfaceVariant, m3.onSurfaceVariant
+	if len(a.team) > 0 {
+		names := make([]string, len(a.team))
+		for i, n := range a.team {
+			names[i] = title(n)
+		}
+		txt = strings.Join(names, " · ")
+	}
+	if teamReady(a.team) {
+		bg, fg = m3.primaryContainer, m3.onPrimaryContainer
+		txt = "Ready: " + txt
+	}
+	gtx.Constraints.Min.X = gtx.Constraints.Max.X
+	macro := op.Record(gtx.Ops)
+	dims := layout.Inset{
+		Left: gapM, Right: gapM, Top: gapS, Bottom: gapS,
+	}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		l := material.Label(th, unit.Sp(14), txt)
+		l.Color = fg
+		l.MaxLines = 1
+		return l.Layout(gtx)
+	})
+	call := macro.Stop()
+	fillRRect(gtx, bg, cornerSmall, dims.Size)
+	call.Add(gtx.Ops)
+	return dims
 }
 
 func (a *ui) dexRow(gtx layout.Context, th *material.Theme, p api.Pokemon, i int) layout.Dimensions {
@@ -128,18 +179,28 @@ func (a *ui) dexRow(gtx layout.Context, th *material.Theme, p api.Pokemon, i int
 		return layout.Dimensions{}
 	}
 	pos := teamPosition(a.team, p.Name)
-	label := p.Name + "   " + strings.Join(p.Types, "/")
+	// The leading slot carries the pick order when picked and the
+	// dex number otherwise, so a glance down the list reads as a team
+	// sheet rather than as a column of identical buttons.
+	leading := "#" + itoa(p.ID)
+	trailing := ""
 	if pos > 0 {
-		label = itoa(pos) + ".  " + label
+		leading = itoa(pos)
+		trailing = "on team"
 	}
-	return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		gtx.Constraints.Min.Y = gtx.Dp(tapTarget)
-		b := material.Button(th, &a.dexClicks[i], label)
-		if pos == 0 {
-			b.Background = dim
-		}
-		return b.Layout(gtx)
+	return layout.Inset{Bottom: gapXS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return listItem(gtx, th, &a.dexClicks[i], leading,
+			title(p.Name), strings.Join(p.Types, " · "), trailing, pos > 0)
 	})
+}
+
+// title capitalises a name for display. The API returns lowercase
+// ids; a list of lowercase names reads as data, not as a Pokedex.
+func title(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // --- team -----------------------------------------------------------
@@ -195,7 +256,7 @@ func (a *ui) teamScreen(gtx layout.Context, th *material.Theme) layout.Dimension
 		}),
 		spacer(8),
 		rigid(func(gtx layout.Context) layout.Dimensions {
-			return tapBtn(gtx, th, &a.teamBack, "Back to Pokedex")
+			return tonalBtn(gtx, th, &a.teamBack, "Back to Pokedex")
 		}),
 	)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
@@ -230,7 +291,7 @@ func (a *ui) lobbyScreen(gtx layout.Context, th *material.Theme) layout.Dimensio
 		}),
 		spacer(8),
 		rigid(func(gtx layout.Context) layout.Dimensions {
-			return tapBtn(gtx, th, &a.refreshBtn, "Refresh")
+			return tonalBtn(gtx, th, &a.refreshBtn, "Refresh")
 		}),
 		spacer(12),
 		rigid(func(gtx layout.Context) layout.Dimensions {
@@ -249,12 +310,17 @@ func (a *ui) lobbyScreen(gtx layout.Context, th *material.Theme) layout.Dimensio
 					return layout.Dimensions{}
 				}
 				return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Min.Y = gtx.Dp(tapTarget)
-					lbl := waiting[i].Trainer
+					sup := "tap to join"
 					if len(waiting[i].Team) > 0 {
-						lbl += "  vs  " + strings.Join(waiting[i].Team, ", ")
+						names := make([]string, len(waiting[i].Team))
+						for k, n := range waiting[i].Team {
+							names[k] = title(n)
+						}
+						sup = "bringing " + strings.Join(names, ", ")
 					}
-					return material.Button(th, &a.lobbyBtns[i], lbl).Layout(gtx)
+					initial := strings.ToUpper(waiting[i].Trainer[:1])
+					return listItem(gtx, th, &a.lobbyBtns[i], initial,
+						title(waiting[i].Trainer), sup, "", false)
 				})
 			})
 		}),
@@ -287,25 +353,62 @@ func (a *ui) navBar(gtx layout.Context, th *material.Theme) layout.Dimensions {
 		{"Lobby", screenLobby, true},
 		{"Battle", screenBattle, a.battle != nil},
 	}
-	var children []layout.FlexChild
-	for i, t := range tabs {
-		i, t := i, t
-		children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return layout.Inset{Left: unit.Dp(2), Right: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				if !t.on {
-					gtx = gtx.Disabled()
-				}
-				gtx.Constraints.Min.Y = gtx.Dp(tapTarget)
-				b := material.Button(th, &a.navBtns[i], t.label)
-				if a.screen != t.to {
-					b.Background = dim
-				}
-				return b.Layout(gtx)
-			})
-		}))
-	}
-	return layout.Inset{Top: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+	macro := op.Record(gtx.Ops)
+	dims := layout.Inset{Top: gapS, Bottom: gapS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Min.X = gtx.Constraints.Max.X
+		var children []layout.FlexChild
+		for i, t := range tabs {
+			i, t := i, t
+			children = append(children, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				return a.navItem(gtx, th, &a.navBtns[i], t.label, a.screen == t.to, t.on)
+			}))
+		}
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, children...)
+	})
+	call := macro.Stop()
+	// The bar sits on surfaceContainer, which is what separates it
+	// from the content above without needing a divider line.
+	paint.FillShape(gtx.Ops, m3.surfaceContainer,
+		clip.Rect(image.Rectangle{Max: dims.Size}).Op())
+	call.Add(gtx.Ops)
+	return dims
+}
+
+// navItem is one destination. M3 marks the active one with a filled
+// pill behind the label rather than by colouring the others grey -
+// grey reads as disabled, which is what the first version looked like.
+func (a *ui) navItem(gtx layout.Context, th *material.Theme, c *widget.Clickable, label string, active, enabled bool) layout.Dimensions {
+	fg := m3.onSurfaceVariant
+	if active {
+		fg = m3.onSecondaryContainer
+	}
+	if !enabled {
+		fg = withAlpha(m3.onSurface, 0x61)
+		gtx = gtx.Disabled()
+	}
+	return material.ButtonLayoutStyle{
+		Background:   color.NRGBA{},
+		CornerRadius: cornerFull,
+		Button:       c,
+	}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Min.Y = gtx.Dp(tapTarget)
+		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			macro := op.Record(gtx.Ops)
+			d := layout.Inset{
+				Left: gapL, Right: gapL, Top: gapXS, Bottom: gapXS,
+			}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				l := material.Label(th, unit.Sp(12), label)
+				l.Color = fg
+				l.MaxLines = 1
+				return l.Layout(gtx)
+			})
+			call := macro.Stop()
+			if active {
+				fillRRect(gtx, m3.secondaryContainer, cornerFull, d.Size)
+			}
+			call.Add(gtx.Ops)
+			return d
+		})
 	})
 }
 

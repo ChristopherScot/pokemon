@@ -1,5 +1,6 @@
-v0.1.0
+v0.2.0
 
+v0.2.0 Material 3: colour roles, cards, tonal buttons, and a real nav bar
 v0.1.0 the playable game: browse, team, lobby and battle, laid out for a thumb
 v0.0.5 JDK 17: modern d8 cannot be loaded by a JDK 8 runtime
 v0.0.4 four-part version, so gogio accepts it
