@@ -37,7 +37,7 @@ function findAssetDir(): string {
 /** Where the built assets are. */
 export const ASSET_DIR = findAssetDir()
 
-type Manifest = Record<string, { file: string; isEntry?: boolean }>
+type Manifest = Record<string, { file: string; isEntry?: boolean; imports?: string[] }>
 
 let manifest: Manifest | null = null
 
@@ -57,9 +57,31 @@ function load(): Manifest {
  * pointing at nothing renders, looks fine, and does nothing - which is
  * the failure mode this whole file exists to make impossible.
  */
-export function assetURL(entry: 'battle' | 'lobby' | 'pokedex'): string {
-  const m = load()
-  const hit = m[`client/${entry}-entry.tsx`]
+export function assetURL(entry: Entry): string {
+  return `/assets/${lookup(entry).file}`
+}
+
+export type Entry = 'battle' | 'lobby' | 'pokedex'
+
+function lookup(entry: Entry) {
+  const hit = load()[`client/${entry}-entry.tsx`]
   if (!hit) throw new Error(`no built bundle for ${entry}`)
-  return `/assets/${hit.file}`
+  return hit
+}
+
+/**
+ * The chunks a page's entry imports, for <link rel="modulepreload">.
+ *
+ * Once more than one page shares React, Rollup splits it into a chunk
+ * the entry imports rather than inlining it in both. The browser would
+ * fetch that chunk anyway when it parses the entry's import - but only
+ * after parsing it, which is a wasted round trip on the critical path.
+ * Preloading is what closes it.
+ */
+export function preloadURLs(entry: Entry): string[] {
+  const m = load()
+  return (lookup(entry).imports ?? []).flatMap((key) => {
+    const chunk = m[key]
+    return chunk ? [`/assets/${chunk.file}`] : []
+  })
 }

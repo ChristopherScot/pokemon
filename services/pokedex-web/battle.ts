@@ -58,7 +58,7 @@ const esc = (s: unknown): string =>
   String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 
-import { assetURL } from './assets.ts'
+import { assetURL, preloadURLs } from './assets.ts'
 import { UI_VERSION } from './version.ts'
 export { UI_VERSION }
 
@@ -274,6 +274,7 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
   id,
   me: trainer,
 })}</script>
+${preloadURLs('battle').map((u) => `<link rel="modulepreload" href="${u}">`).join('')}
 <script type="module" src="${assetURL('battle')}"></script>
 </body></html>`
 }
@@ -439,13 +440,6 @@ export function registerBattle(app: FastifyInstance) {
 // lobbyPage lists open battles and, when there is no trainer yet, asks
 // for a name first.
 export function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: WaitingBattle[] }) {
-  const rows = waiting.length === 0
-    ? '<p class="sub">nobody is waiting. open one below and share the link.</p>'
-    : waiting.map((w) => `<div class="row">
-         <div><strong>${esc(w.trainer)}</strong>
-         <div class="sub" style="margin:0">${w.team.map(esc).join(', ')}</div></div>
-         <a class="btn" href="/?join=${encodeURIComponent(w.battleId)}">join</a></div>`).join('')
-
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -466,6 +460,11 @@ export function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: Waitin
                   border-radius:8px; padding:7px 12px; }
   button { cursor:pointer; transition:background .15s; }
   button:hover { background:#2f3547; }
+  /* A button that reads as a link. It IS a button - it reveals the
+     register form rather than navigating - and an <a href="#"> that
+     does something is a lie to anyone using a screen reader. */
+  .linkish { background:none; border:0; padding:0; color:inherit;
+             text-decoration:underline; cursor:pointer; font:inherit; }
   /* An anchor styled as a button: navigating to the picker is a link,
      and a <button> wrapped in an <a> is invalid HTML that screen
      readers announce wrongly. */
@@ -476,108 +475,14 @@ export function lobbyPage({ me, waiting }: { me: Trainer | null; waiting: Waitin
   .team { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
 </style></head>
 <body>
-  <h1>Battle lobby</h1>
-  <p class="sub">${me ? 'you are <strong>' + esc(me.name) + '</strong>' : 'pick a trainer name to start'} ·
-    <a href="/">back to the pokedex</a>${me ? ' · <a href="#" id="rename">not you?</a>' : ''}</p>
+  <!-- React mounts here. The server still renders the page shell and
+       ships the first waiting list in the boot island, so the lobby is
+       useful before any JavaScript runs and does not flash empty. -->
+  <div id="root"></div>
 
-  <!-- Always in the markup, hidden when there is already a trainer.
-       Trainers live in server memory, so a deploy invalidates every
-       token while the cookie survives - the page then says "you are
-       <name>" and every action answers "register first", with the only
-       form that could fix it hidden because a cookie was present. -->
-  <div class="row" id="reg-row"${me ? ' hidden' : ''}><input id="name" placeholder="trainer name" maxlength="32">
-    <button id="reg">register</button></div>
+<script type="application/json" id="boot">${JSON.stringify({ me, waiting })}</script>
+${preloadURLs('lobby').map((u) => `<link rel="modulepreload" href="${u}">`).join('')}
+<script type="module" src="${assetURL('lobby')}"></script>
 
-  ${me ? `<div class="row"><div><strong>your team</strong>
-      <div class="sub" style="margin:0">pick from the pokedex, or start straight away
-        and get a random team.</div></div></div>
-    <div class="row"><a class="btn" href="/">pick a team &rarr;</a>
-      <button id="open">open with a random team</button></div>` : ''}
-
-  <h2 style="font-size:14px;color:var(--dim);margin:22px 0 8px">waiting</h2>
-  <div id="waiting">${rows}</div>
-
-<script type="module">
-${PRELUDE}
-// Reveal the register form for someone whose identity went stale, or
-// who simply wants a different name.
-const rename = document.getElementById('rename')
-if (rename) rename.addEventListener('click', (ev) => {
-  ev.preventDefault()
-  const row = document.getElementById('reg-row')
-  if (row) { row.hidden = false; document.getElementById('name').focus() }
-})
-
-const reg = document.getElementById('reg')
-if (reg) reg.addEventListener('click', async () => {
-  const name = document.getElementById('name').value.trim()
-  if (!name) return
-  const res = await fetch('/battle/register', {
-    method:'POST', headers:{'content-type':'application/json', ...V}, body:JSON.stringify({name}) })
-  if (res.ok) location.reload()
-  else alert((await res.json()).message || 'that name is taken')
-})
-
-// No team in the body: this button is explicitly "open with a random
-// team". Choosing one happens in the pokedex, the only screen that can
-// show you what you are choosing between.
-const open = document.getElementById('open')
-if (open) open.addEventListener('click', async () => {
-  const res = await fetch('/battle/open', {
-    method:'POST', headers:{'content-type':'application/json', ...V}, body:JSON.stringify({}) })
-  const body = await res.json()
-  if (res.ok) { location.href = '/battle/' + body.id; return }
-  // A 401 here means the token in the cookie is one the API no longer
-  // knows - the server restarted and lost its trainers, which happens
-  // on every deploy. The server has already cleared the cookie, so a
-  // reload brings back the register form. Alerting "register first"
-  // and stopping was a dead end: the page still said "you are <name>"
-  // from the same cookie, and the form to register again was hidden
-  // precisely because a cookie was present.
-  if (res.status === 401) { location.reload(); return }
-  alert(body.message || 'could not open that battle')
-})
-
-// Keep the waiting list current.
-//
-// It used to render once and never change, so a battle opened by
-// somebody else after your page loaded never appeared - no join button,
-// because the list was frozen at load. The battle page has polled all
-// along; this is the same idea for the screen that needed it more.
-//
-// Paused while the tab is hidden. A lobby left open in a background tab
-// is the shape that produced 46,000 wasted requests from one stale
-// battle page, and nobody is waiting to join a battle they cannot see.
-function renderWaiting(list) {
-  const box = document.getElementById('waiting')
-  if (!box) return
-  box.innerHTML = list.length === 0
-    ? '<p class="sub">nobody is waiting. open one below and share the link.</p>'
-    : list.map((w) => '<div class="row">' +
-        '<div><strong>' + esc(w.trainer) + '</strong>' +
-        '<div class="sub" style="margin:0">' + w.team.map(esc).join(', ') + '</div></div>' +
-        '<a class="btn" href="/?join=' + encodeURIComponent(w.battleId) + '">join</a></div>').join('')
-}
-
-let lobbyMisses = 0
-async function pollLobby() {
-  if (!document.hidden) {
-    try {
-      const res = await fetch('/battle/waiting', { headers: V })
-      if (res.ok) {
-        lobbyMisses = 0
-        const b = await res.json()
-        renderWaiting(b.waiting || [])
-      } else if (TERMINAL.has(res.status)) {
-        return // this client is too old, or the endpoint is gone
-      } else if (++lobbyMisses >= 5) {
-        return // the API has been unreachable for a while; stop asking
-      }
-    } catch { /* a dropped poll retries on the next tick */ }
-  }
-  setTimeout(pollLobby, 3000)
-}
-setTimeout(pollLobby, 3000)
-</script>
 </body></html>`
 }

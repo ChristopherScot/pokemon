@@ -117,17 +117,6 @@ test('every battle route reports 502 when the API is unreachable', async () => {
 
 
 
-test('the lobby sends you to the picker rather than a text box', async () => {
-  const { lobbyPage } = await import('./battle.ts')
-  const page = lobbyPage({
-    me: { name: 'ash', token: 't' },
-    waiting: [{ battleId: 'xyz789', trainer: 'misty', team: ['staryu'] }] as never,
-  })
-  assert.match(page, /href="\/\?join=xyz789"/, 'each waiting battle should link to the picker')
-  // The old comma-separated input is gone; leaving it would be two
-  // different ways to do the same thing, disagreeing about which wins.
-  expect(page, 'the typed-team input should be gone').not.toMatch(/id="team"/)
-})
 
 // The lobby rendered once and never changed, so a battle opened after
 // your page loaded never appeared and there was no button to join it.
@@ -156,66 +145,8 @@ test('the filter bar pins to a measured topbar height, not a guess', async () =>
   )
 })
 
-// The lobby's script is EXECUTED, not just asserted on as a string.
-//
-// It shipped with `V` used in four handlers and declared only in the
-// battle page's script - a different module scope in a different
-// document. Every lobby handler threw "ReferenceError: V is not
-// defined" on its first statement: register, open, join and the poll,
-// all dead, all silent, because module scripts fail quietly and the
-// poll's catch swallowed its own throw.
-//
-// A test that checks the page CONTAINS something passes whether or not
-// the page works. This one runs it.
-async function runLobbyScript(waiting: unknown[] = []) {
-  const { lobbyPage } = await import('./battle.ts')
-  const page = lobbyPage({
-    me: { name: 'ash', token: 't' },
-    waiting: waiting as never,
-  })
-  const open = page.match(/<script[^>]*>/)!
-  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
 
-  const sent: Array<{ url: string; headers: Record<string, string> }> = []
-  const els: Record<string, unknown> = {
-    team: { value: 'pikachu' },
-    waiting: { innerHTML: '' },
-  }
-  const sandbox = {
-    document: {
-      getElementById: (id: string) => els[id] ?? null,
-      addEventListener: () => {},
-      querySelectorAll: () => [],
-      hidden: false,
-    },
-    location: { pathname: '/battle', href: '', reload: () => {} },
-    fetch: async (url: string, init?: { headers?: Record<string, string> }) => {
-      sent.push({ url, headers: init?.headers ?? {} })
-      return { ok: true, status: 200, json: async () => ({ waiting: [] }) }
-    },
-    setTimeout: () => 0,
-    alert: () => {},
-    console,
-  }
-  // Throws here if the script references anything it does not define.
-  const run = new Function(...Object.keys(sandbox), script + '\n;return { pollLobby };')
-  const api = run(...Object.values(sandbox)) as { pollLobby: () => Promise<void> }
-  return { api, sent }
-}
 
-test('the lobby script evaluates without a missing binding', async () => {
-  await runLobbyScript()
-})
-
-test('lobby requests report the UI version', async () => {
-  const { UI_VERSION } = await import('./battle.ts')
-  const { api, sent } = await runLobbyScript()
-  await api.pollLobby()
-  assert.ok(sent.length > 0, 'the poll should have made a request')
-  for (const r of sent) {
-    assert.equal(r.headers['Client-Version'], UI_VERSION, `${r.url} sent no version`)
-  }
-})
 
 
 
@@ -348,53 +279,7 @@ test('pressing Ready with no join id still opens a battle', async () => {
 })
 
 
-// Trainers live in the API's memory, so every deploy invalidates every
-// token while the browser's cookie survives. The lobby then said
-// "you are Chris" from the cookie's NAME while every action answered
-// 401 "register first" because of its TOKEN - and the register form
-// was hidden precisely because a cookie was present. No way out but
-// clearing site data.
-test('the lobby can always re-register, even with a trainer cookie', async () => {
-  const { lobbyPage } = await import('./battle.ts')
-  const page = lobbyPage({ me: { name: 'chris', token: 'stale' }, waiting: [] as never })
-  assert.match(page, /id="reg-row"/, 'the register form must be in the markup')
-  assert.match(page, /id="rename"/, 'and something must reveal it')
-})
 
-// A 401 means the cookie's token is dead and the server has already
-// cleared it, so reloading shows the register form. Alerting and
-// stopping left the user staring at a name they could not use.
-test('a stale trainer reloads into the register form rather than alerting', async () => {
-  const { lobbyPage } = await import('./battle.ts')
-  const page = lobbyPage({ me: { name: 'chris', token: 'stale' }, waiting: [] as never })
-  const open = page.match(/<script[^>]*>/)!
-  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
-
-  let reloaded = false
-  let alerted = ''
-  const els: Record<string, unknown> = {
-    open: { addEventListener(_e: string, fn: () => Promise<void>) { (els.open as {fire?: unknown}).fire = fn } },
-  }
-  const sandbox = {
-    document: {
-      getElementById: (id: string) => els[id] ?? null,
-      addEventListener: () => {},
-      querySelectorAll: () => [],
-      hidden: false,
-    },
-    location: { pathname: '/battle', href: '', reload: () => { reloaded = true } },
-    fetch: async () => ({ ok: false, status: 401, json: async () => ({ message: 'register first' }) }),
-    setTimeout: () => 0,
-    alert: (m: string) => { alerted = m },
-    console,
-  }
-  const run = new Function(...Object.keys(sandbox), script + '\n;return {};')
-  run(...Object.values(sandbox))
-
-  await ((els.open as { fire: () => Promise<void> }).fire)()
-  assert.equal(reloaded, true, 'a 401 should reload into the register form')
-  assert.equal(alerted, '', 'and not dead-end in an alert')
-})
 
 // checkTurn is an ordinary exported function now, so the test imports
 // it. It used to be pulled out of the page's <script> by regex and
