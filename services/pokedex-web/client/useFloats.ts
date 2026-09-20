@@ -31,6 +31,7 @@ export function useFloats(battle: Battle | null, mineIdx: number): Float[] {
   // -1 means "not rendered yet": the first pass adopts the log's length
   // rather than replaying it.
   const seenLog = useRef(-1)
+  const pending = useRef(new Set<ReturnType<typeof setTimeout>>())
 
   useEffect(() => {
     if (!battle) return
@@ -62,13 +63,31 @@ export function useFloats(battle: Battle | null, mineIdx: number): Float[] {
     if (fresh.length === 0) return
 
     setFloats((cur) => [...cur, ...fresh])
+
+    // Scheduled here, and NOT returned as cleanup.
+    //
+    // It was cleanup, which cancelled it on the next poll - and
+    // useBattle hands down a new battle object every second, so the
+    // effect re-ran and killed the timer before it ever fired. The
+    // floats never expired and the shake never stopped: one hit and
+    // the Pokemon jittered forever.
+    //
+    // A float's lifetime belongs to the float, not to the effect that
+    // happened to create it.
     const ids = new Set(fresh.map((f) => f.id))
     const timer = setTimeout(
       () => setFloats((cur) => cur.filter((f) => !ids.has(f.id))),
       LIFE_MS,
     )
-    return () => clearTimeout(timer)
+    pending.current.add(timer)
   }, [battle, mineIdx])
+
+  // Only unmount cancels them, so a screen that goes away does not
+  // leave timers running.
+  useEffect(() => {
+    const timers = pending.current
+    return () => { for (const t of timers) clearTimeout(t) }
+  }, [])
 
   return floats
 }

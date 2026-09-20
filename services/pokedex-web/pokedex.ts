@@ -11,6 +11,7 @@
 // means the container is `node server.js` with no compile stage.
 
 import type { FastifyInstance } from 'fastify'
+import { colour, island } from './types.ts'
 import { assetURL, preloadURLs } from './assets.ts'
 import createClient, { exponentialRetry, noRetry } from '@christopherscot/pokedex-client'
 
@@ -39,19 +40,6 @@ const api = createClient({
   policy: process.env.POKEDEX_NO_RETRY ? noRetry : exponentialRetry,
 })
 
-// One colour per type, so a card is scannable without reading it. These
-// are the familiar Pokedex colours; anything unknown falls back to grey
-// rather than throwing.
-const TYPE_COLOURS = {
-  normal: '#9fa19f', fire: '#e62829', water: '#2980ef', electric: '#fac000',
-  grass: '#3fa129', ice: '#3dcef3', fighting: '#ff8000', poison: '#9141cb',
-  ground: '#915121', flying: '#81b9ef', psychic: '#ef4179', bug: '#91a119',
-  rock: '#afa981', ghost: '#704170', dragon: '#5060e1', dark: '#50413f',
-  steel: '#60a1b8', fairy: '#ef70ef',
-}
-
-const colour = (type: string): string =>
-  TYPE_COLOURS[type as keyof typeof TYPE_COLOURS] ?? '#6b7280'
 
 // escape() runs on every string that reaches the page. The data is ours
 // and the names are tame, but a renderer that only escapes "untrusted"
@@ -60,43 +48,6 @@ const escape = (s: unknown): string =>
   String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 
-function card(p: Pokemon) {
-  const types = p.types
-    .map((t) => `<span class="type" style="background:${colour(t)}">${escape(t)}</span>`)
-    .join('')
-
-  // Status moves have power 0, which reads as a bug rather than as "deals
-  // no damage" - show a dash, the same choice the CLI makes.
-  const moves = p.moves
-    .map((m) => `<li><span>${escape(m.name)}</span><span class="move-type" style="color:${colour(m.type)}">${escape(m.type)}</span><b>${m.power || '—'}</b></li>`)
-    .join('')
-
-  // A button, not an <article> with a click handler. The card IS the
-  // team picker, and as a div it was unreachable by keyboard entirely -
-  // you could browse and filter, then not pick a team, which is the
-  // whole product. A real button brings focus, Enter and Space, and the
-  // accessibility tree with it rather than needing tabindex plus a
-  // keydown shim.
-  //
-  // aria-pressed carries the selected state: .picked::after is CSS
-  // content, which is not reliably announced, so "on your team" was
-  // invisible to a screen reader even once the card was reachable.
-  return `
-    <button type="button" class="card" aria-pressed="false"
-            data-name="${escape(p.name)}" data-sprite="${escape(p.sprite)}">
-      <header>
-        <span class="num">#${String(p.id).padStart(3, '0')}</span>
-        <h2>${escape(p.name)}</h2>
-      </header>
-      <img src="${escape(p.sprite)}" alt="${escape(p.name)}" loading="lazy" width="96" height="96">
-      <div class="types">${types}</div>
-      <dl>
-        <dt>height</dt><dd>${(p.height / 10).toFixed(1)} m</dd>
-        <dt>weight</dt><dd>${(p.weight / 10).toFixed(1)} kg</dd>
-      </dl>
-      <ul class="moves">${moves}</ul>
-    </button>`
-}
 
 // Exported like battlePage/lobbyPage so a test can assert on the real
 // markup. The route itself 502s without a live API behind it, so
@@ -173,15 +124,26 @@ export function page(
      rather than leaving holes. */
   .card.hidden { display:none; }
 
-  dialog { border:1px solid #333a4d; border-radius:14px; background:var(--card);
+  /* Visible to a screen reader, not to the eye. The search-result
+     count is announced, and without this rule it was ordinary body
+     text sitting under the filter bar reading "5 pokemon match char". */
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+             overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+
+  /* .modal rather than dialog: the trainer-name prompt is a component
+     now. Every one of these rules was still scoped to the dialog element, so the
+     prompt rendered completely unstyled - no card, no backdrop, no
+     input styling - while looking fine in the markup. */
+  .modal-backdrop { position:fixed; inset:0; display:grid; place-items:center;
+                    background:rgba(9,10,14,.7); backdrop-filter:blur(2px); z-index:50; }
+  .modal { border:1px solid #333a4d; border-radius:14px; background:var(--card);
            color:var(--fg); padding:22px 24px; max-width:380px; width:calc(100% - 32px); }
-  dialog::backdrop { background:rgba(9,10,14,.7); backdrop-filter:blur(2px); }
-  dialog h2 { margin:0 0 6px; font-size:18px; }
-  dialog p { margin:0 0 14px; color:var(--dim); font-size:13px; }
-  dialog input { width:100%; font:inherit; color:var(--fg); background:var(--bg);
+  .modal h2 { margin:0 0 6px; font-size:18px; }
+  .modal p { margin:0 0 14px; color:var(--dim); font-size:13px; }
+  .modal input { width:100%; font:inherit; color:var(--fg); background:var(--bg);
                  border:1px solid #333a4d; border-radius:8px; padding:9px 12px;
                  outline:none; margin-bottom:14px; }
-  dialog input:focus { border-color:#6d5ae0; }
+  .modal input:focus { border-color:#6d5ae0; }
   .modal-error { color:#f87171; margin:-8px 0 12px; }
   .modal-actions { display:flex; gap:8px; justify-content:flex-end; }
   .modal-actions button { font:inherit; font-weight:600; border:none; border-radius:8px;
@@ -217,7 +179,7 @@ export function page(
   /* Visible focus. Both text inputs set outline:none and replaced it
      with a border colour at 3.27:1, under the 4.5 it needs - and the
      cards had no focus style at all because they could not be focused. */
-  .card:focus-visible, #search:focus-visible, dialog input:focus-visible,
+  .card:focus-visible, #search:focus-visible, .modal input:focus-visible,
   .filters a:focus-visible, button:focus-visible {
     outline:2px solid #a78bfa; outline-offset:2px;
   }
@@ -283,7 +245,7 @@ export function page(
        empty on first paint. -->
   <div id="root"></div>
 
-<script type="application/json" id="boot">${JSON.stringify({ pokemon, types, active, join })}</script>
+<script type="application/json" id="boot">${island({ pokemon, types, active, join })}</script>
 ${preloadURLs('pokedex').map((u) => `<link rel="modulepreload" href="${u}">`).join('')}
 <script type="module" src="${assetURL('pokedex')}"></script>
 

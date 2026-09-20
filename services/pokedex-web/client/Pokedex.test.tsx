@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { StrictMode } from 'react'
+
 import { render, screen, waitFor } from '@testing-library/react'
 import { userEvent } from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -141,4 +143,28 @@ test('a full team blocks new picks but still allows changes', async () => {
   }
   expect(card('squirtle')).toBeDisabled()
   expect(card('pikachu')).toBeEnabled()
+})
+
+// StrictMode double-invokes effects in development, and this app ships
+// StrictMode. The team was restored by an effect and written by
+// another, so the write ran first with the initial [] and ERASED the
+// saved team before the read could restore it: pick three Pokemon,
+// reload, and they are gone and overwritten.
+//
+// Rendering in StrictMode is what catches this class of bug. The rest
+// of this file renders plain, which is why the suite was green.
+test('a saved team survives a StrictMode mount', () => {
+  sessionStorage.setItem(
+    'pokedex.team',
+    JSON.stringify([{ name: 'pikachu', sprite: 'pikachu.png' }]),
+  )
+  render(
+    <StrictMode>
+      <Pokedex pokemon={dex} types={[]} active="" join="" resume="" />
+    </StrictMode>,
+  )
+  const card = screen.getAllByRole('button', { name: /pikachu/ })
+    .find((el) => el.classList.contains('card'))!
+  expect(card).toHaveAttribute('aria-pressed', 'true')
+  expect(JSON.parse(sessionStorage.getItem('pokedex.team') ?? '[]')).toHaveLength(1)
 })

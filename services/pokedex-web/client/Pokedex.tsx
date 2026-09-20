@@ -3,12 +3,12 @@
 // The card grid IS the team picker. That is why every card is a real
 // button - as an <article> with a delegated click handler the whole
 // product was mouse-only, and picking a team is the product.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { components } from '@christopherscot/pokedex-client'
 
 import { colour } from '../types.ts'
-import { TEAM_SIZE } from './shared.ts'
+import { TEAM_SIZE, V } from './shared.ts'
 import { useTeam, type Pick } from './useTeam.ts'
 
 type Pokemon = components['schemas']['Pokemon']
@@ -29,6 +29,7 @@ export function Pokedex({
 }) {
   const { team, toggle, removeAt, clear } = useTeam()
   const [query, setQuery] = useState('')
+  const topbar = useTopbarHeight()
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -39,7 +40,7 @@ export function Pokedex({
 
   return (
     <>
-      <header className="topbar">
+      <header className="topbar" ref={topbar}>
         <div className="title">
           <h1>{join ? 'Pick your team' : 'Pokedex'}</h1>
           <p className="sub">
@@ -116,6 +117,37 @@ export function Pokedex({
 function href(query: string, join: string): string {
   const parts = [query, join ? `join=${encodeURIComponent(join)}` : ''].filter(Boolean)
   return parts.length ? `/?${parts.join('&')}` : '/'
+}
+
+/**
+ * Publishes the topbar's real height as --topbar-h.
+ *
+ * The filters pin underneath it, and the offset was a hardcoded 86px -
+ * roughly right on a desktop window and wrong everywhere else. The
+ * topbar WRAPS (title, search, three slots, a button), so on a phone it
+ * is two or three rows tall and the filters slid behind the header and
+ * out of reach.
+ *
+ * ResizeObserver rather than a resize listener: the topbar also changes
+ * height when a team slot fills and the text inside it reflows, which
+ * fires no resize event. The port dropped this and the CSS fell back to
+ * the hardcoded value the comment calls wrong.
+ */
+function useTopbarHeight() {
+  const ref = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const publish = () =>
+      document.documentElement.style.setProperty('--topbar-h', `${el.getBoundingClientRect().height}px`)
+    publish()
+    const ro = new ResizeObserver(publish)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  return ref
 }
 
 function Card({
@@ -221,7 +253,10 @@ function Ready({
     const url = join ? `/battle/${encodeURIComponent(join)}/join` : '/battle/open'
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      // ...V like every other fetch in the app: without it the
+      // server's version-refusal path cannot see these requests, and
+      // three of four call sites agreed while this one did not.
+      headers: { 'content-type': 'application/json', ...V },
       body: JSON.stringify(body),
     })
     const out = await res.json().catch(() => ({}))
@@ -292,7 +327,7 @@ function NameDialog({
     if (!trimmed) return
     const res = await fetch('/battle/register', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...V },
       body: JSON.stringify({ name: trimmed }),
     })
     if (res.ok) { onRegistered(); return }

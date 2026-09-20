@@ -14,3 +14,27 @@ export const TYPE_COLOURS: Record<string, string> = {
 
 /** The badge colour for a type, or a neutral grey for an unknown one. */
 export const colour = (type: string): string => TYPE_COLOURS[type] ?? '#6b7280'
+
+/**
+ * JSON for a `<script type="application/json">` island.
+ *
+ * JSON.stringify does NOT escape `<`, so a trainer named
+ * `x</script><script>alert(1)</script>` closes the island early and the
+ * rest of the string is parsed as markup and executed. Everything else
+ * on these pages goes through esc(); the island was the one hole, and
+ * it is the one carrying attacker-influenceable data.
+ *
+ * `<` is valid JSON and parses back to the same string, so nothing
+ * downstream changes. U+2028 and U+2029 are escaped for a different
+ * reason: they are valid in JSON but are line terminators in JavaScript
+ * source, which breaks any consumer that eval()s this.
+ *
+ * Every SSR framework ships this function. "JSON.stringify is safe in
+ * HTML" is a common and wrong belief.
+ */
+export function island(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+}

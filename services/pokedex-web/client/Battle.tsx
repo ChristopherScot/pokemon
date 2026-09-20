@@ -27,7 +27,10 @@ function sideFor(b: Battle, me: string): { mine: Side; theirs: Side } | null {
 export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
   const [picked, setPicked] = useState({ attacker: 0, move: 0, target: 0 })
   const [sending, setSending] = useState(false)
-  const [rejected, setRejected] = useState('')
+  // Keyed to the version it belongs to. It was a bare string cleared
+  // nowhere, so a 409 stayed under the live log for the rest of the
+  // battle - "not your turn" still showing three turns later.
+  const [rejected, setRejected] = useState<{ version: number; text: string } | null>(null)
 
   // Before the early return: hooks cannot be called conditionally, and
   // a spectator's board animates too.
@@ -43,7 +46,7 @@ export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
 
   async function send() {
     const why = checkTurn(b, me, picked)
-    if (why) { setRejected(why); return }
+    if (why) { setRejected({ version: b.version, text: why }); return }
     setSending(true)
     try {
       const res = await fetch(`/battle/${b.id}/turn`, {
@@ -55,7 +58,7 @@ export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
         // The state moved on between the check and the send. The server
         // is the authority and this is what it said.
         const body = await res.json().catch(() => ({ message: 'that move was rejected' }))
-        setRejected(String(body.message ?? 'that move was rejected'))
+        setRejected({ version: b.version, text: String(body.message ?? 'that move was rejected') })
       }
     } finally {
       setSending(false)
@@ -123,7 +126,7 @@ export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
         </div>
       )}
 
-      <Log battle={b} rejected={rejected} />
+      <Log battle={b} rejected={rejected?.version === b.version ? rejected.text : ''} />
     </>
   )
 }

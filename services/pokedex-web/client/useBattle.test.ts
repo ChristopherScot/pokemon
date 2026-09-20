@@ -67,3 +67,36 @@ test('every request reports the UI version', async () => {
   await waitFor(() => expect(result.current.kind).toBe('ok'))
   expect(seen[0]['Client-Version']).toBeTruthy()
 })
+
+// A new battle gets a fresh miss budget.
+//
+// seen and misses were refs on the component, not the polling run, so
+// they outlived a change of id: after one battle spent its five misses,
+// the next one stopped on its FIRST 404 and told the player "this
+// battle is over" about a battle that was merely slow. Unreachable
+// while the page mounts per battle, which is what made it a trap for
+// whoever adds client routing rather than a visible bug.
+test('switching battles resets the miss budget', async () => {
+  const calls: string[] = []
+  vi.stubGlobal('fetch', async (url: string) => {
+    calls.push(url)
+    return { ok: false, status: 404, json: async () => ({}) }
+  })
+
+  const { result, rerender } = renderHook(({ id }) => useBattle(id), {
+    initialProps: { id: 'first' },
+  })
+  await waitFor(() => expect(result.current.kind).toBe('stopped'), { timeout: 15_000 })
+  const spent = calls.filter((u) => u.includes('first')).length
+  expect(spent).toBeGreaterThan(1)
+
+  // The hook still reports 'stopped' from the FIRST battle until the
+  // second decides otherwise, so waiting on state returns instantly.
+  // Count the requests the second battle actually makes instead.
+  calls.length = 0
+  rerender({ id: 'second' })
+  await waitFor(
+    () => expect(calls.filter((u) => u.includes('second')).length).toBe(spent),
+    { timeout: 15_000 },
+  )
+}, 40_000)

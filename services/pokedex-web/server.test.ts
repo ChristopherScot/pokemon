@@ -222,3 +222,33 @@ test('the battle page mounts React with its boot data', async () => {
   assert.match(html, /<script type="module" src="\/assets\/battle-[^"]+\.js">/,
     'the page must load the hashed bundle the build produced')
 })
+
+// JSON.stringify does not escape `<`, so a trainer name containing
+// `</script>` closed the boot island early and everything after it was
+// parsed as markup. Everything else on these pages goes through esc();
+// the island was the one hole, and it carries the one piece of
+// attacker-influenceable data.
+test('a trainer name cannot break out of the boot island', async () => {
+  const { battlePage } = await import('./battle.ts')
+  const evil = 'x</script><script>alert(1)</script>'
+  const html = battlePage({ id: 'abc123', trainer: evil })
+
+  const start = html.indexOf('id="boot"')
+  const end = html.indexOf('</script>', start)
+  const island = html.slice(start, end)
+  expect(island, 'the injected tag must not survive into the island').not.toMatch(/<script>alert/)
+
+  // And it must still parse back to exactly what went in.
+  const json = island.slice(island.indexOf('>') + 1)
+  assert.equal((JSON.parse(json) as { me: string }).me, evil)
+})
+
+// The token authorises this trainer's moves. It lives in a cookie; the
+// lobby only ever reads the NAME, so shipping the token into readable
+// DOM text handed it to any injected script and any extension.
+test('the lobby boot island carries no auth token', async () => {
+  const { lobbyPage } = await import('./battle.ts')
+  const html = lobbyPage({ me: { name: 'ash', token: 'secret-token-value' }, waiting: [] })
+  expect(html).not.toMatch(/secret-token-value/)
+  assert.match(html, /"name":"ash"/, 'but the name is still there')
+})

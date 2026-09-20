@@ -12,7 +12,7 @@
 //   - Anything else is transient and worth another go.
 //   - A hidden tab does not poll. A lobby left open in a background tab
 //     is the shape that produced the 46,000 requests.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { components } from '@christopherscot/pokedex-client'
 
@@ -30,15 +30,24 @@ const INTERVAL = 1000
 
 export function useBattle(id: string): BattleState {
   const [state, setState] = useState<BattleState>({ kind: 'loading' })
-  // Refs, not state: changing these must not re-render, and the poll
-  // loop has to see the current value rather than the one captured
-  // when the effect ran.
-  const seen = useRef(-1)
-  const misses = useRef(0)
 
   useEffect(() => {
     let live = true
     let timer: ReturnType<typeof setTimeout> | undefined
+
+    // Plain locals, not refs. The loop closes over them, so it still
+    // sees the current value - and their lifetime is now exactly one
+    // polling run, which is what they describe.
+    //
+    // As refs they outlived the id: after one battle spent its miss
+    // budget, the NEXT battle in the same mounted component stopped on
+    // its first 404 and reported "this battle is over" for one that was
+    // merely slow. `seen` leaked the same way - a new battle whose
+    // version happened to match the old one rendered nothing at all.
+    // Unreachable today because the page mounts per battle, which makes
+    // it a trap for whoever adds client routing rather than a bug.
+    let seen = -1
+    let misses = 0
 
     async function tick() {
       if (!live) return
@@ -51,8 +60,8 @@ export function useBattle(id: string): BattleState {
         if (!live) return
 
         if (res.status === 404) {
-          misses.current += 1
-          if (misses.current >= MAX_MISSES) {
+          misses += 1
+          if (misses >= MAX_MISSES) {
             setState({
               kind: 'stopped',
               message: 'this battle is over — the server restarted, or it expired',
@@ -66,12 +75,12 @@ export function useBattle(id: string): BattleState {
           })
           return
         } else if (res.ok) {
-          misses.current = 0
+          misses = 0
           const b = (await res.json()) as Battle
           // Only re-render when the server says something changed;
           // repainting an identical board fights the animations.
-          if (b.version !== seen.current) {
-            seen.current = b.version
+          if (b.version !== seen) {
+            seen = b.version
             setState({ kind: 'ok', battle: b })
           }
         }

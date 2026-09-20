@@ -6,10 +6,15 @@
 // a regex. That worked while the page was a template literal and stops
 // being meaningful the moment the board is a component: what matters is
 // what React renders, not what the shell HTML contains.
-import { render, screen } from '@testing-library/react'
-import { expect, test } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
+import { expect, test, vi } from 'vitest'
+
+import type { components } from '@christopherscot/pokedex-client'
 
 import { BattleBoard } from './Battle.tsx'
+
+type Battle = components['schemas']['Battle']
+type Mon = components['schemas']['BattlePokemon']
 
 const mon = (name: string, over: Record<string, unknown> = {}) => ({
   name, hp: 20, maxHp: 20, sprite: 's.png', types: ['electric'], fainted: false,
@@ -20,14 +25,17 @@ const mon = (name: string, over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-const battle = (over: Record<string, unknown> = {}) => ({
+// Typed against the generated schema rather than cast to never: a
+// fixture that casts away its type cannot catch a renamed or misspelt
+// field, which is most of what a fixture is for.
+const battle = (over: Partial<Battle> = {}): Battle => ({
   id: 'abc123', status: 'active', version: 1, turn: 'ash', log: [],
   sides: [
     { trainer: 'ash', team: [mon('pikachu')] },
     { trainer: 'misty', team: [mon('staryu')] },
   ],
   ...over,
-}) as never
+})
 
 // A screen-reader user has to be TOLD their turn began; it is the one
 // thing this game must announce. The old banner was rebuilt inside a
@@ -87,7 +95,7 @@ test('a spectator gets a board, not a crash', () => {
 // `!e.damage`, and an immune hit deals exactly 0, so the branch that
 // says "no effect" was unreachable - the classifier was right and the
 // screen showed nothing.
-const withLog = (log: unknown[]) => battle({ log }) as never
+const withLog = (log: Battle['log']) => battle({ log })
 
 test('a hit floats its damage over the target', () => {
   const { rerender } = render(<BattleBoard battle={battle()} me="ash" />)
@@ -134,4 +142,34 @@ test('a status move floats nothing', () => {
   )
   expect(screen.queryByText(/^-/)).toBeNull()
   expect(screen.queryByText('no effect')).toBeNull()
+})
+
+// Floats have to EXPIRE, and the only way to see that they do not is to
+// keep polling while they are on screen.
+//
+// The expiry timer was returned as effect cleanup, and useBattle hands
+// down a new battle object every second - so the effect re-ran and
+// cancelled the timer before it ever fired. The float stayed forever
+// and, because the shake class derives from the same array, so did the
+// shake. Every existing float test rendered once and never polled,
+// which is exactly why the suite was green.
+test('a float expires even while the battle keeps polling', async () => {
+  vi.useFakeTimers()
+  try {
+    const hit = { turnNumber: 1, text: 'hit', target: 'staryu', damage: 7, effectiveness: 1 }
+    const { rerender } = render(<BattleBoard battle={battle()} me="ash" />)
+    rerender(<BattleBoard battle={withLog([hit])} me="ash" />)
+    expect(screen.getByText('-7')).toBeTruthy()
+
+    // Four seconds of polling, a new object each time, as the real poll
+    // produces. The float's life is 2400ms.
+    for (let i = 0; i < 4; i++) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+      rerender(<BattleBoard battle={{ ...battle({ log: [hit] }), version: 2 + i }} me="ash" />)
+    }
+
+    expect(screen.queryByText('-7'), 'the float never expired').toBeNull()
+  } finally {
+    vi.useRealTimers()
+  }
 })
