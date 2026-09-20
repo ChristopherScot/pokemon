@@ -44,35 +44,50 @@ func rgb(v uint32) color.NRGBA {
 	return color.NRGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xFF}
 }
 
-// m3 is the baseline light scheme.
+// m3 is the app's light scheme, built from the official Pokemon brand
+// palette rather than M3's purple default: Digital Red #FF0000,
+// Ultramarine Blue #3B4CCA and Golden Yellow #FFDE00, which are the
+// Pokeball and the logo.
 //
-// Not the purple default: a Pokedex is a red device, so primary is
-// derived from that. The rest keeps M3's relationships - a container
-// is a desaturated tint of its role, and every on- colour clears the
-// contrast floor against its pair.
+// The brand reds and blues are too saturated to sit under text, so
+// each is taken down to an M3 container tone and the full-strength
+// version is kept for the roles that carry no text - a filled button
+// with white on it, the HP bar.
+//
+// SURFACES ARE NEUTRAL. M3 tints them with a few percent of the
+// source hue, which at these values is invisible; the previous
+// version pushed that to 8% and turned the whole app pink. A Pokedex
+// is a red device on a WHITE background, and every game screen is
+// white or near-black behind the chrome.
 var m3 = scheme{
-	primary:            rgb(0xB3261E),
+	// Pokeball red, darkened to clear contrast with white text.
+	primary:            rgb(0xC21B17),
 	onPrimary:          rgb(0xFFFFFF),
-	primaryContainer:   rgb(0xF9DEDC),
-	onPrimaryContainer: rgb(0x410E0B),
-	// Derived from the same red hue as primary. M3 derives every role
-	// from one source colour; a red primary beside the stock purple
-	// secondary is two palettes in one app.
-	secondary:            rgb(0x775652),
+	primaryContainer:   rgb(0xFFDAD5),
+	onPrimaryContainer: rgb(0x410100),
+
+	// The logo blue, for the secondary emphasis.
+	secondary:            rgb(0x3B4CCA),
 	onSecondary:          rgb(0xFFFFFF),
-	secondaryContainer:   rgb(0xFFDAD6),
-	onSecondaryContainer: rgb(0x2C1512),
-	surface:              rgb(0xFFF8F7),
-	onSurface:            rgb(0x231918),
-	surfaceVariant:       rgb(0xF5DDDA),
-	onSurfaceVariant:     rgb(0x534341),
-	surfaceContainer:     rgb(0xFBEEEC),
-	outline:              rgb(0x857370),
-	outlineVariant:       rgb(0xD8C2BF),
-	errorColor:           rgb(0xB3261E),
-	onError:              rgb(0xFFFFFF),
-	success:              rgb(0x386A20),
-	warning:              rgb(0x7D5700),
+	secondaryContainer:   rgb(0xDFE0FF),
+	onSecondaryContainer: rgb(0x00105C),
+
+	// Near-neutral, a hair warm. Not pink.
+	surface:          rgb(0xFCFCFC),
+	onSurface:        rgb(0x1B1B1B),
+	surfaceVariant:   rgb(0xE6E1E1),
+	onSurfaceVariant: rgb(0x494646),
+	surfaceContainer: rgb(0xF1EFEF),
+	outline:          rgb(0x7A7676),
+	outlineVariant:   rgb(0xCBC6C6),
+
+	errorColor: rgb(0xBA1A1A),
+	onError:    rgb(0xFFFFFF),
+
+	// HP bar states, which are their own convention: the games have
+	// used green/amber/red for a health bar since 1996.
+	success: rgb(0x2E7D32),
+	warning: rgb(0xF2A600),
 }
 
 // applyScheme points Gio's four-colour palette at the M3 roles it
