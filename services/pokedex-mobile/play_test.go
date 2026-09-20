@@ -6,6 +6,10 @@ import (
 	"image/png"
 	"os"
 	"testing"
+
+	"gioui.org/widget"
+
+	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
 // The register screen is what a new phone shows, and it must actually
@@ -43,6 +47,109 @@ func TestBattleScreenRenders(t *testing.T) {
 	if os.Getenv("SHOTS") != "" {
 		f, _ := os.Create("/tmp/shot-battle.png")
 		png.Encode(f, img)
+		f.Close()
+	}
+}
+
+// A turn, played by tapping: pokemon, then move, then target.
+//
+// This is the flow that makes it a game rather than a screenshot, and
+// the stages have to advance in order or a player is stuck.
+func TestPlayATurnByTapping(t *testing.T) {
+	h := newHarness(t)
+	h.ui.id.Name = "ash"
+	h.ui.bc = testClient(t)
+	h.ui.screen = screenBattle
+	h.ui.battle = testBattle("ash", "misty")
+	h.frame()
+
+	if h.ui.sel.stage() != "pick a pokemon" {
+		t.Fatalf("opening stage = %q", h.ui.sel.stage())
+	}
+
+	// The first control button sits just above the nav bar. Tap it.
+	h.tap(phoneW/2, firstButtonY)
+	if !h.ui.sel.haveAttacker {
+		t.Fatal("tapping a pokemon did not select it")
+	}
+	if h.ui.sel.stage() != "pick a move" {
+		t.Fatalf("after picking a pokemon, stage = %q", h.ui.sel.stage())
+	}
+
+	// Now the same row holds moves. With two living opponents the
+	// selection would wait for a target; the fixture has one, so
+	// tapping a move sends the turn and clears the selection. Either
+	// way the move tap must be OBSERVED - a stage that does not
+	// advance is a player stuck on their own turn.
+	h.tap(phoneW/2, firstButtonY)
+	if h.ui.sel.haveAttacker && !h.ui.sel.haveMove {
+		t.Fatal("tapping a move neither selected it nor sent the turn")
+	}
+}
+
+// One living opponent means the target is not a choice, and asking for
+// a third tap there is busywork the terminal does not impose either.
+func TestOneTargetSkipsTheThirdTap(t *testing.T) {
+	h := newHarness(t)
+	h.ui.id.Name = "ash"
+	h.ui.bc = testClient(t)
+	h.ui.screen = screenBattle
+	b := testBattle("ash", "misty")
+	// psyduck is already fainted in the fixture, so staryu is alone.
+	h.ui.battle = b
+	h.frame()
+
+	_, theirs, _ := h.ui.bc.SideFor(b)
+	if !onlyOneTarget(theirs) {
+		t.Fatal("fixture should leave exactly one living opponent")
+	}
+
+	h.tap(phoneW/2, firstButtonY) // pokemon
+	h.tap(phoneW/2, firstButtonY) // move -> should send immediately
+
+	// Sending clears the selection, which is how we know it fired
+	// rather than waiting for a target tap.
+	if h.ui.sel.haveAttacker || h.ui.sel.haveMove {
+		t.Error("the turn was not sent; it is still waiting for a target tap")
+	}
+}
+
+// The Pokedex list, where a team gets picked. A long list on a phone
+// must scroll by dragging, and picking must survive the scroll.
+func TestBrowseScrollsAndPicks(t *testing.T) {
+	h := newHarness(t)
+	h.ui.id.Name = "ash"
+	h.ui.screen = screenBrowse
+	for i := 0; i < 40; i++ {
+		h.ui.dex = append(h.ui.dex, api.Pokemon{
+			ID: i + 1, Name: "mon" + itoa(i), Types: []string{"normal"},
+		})
+	}
+	h.ui.dexClicks = make([]widget.Clickable, len(h.ui.dex))
+	h.frame()
+
+	// Tap the first row to pick it.
+	h.tap(phoneW/2, 165)
+	if len(h.ui.team) == 0 {
+		t.Fatal("tapping a row picked nothing")
+	}
+	picked := h.ui.team[0]
+
+	// Drag upward to scroll down the list, the way a thumb does.
+	before := h.ui.dexList.Position.First
+	h.drag(phoneW/2, 600, 250)
+	if h.ui.dexList.Position.First <= before {
+		t.Errorf("dragging did not scroll: first went %d -> %d",
+			before, h.ui.dexList.Position.First)
+	}
+
+	// The pick survives scrolling - it is state, not a screen position.
+	if teamPosition(h.ui.team, picked) != 1 {
+		t.Errorf("after scrolling, %q is no longer the lead pick", picked)
+	}
+	if os.Getenv("SHOTS") != "" {
+		f, _ := os.Create("/tmp/shot-browse.png")
+		png.Encode(f, h.img)
 		f.Close()
 	}
 }

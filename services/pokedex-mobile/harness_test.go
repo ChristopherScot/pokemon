@@ -30,6 +30,11 @@ import (
 	"gioui.org/widget/material"
 )
 
+// firstButtonY is where the first control button sits: above the nav
+// bar, which is tapTarget high with a little padding. Derived rather
+// than hardcoded per test so a layout change moves one constant.
+const firstButtonY = phoneH - 48 - 8 - 48 - 4 - 26
+
 // phoneSize is a mid-range Android in density-independent pixels.
 const phoneW, phoneH = 411, 891
 
@@ -104,23 +109,47 @@ func (h *harness) tap(x, y int) {
 	h.frame()
 }
 
-// drag scrolls a list, which on a phone is the only way to reach past
-// the first screenful.
+// drag scrolls a list the way a thumb does: press, move, release.
+//
+// Only Press, Move, Leave and Release can be injected - the router
+// DERIVES Drag from a Move while pressed, and queueing a Drag
+// directly panics with "unsupported pointer event type".
 func (h *harness) drag(x, y0, y1 int) {
 	h.t.Helper()
-	now := time.Since(time.Time{})
+	base := time.Since(time.Time{})
 	steps := []struct {
-		k pointer.Kind
-		y int
-	}{{pointer.Press, y0}, {pointer.Move, (y0 + y1) / 2}, {pointer.Move, y1}, {pointer.Release, y1}}
-	for i, s := range steps {
+		k  pointer.Kind
+		y  int
+		dt time.Duration
+	}{
+		{pointer.Press, y0, 0},
+		{pointer.Move, y0 - (y0-y1)/3, 16 * time.Millisecond},
+		{pointer.Move, y0 - 2*(y0-y1)/3, 32 * time.Millisecond},
+		{pointer.Move, y1, 48 * time.Millisecond},
+		{pointer.Release, y1, 64 * time.Millisecond},
+	}
+	for _, s := range steps {
 		h.rtr.Queue(pointer.Event{
 			Kind:     s.k,
 			Source:   pointer.Touch,
 			Position: f32.Pt(float32(x), float32(s.y)),
-			Time:     now + time.Duration(i)*10*time.Millisecond,
+			Time:     base + s.dt,
 		})
+		h.frame()
 	}
+}
+
+// scroll moves a list by a wheel-style scroll, which is what a
+// material.List consumes directly.
+func (h *harness) scroll(x, y, dy int) {
+	h.t.Helper()
+	h.rtr.Queue(pointer.Event{
+		Kind:     pointer.Scroll,
+		Source:   pointer.Mouse,
+		Position: f32.Pt(float32(x), float32(y)),
+		Scroll:   f32.Pt(0, float32(dy)),
+		Time:     time.Since(time.Time{}),
+	})
 	h.frame()
 }
 
