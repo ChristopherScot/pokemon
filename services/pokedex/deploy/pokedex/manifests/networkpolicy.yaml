@@ -20,8 +20,14 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     # Both ingress controllers, because the API answers on /api of a
-    # host that may be LAN or public, and pokedex-web, which is its
-    # only in-cluster caller.
+    # host that may be LAN or public, and both front ends, which are its
+    # only in-cluster callers.
+    #
+    # A caller missing from this list does not fail in a way that points
+    # here: it gets ECONNREFUSED from the Service IP, and the front end
+    # reports "pokedex API unavailable", which reads like the API is
+    # down. pokedex-htmx deployed green, healthy and 502ing for exactly
+    # that reason.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -32,6 +38,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: pokedex-web
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pokedex-htmx
       ports:
         - protocol: TCP
           port: 3000
