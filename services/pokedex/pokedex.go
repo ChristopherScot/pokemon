@@ -65,30 +65,47 @@ type pokedex struct {
 	stats map[int]baseStats
 }
 
+// loadPokedex builds the index from the JSON compiled into the
+// binary, for a run with no database.
 func loadPokedex() (*pokedex, error) {
 	var doc dataset
 	if err := json.Unmarshal(pokedexJSON, &doc); err != nil {
 		return nil, fmt.Errorf("decoding embedded pokedex: %w", err)
 	}
-	raw := doc.Pokemon
-	if len(raw) == 0 {
+	if len(doc.Pokemon) == 0 {
 		return nil, fmt.Errorf("embedded pokedex is empty")
 	}
 	if len(doc.Moves) == 0 {
 		return nil, fmt.Errorf("embedded pokedex has no move catalogue")
 	}
+	return buildPokedex(doc.Pokemon, doc.Moves)
+}
 
+// buildPokedex turns rows into the index, and is the ONLY place that
+// knows how.
+//
+// There used to be two of these - one over embedded JSON, one over
+// sqlc rows - about ninety duplicated lines apiece. The sources
+// genuinely differ, but only in how a row is obtained: int vs int32,
+// moves inline vs joined through a link table. Everything after that
+// was the same, so adding a field to api.Pokemon meant the same edit
+// in two files.
+//
+// Worse, which one ran was decided by DATABASE_URL at startup, so
+// local development exercised one path and production the other, and
+// a divergence between them was invisible until it shipped.
+func buildPokedex(mons []entry, moves []moveEntry) (*pokedex, error) {
 	p := &pokedex{
-		ordered: make([]api.Pokemon, 0, len(raw)),
-		byName:  make(map[string]api.Pokemon, len(raw)),
-		stats:   make(map[int]baseStats, len(raw)),
+		ordered: make([]api.Pokemon, 0, len(mons)),
+		byName:  make(map[string]api.Pokemon, len(mons)),
+		stats:   make(map[int]baseStats, len(mons)),
 
-		moves:      make([]api.Move, 0, len(doc.Moves)),
-		moveByName: make(map[string]api.Move, len(doc.Moves)),
-		learnable:  make(map[string][]string, len(raw)),
+		moves:      make([]api.Move, 0, len(moves)),
+		moveByName: make(map[string]api.Move, len(moves)),
+		learnable:  make(map[string][]string, len(mons)),
 	}
 
-	for _, m := range doc.Moves {
+	for _, m := range moves {
 		mv := api.Move{
 			Name:        m.Name,
 			Type:        m.Type,
@@ -104,7 +121,8 @@ func loadPokedex() (*pokedex, error) {
 		p.moves = append(p.moves, mv)
 		p.moveByName[m.Name] = mv
 	}
-	for _, e := range raw {
+
+	for _, e := range mons {
 		p.stats[e.ID] = baseStats{
 			hp:      e.BaseHp,
 			attack:  e.BaseAttack,
@@ -112,13 +130,13 @@ func loadPokedex() (*pokedex, error) {
 			speed:   e.BaseSpeed,
 		}
 
-		moves := make([]api.Move, 0, len(e.Moves))
+		battle := make([]api.Move, 0, len(e.Moves))
 		for _, name := range e.Moves {
 			mv, ok := p.moveByName[name]
 			if !ok {
-				return nil, fmt.Errorf("pokedex entry %q lists move %q, which is not in the catalogue", e.Name, name)
+				return nil, fmt.Errorf("pokemon %q lists move %q, which is not in the catalogue", e.Name, name)
 			}
-			moves = append(moves, mv)
+			battle = append(battle, mv)
 		}
 		p.learnable[strings.ToLower(e.Name)] = e.LearnableMoves
 
@@ -131,7 +149,7 @@ func loadPokedex() (*pokedex, error) {
 			Height:      e.Height,
 			Weight:      e.Weight,
 			Sprite:      e.Sprite,
-			Moves:       moves,
+			Moves:       battle,
 		}
 		if e.Habitat != "" {
 			mon.Habitat = api.NewOptString(e.Habitat)

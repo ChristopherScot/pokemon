@@ -7,12 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/internal/dbgen"
 )
 
@@ -101,6 +99,13 @@ func seed(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
+// loadPokedexFromDB reads the reference data and hands it to
+// buildPokedex.
+//
+// Everything here is row-shape translation - int32 to int, moves
+// joined through a link table rather than inline. The index itself is
+// built by the same function the embedded path uses, so the two
+// cannot drift, which they could when this file had its own copy.
 func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error) {
 	q := dbgen.New(pool)
 
@@ -125,32 +130,6 @@ func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error
 		return nil, fmt.Errorf("reading pokemon moves: %w", err)
 	}
 
-	p := &pokedex{
-		ordered:    make([]api.Pokemon, 0, len(rawMons)),
-		byName:     make(map[string]api.Pokemon, len(rawMons)),
-		stats:      make(map[int]baseStats, len(rawMons)),
-		moves:      make([]api.Move, 0, len(rawMoves)),
-		moveByName: make(map[string]api.Move, len(rawMoves)),
-		learnable:  make(map[string][]string, len(rawMons)),
-	}
-
-	for _, m := range rawMoves {
-		mv := api.Move{
-			Name:        m.Name,
-			Type:        m.Type,
-			Power:       int(m.Power),
-			Description: m.Description,
-			Effect:      m.Effect,
-			Pp:          int(m.Pp),
-			DamageClass: m.DamageClass,
-		}
-		if m.Accuracy != nil {
-			mv.Accuracy = api.NewOptInt(int(*m.Accuracy))
-		}
-		p.moves = append(p.moves, mv)
-		p.moveByName[m.Name] = mv
-	}
-
 	battleMoves := map[int32][]string{}
 	learnMoves := map[int32][]string{}
 	for _, l := range links {
@@ -162,54 +141,49 @@ func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error
 		}
 	}
 
+	moves := make([]moveEntry, 0, len(rawMoves))
+	for _, m := range rawMoves {
+		me := moveEntry{
+			Name:        m.Name,
+			Type:        m.Type,
+			Power:       int(m.Power),
+			Description: m.Description,
+			Effect:      m.Effect,
+			PP:          int(m.Pp),
+			DamageClass: m.DamageClass,
+		}
+		if m.Accuracy != nil {
+			acc := int(*m.Accuracy)
+			me.Accuracy = &acc
+		}
+		moves = append(moves, me)
+	}
+
+	mons := make([]entry, 0, len(rawMons))
 	for _, e := range rawMons {
-		moves := make([]api.Move, 0, len(battleMoves[e.ID]))
-		for _, name := range battleMoves[e.ID] {
-			mv, ok := p.moveByName[name]
-			if !ok {
-				return nil, fmt.Errorf("pokemon %q lists move %q, which is not in the catalogue", e.Name, name)
-			}
-			moves = append(moves, mv)
-		}
-
-		mon := api.Pokemon{
-			ID:          int(e.ID),
-			Name:        e.Name,
-			Description: e.Description,
-			Genus:       e.Genus,
-			Types:       e.Types,
-			Height:      int(e.Height),
-			Weight:      int(e.Weight),
-			Sprite:      e.Sprite,
-			Moves:       moves,
-		}
-		if e.Habitat != "" {
-			mon.Habitat = api.NewOptString(e.Habitat)
-		}
-		if e.Artwork != "" {
-			mon.Artwork = api.NewOptString(e.Artwork)
-		}
-		if e.EvolvesFrom != "" {
-			mon.EvolvesFrom = api.NewOptString(e.EvolvesFrom)
-		}
-		if e.Legendary {
-			mon.Legendary = api.NewOptBool(true)
-		}
-
-		p.stats[int(e.ID)] = baseStats{
-			hp:      int(e.BaseHp),
-			attack:  int(e.BaseAttack),
-			defense: int(e.BaseDefense),
-			speed:   int(e.BaseSpeed),
-		}
-		p.ordered = append(p.ordered, mon)
-		p.byName[strings.ToLower(mon.Name)] = mon
-		p.learnable[strings.ToLower(mon.Name)] = learnMoves[e.ID]
+		mons = append(mons, entry{
+			ID:             int(e.ID),
+			Name:           e.Name,
+			Types:          e.Types,
+			Height:         int(e.Height),
+			Weight:         int(e.Weight),
+			BaseHp:         int(e.BaseHp),
+			BaseAttack:     int(e.BaseAttack),
+			BaseDefense:    int(e.BaseDefense),
+			BaseSpeed:      int(e.BaseSpeed),
+			Description:    e.Description,
+			Genus:          e.Genus,
+			Habitat:        e.Habitat,
+			Sprite:         e.Sprite,
+			Artwork:        e.Artwork,
+			EvolvesFrom:    e.EvolvesFrom,
+			Legendary:      e.Legendary,
+			Moves:          battleMoves[e.ID],
+			LearnableMoves: learnMoves[e.ID],
+		})
 	}
-	if err := p.finish(); err != nil {
-		return nil, err
-	}
-	return p, nil
+
+	return buildPokedex(mons, moves)
 }
 
 // runSeed loads the embedded reference data into the database and
