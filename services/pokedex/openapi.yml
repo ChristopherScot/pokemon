@@ -7,7 +7,7 @@ info:
   title: pokedex
   # Bump this when the API changes. The generated client reports it in
   # Client-Version, so one version covers the API and its clients.
-  version: 0.7.0
+  version: 0.8.0
   description: pokedex, owned by me-myself-and-i.
 
 paths:
@@ -688,8 +688,29 @@ components:
           type: integer
           description: >
             Index of a move this Pokemon cannot currently use, or absent.
-            Selecting it is a 409, so a client should show it as
-            unavailable rather than letting the turn fail.
+            Prefer usableMoves: this is the input the server used, and a
+            client that reads it is re-deriving a conclusion the server
+            has already drawn.
+        canAct:
+          type: boolean
+          description: >
+            Whether this Pokemon can be chosen as the attacker right
+            now. The server decides; a client that computes it from
+            fainted, status and whose turn it is has a second copy of
+            the rules that will drift.
+        canBeTargeted:
+          type: boolean
+          description: >
+            Whether this Pokemon is a legal target right now.
+        usableMoves:
+          type: array
+          items:
+            type: boolean
+          description: >
+            One entry per move, in the same order, saying whether it can
+            be selected this turn. Disabled moves and moves with no PP
+            are false. A client greys out the false ones and needs no
+            rules of its own to do it.
 
     BattleEvent:
       type: object

@@ -192,7 +192,10 @@ const sideBlock = (
   `<div class="side"><h2>${esc(title)}</h2>` +
   team.map((p, i) => mon(p, side, i, {
     floats,
-    selectable: selectable && !p.fainted,
+    // canAct, not !fainted: fainted is the input the server used,
+    // and reading it here is a second copy of the rule. usableMoves
+    // and canAct are the server's own verdict.
+    selectable: selectable && (p.canAct ?? !p.fainted),
     selected: selectedAt === i,
     name: p.name,
   })).join('') +
@@ -202,6 +205,11 @@ const sideBlock = (
 // of the server's turn rules. pokedex-web shipped an 18-line checkTurn()
 // that re-implemented the server's validation so it could grey buttons
 // out; the server simply does not render a control you may not use.
+//
+// That claim used to be almost true - this file still decided a move
+// was unusable by comparing against disabledMove, which is the rule
+// rather than the verdict. It now reads usableMoves and canAct, which
+// the server computes.
 function pick(b: Battle, mine: Side, theirs: Side, sel: Turn): string {
   const attacker = mine.team[sel.attacker]
   if (!attacker) return ''
@@ -210,7 +218,11 @@ function pick(b: Battle, mine: Side, theirs: Side, sel: Turn): string {
     // A disabled move is not a disabled button: the control is omitted
     // and the reason stated, because "disabled this turn" is real
     // information and a greyed button hides it behind a tooltip.
-    if (attacker.disabledMove === i) {
+    // usableMoves is the server's answer, one entry per move. The
+    // disabledMove fallback is for a battle from a server that
+    // predates the field.
+    const usable = attacker.usableMoves ? attacker.usableMoves[i] : attacker.disabledMove !== i
+    if (!usable) {
       return `<span class="move-off">${esc(m.name)} <small>disabled this turn</small></span>`
     }
     // form="turn" - the form is in battlePage(), see mon() above.

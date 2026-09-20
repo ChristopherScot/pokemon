@@ -213,9 +213,20 @@ type BattlePokemon struct {
 	// A confused Pokemon can hit itself instead of attacking, so a client should say so before the player
 	// commits a turn.
 	Confused OptBool `json:"confused"`
-	// Index of a move this Pokemon cannot currently use, or absent. Selecting it is a 409, so a client
-	// should show it as unavailable rather than letting the turn fail.
+	// Index of a move this Pokemon cannot currently use, or absent. Prefer usableMoves: this is the input
+	// the server used, and a client that reads it is re-deriving a conclusion the server has already
+	// drawn.
 	DisabledMove OptInt `json:"disabledMove"`
+	// Whether this Pokemon can be chosen as the attacker right now. The server decides; a client that
+	// computes it from fainted, status and whose turn it is has a second copy of the rules that will
+	// drift.
+	CanAct OptBool `json:"canAct"`
+	// Whether this Pokemon is a legal target right now.
+	CanBeTargeted OptBool `json:"canBeTargeted"`
+	// One entry per move, in the same order, saying whether it can be selected this turn. Disabled moves
+	// and moves with no PP are false. A client greys out the false ones and needs no rules of its own to
+	// do it.
+	UsableMoves []bool `json:"usableMoves"`
 }
 
 // GetName returns the value of Name.
@@ -268,6 +279,21 @@ func (s *BattlePokemon) GetDisabledMove() OptInt {
 	return s.DisabledMove
 }
 
+// GetCanAct returns the value of CanAct.
+func (s *BattlePokemon) GetCanAct() OptBool {
+	return s.CanAct
+}
+
+// GetCanBeTargeted returns the value of CanBeTargeted.
+func (s *BattlePokemon) GetCanBeTargeted() OptBool {
+	return s.CanBeTargeted
+}
+
+// GetUsableMoves returns the value of UsableMoves.
+func (s *BattlePokemon) GetUsableMoves() []bool {
+	return s.UsableMoves
+}
+
 // SetName sets the value of Name.
 func (s *BattlePokemon) SetName(val string) {
 	s.Name = val
@@ -316,6 +342,21 @@ func (s *BattlePokemon) SetConfused(val OptBool) {
 // SetDisabledMove sets the value of DisabledMove.
 func (s *BattlePokemon) SetDisabledMove(val OptInt) {
 	s.DisabledMove = val
+}
+
+// SetCanAct sets the value of CanAct.
+func (s *BattlePokemon) SetCanAct(val OptBool) {
+	s.CanAct = val
+}
+
+// SetCanBeTargeted sets the value of CanBeTargeted.
+func (s *BattlePokemon) SetCanBeTargeted(val OptBool) {
+	s.CanBeTargeted = val
+}
+
+// SetUsableMoves sets the value of UsableMoves.
+func (s *BattlePokemon) SetUsableMoves(val []bool) {
+	s.UsableMoves = val
 }
 
 type BattleStatus string

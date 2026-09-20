@@ -355,8 +355,14 @@ export interface components {
             stages?: components["schemas"]["StatStages"];
             /** @description A confused Pokemon can hit itself instead of attacking, so a client should say so before the player commits a turn. */
             confused?: boolean;
-            /** @description Index of a move this Pokemon cannot currently use, or absent. Selecting it is a 409, so a client should show it as unavailable rather than letting the turn fail. */
+            /** @description Index of a move this Pokemon cannot currently use, or absent. Prefer usableMoves: this is the input the server used, and a client that reads it is re-deriving a conclusion the server has already drawn. */
             disabledMove?: number;
+            /** @description Whether this Pokemon can be chosen as the attacker right now. The server decides; a client that computes it from fainted, status and whose turn it is has a second copy of the rules that will drift. */
+            canAct?: boolean;
+            /** @description Whether this Pokemon is a legal target right now. */
+            canBeTargeted?: boolean;
+            /** @description One entry per move, in the same order, saying whether it can be selected this turn. Disabled moves and moves with no PP are false. A client greys out the false ones and needs no rules of its own to do it. */
+            usableMoves?: boolean[];
         };
         BattleEvent: {
             turnNumber: number;

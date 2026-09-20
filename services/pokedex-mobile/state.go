@@ -126,10 +126,11 @@ func moveLabel(m api.Move) string {
 
 // canAttack reports whether a move button should be tappable.
 //
-// Delegates to battleclient.MoveUsable so a disabled move is disabled
-// identically here and in the terminal - the server answers a disabled
-// move with a 409, and a client that lets the tap through turns that
-// into a failed turn the player did not expect.
+// Every question here is answered by the server and read through
+// battleclient - the phone holds no rules of its own. A client that
+// decided for itself would disagree with the server the first time a
+// rule changed, and the player would find out by having a tap
+// rejected with a 409.
 func canAttack(b *api.Battle, bc *battleclient.Client, mon api.BattlePokemon, moveIdx int) bool {
 	if b == nil || bc == nil {
 		return false
@@ -137,7 +138,10 @@ func canAttack(b *api.Battle, bc *battleclient.Client, mon api.BattlePokemon, mo
 	if !bc.MyTurn(b) {
 		return false
 	}
-	if mon.Fainted {
+	// CanAct rather than !Fainted: fainted is the INPUT the server
+	// used, and reading it here would be re-deriving a conclusion the
+	// server has already published.
+	if !battleclient.CanAct(mon) {
 		return false
 	}
 	return battleclient.MoveUsable(mon, moveIdx)
@@ -251,7 +255,11 @@ func (p pick) ready() bool { return p.haveAttacker && p.haveMove }
 func aliveIndexes(side api.Side) []int {
 	var out []int
 	for i, m := range side.Team {
-		if !m.Fainted {
+		// CanBeTargeted rather than !Fainted. This drives which
+		// targets are offered and whether the third tap can be
+		// skipped, so it is a rule - and a client that derives it
+		// from fainted has a copy that drifts.
+		if battleclient.CanBeTargeted(m) {
 			out = append(out, i)
 		}
 	}
