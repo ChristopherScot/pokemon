@@ -50,23 +50,7 @@ func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params
 		return &api.CreateBattleBadRequest{Message: err.Error()}, nil
 	}
 
-	now := time.Now()
-	b := &battle{
-		id:      randomID(s.rng, 6),
-		status:  "waiting",
-		version: 1,
-		created: now,
-		touched: now,
-		sides: []*side{{
-			trainer: trainer,
-			token:   params.XTrainerToken,
-			team:    team,
-		}},
-	}
-	b.log = append(b.log, api.BattleEvent{
-		TurnNumber: 0,
-		Text:       fmt.Sprintf("%s is looking for a battle.", trainer),
-	})
+	b := newBattle(randomID(s.rng, 6), trainer, params.XTrainerToken, team, time.Now())
 	if err := s.battles.create(ctx, b); err != nil {
 		return nil, fmt.Errorf("creating battle: %w", err)
 	}
@@ -101,26 +85,9 @@ func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api
 
 	var out *api.Battle
 	err = s.battles.update(ctx, params.ID, func(b *battle) error {
-		if b.status != "waiting" {
-			return errBattleFull
+		if err := b.join(trainer, params.XTrainerToken, team); err != nil {
+			return err
 		}
-		if b.sides[0].token == params.XTrainerToken {
-			return errAlreadyIn
-		}
-
-		b.sides = append(b.sides, &side{
-			trainer: trainer,
-			token:   params.XTrainerToken,
-			team:    team,
-		})
-		b.status = "active"
-		b.turn = 0
-		b.version++
-		b.touched = time.Now()
-		b.log = append(b.log, api.BattleEvent{
-			TurnNumber: 0,
-			Text:       fmt.Sprintf("%s joined. %s moves first!", trainer, b.sides[0].trainer),
-		})
 		out = b.toAPI()
 		return nil
 	})
