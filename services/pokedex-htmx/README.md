@@ -10,11 +10,19 @@ be compared with the React version, not to be a second front door.
 New here? Start at the [repo README](../../README.md) and get the API
 running first.
 
-## Run it
+## Usage
+
+The same application as [`pokedex-web`](../pokedex-web) — browse, pick a
+team, battle — with the same screens and the same behaviour. It is LAN
+only, at `pokedex-htmx.home.chrisscotmartin.com`, because it exists to
+be compared with the React version rather than to be a second front
+door.
+
+## Build
 
 ```sh
-npm install
-POKEDEX_URL=http://127.0.0.1:3000 PORT=3002 INSECURE_COOKIES=1 npm start
+make deps
+POKEDEX_URL=http://127.0.0.1:3000 PORT=3002 INSECURE_COOKIES=1 make run
 ```
 
 <http://localhost:3002>.
@@ -56,10 +64,10 @@ Apple Silicon (the server cannot). The browser never receives JSON.
 | `css.ts` | the stylesheets, lifted verbatim from pokedex-web |
 | `vendor/` | htmx and idiomorph, vendored, no build step |
 
-## Test it
+## Testing
 
 ```sh
-npm test          # typecheck, then node --test
+make test         # typecheck, then node --test
 ```
 
 If you bump htmx or idiomorph in `vendor/`, run `npm run vendor` to
@@ -67,3 +75,12 @@ regenerate `vendor/sources.ts`. They are compiled into the bundle as
 strings on purpose: the image ships `dist/server.js` and nothing else,
 so a file read from disk at runtime works locally and 500s in
 production.
+
+## Deploy
+
+CI builds and pushes an image on every push to `main`;
+argocd-image-updater rolls it out. Manifests are generated from
+`config.yaml` by `homelabctl render` — change the config, not `deploy/`.
+
+There is deliberately no `public: true` host: this service is reachable
+on the LAN only.

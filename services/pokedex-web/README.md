@@ -7,11 +7,19 @@ The React front end, and the only service on the public internet
 New here? Start at the [repo README](../../README.md) and get the API
 running first; nothing below works without it.
 
-## Run it
+## Usage
+
+The React front end, and the one the public internet reaches at
+`pokemon.chrisscotmartin.com`. Browse the pokédex, pick a team of three,
+open or join a battle, and play it out against another trainer.
+
+Everything it shows comes from the `pokedex` API; it has no database.
+
+## Build
 
 ```sh
-npm install
-POKEDEX_URL=http://127.0.0.1:3000 PORT=3001 npm start
+make deps
+POKEDEX_URL=http://127.0.0.1:3000 PORT=3001 make run
 ```
 
 <http://localhost:3001>. `PORT` matters: this service and the API both
@@ -42,15 +50,24 @@ second round trip and no empty first paint.
 The browser talks to *this* server, which talks to the API. It never
 calls the pokédex API directly.
 
-## Test it
+## Testing
 
 ```sh
-npm test          # vitest + Testing Library, in jsdom
-npm run typecheck
+make test         # typecheck, then vitest + Testing Library in jsdom
 ```
 
-`npm test` builds the client bundle first, because some tests render
-against it.
+It builds the client bundle first, because some tests render against it.
+
+## Deploy
+
+CI builds and pushes an image on every push to `main`;
+argocd-image-updater rolls it out. Manifests are generated from
+`config.yaml` by `homelabctl render` — change the config, not `deploy/`.
+
+```sh
+homelabctl check deploy   # manifests and config
+homelabctl status         # what Argo made of it
+```
 
 ## Compare it with the htmx port
 

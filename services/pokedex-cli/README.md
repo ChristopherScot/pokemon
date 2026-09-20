@@ -4,11 +4,49 @@ Owned by me-myself-and-i.
 
 ## Usage
 
-TODO — what this tool does, and the commands it offers.
+Look things up in the pokédex, and play a battle, without leaving the
+shell. Everything comes from the `pokedex` API.
 
 ```sh
-make run ARGS='--help'
+pokedex-cli show pikachu             # one pokemon in detail
+pokedex-cli pokemon --type water     # the list, filtered
+pokedex-cli pokemon --limit 10
+pokedex-cli types                    # every type and how many have it
 ```
+
+Battling is the same steps the web UI walks you through. Teams are
+positional and optional — the server fills in whatever you leave out,
+so naming none is the fastest way into a fight:
+
+```sh
+pokedex-cli register ash
+pokedex-cli open pikachu onix gengar   # or just: pokedex-cli open
+pokedex-cli lobby                      # who is waiting
+pokedex-cli join <battle-id> charizard blastoise venusaur
+pokedex-cli watch <battle-id>          # blocks until it is your turn
+pokedex-cli battle <battle-id>         # the current state
+```
+
+Attacking is by POSITION, 1-based, exactly as `battle` prints them —
+`attack abc123 1 2 3` is your first pokemon using its second move on
+their third:
+
+```sh
+pokedex-cli attack <battle-id> <my-pokemon> <move> <their-pokemon>
+```
+
+A move shown as `(disabled)` cannot be used this turn.
+
+`pokedex-cli update` replaces the binary with the newest release.
+
+It talks to the deployed API by default. Point it at a local one with
+`POKEDEX_URL`:
+
+```sh
+POKEDEX_URL=http://127.0.0.1:3000 pokedex-cli types
+```
+
+Run it without installing: `make run ARGS='show pikachu'`.
 
 ## Build
 

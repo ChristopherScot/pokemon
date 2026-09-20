@@ -2,6 +2,24 @@
 
 Owned by me-myself-and-i.
 
+## Usage
+
+The API, and the only service with a database. It owns the pokédex data
+and every rule of a battle — damage, type effectiveness, whose turn it
+is — so the five clients (two web front ends, a TUI, a CLI and an
+Android app) never re-implement any of it.
+
+```sh
+curl localhost:3000/pokemon/pikachu
+curl localhost:3000/types
+curl localhost:3000/trainers/waiting
+```
+
+Battles are `POST /battles`, `POST /battles/{id}/join` and
+`POST /battles/{id}/turn`, all authenticated with an
+`X-Trainer-Token` from `POST /trainers`. `openapi.yml` is the full
+list.
+
 ## The spec is the source of truth
 
 `openapi.yml` describes this API. Everything else is generated from it:
@@ -45,18 +63,28 @@ a replacement has to keep.
 purpose: a consumer imports that package, and getting the protocol client
 without the defaults would be worse than useless.
 
-## Working on it
+## Build
 
 ```sh
-docker compose up -d             # the database the tests want
-go test ./...                    # server, client and paging
-go run .                         # PORT=3000 by default
+docker compose up -d             # postgres, on :15432
+make run                         # PORT=3000 by default
+wgo run .                        # the same, restarted on every save
 homelabctl regen                 # after editing openapi.yml
 homelabctl check deploy          # deploy manifests and spec problems
 homelabctl diff                  # what would change in the GitOps repo
 ```
 
-### Run the tests against a real database
+Run it with `DATABASE_URL` set, or you get the in-memory store and the
+pokédex compiled into the binary — which is not what production does.
+The startup log says which one you got.
+
+## Testing
+
+```sh
+make test                        # what CI runs
+```
+
+### Why a real database matters here
 
 Battle state round-trips through postgres as JSON, so a field the
 encoder cannot see is lost there and nowhere else. That is not
@@ -227,7 +255,7 @@ traffic to a dependency that is already struggling. Pass
 `api.ExponentialRetry{}` or `api.NoRetry{}`, and a `Breaker`, when a
 specific call wants something else.
 
-## Deploying
+## Deploy
 
 Push to main. CI builds the image; argocd-image-updater sees the new digest
 and commits it to the homelab repo; ArgoCD syncs it. No homelab credential

@@ -4,7 +4,19 @@ Owned by me-myself-and-i.
 
 ## Usage
 
-TODO — what the app does on a phone.
+The pokédex and a full battle, as an Android app. Go and
+[Gio](https://gioui.org/) — one codebase, no Java or Kotlin.
+
+Five screens: register, browse, lobby, team picker, battle. It talks to
+the deployed API, so there is nothing to run alongside it.
+
+On first launch it looks for a saved trainer. On a desktop that is the
+same identity file the CLI writes, so a terminal and a window share a
+trainer; on Android each app has its own storage, so it asks for a name
+instead — which is what the register screen is for.
+
+`make run` opens it in a window on your desktop, which is the fast way
+to work on it. `make apk` builds something a phone can install.
 
 ## Build
 

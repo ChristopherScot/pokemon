@@ -4,11 +4,35 @@ Owned by me-myself-and-i.
 
 ## Usage
 
-TODO — what this terminal app shows, and how to move around it.
+The whole pokédex and a full battle, full-screen in a terminal.
 
 ```sh
-make run ARGS='--help'
+pokedex-tui
 ```
+
+Four screens: browse, lobby, team picker, battle. Every screen prints
+its own keys along the bottom, so there is nothing to memorise:
+
+| | |
+|---|---|
+| `↑` `↓` / `j` `k` | move |
+| `enter` | pick — a pokemon, a battle, a move |
+| `/` | filter by name |
+| `b` | the battle lobby |
+| `ctrl+r` | open a battle as your trainer |
+| `g` | back to a battle you wandered away from |
+| `backspace` | undo the last pick |
+| `esc` | back |
+| `q` | quit |
+
+It talks to the deployed API by default. Point it at a local one with
+`POKEDEX_URL`:
+
+```sh
+POKEDEX_URL=http://127.0.0.1:3000 pokedex-tui
+```
+
+`pokedex-tui update` replaces the binary with the newest release.
 
 ## Build
 
