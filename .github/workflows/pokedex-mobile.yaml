@@ -144,9 +144,65 @@ jobs:
             -version "${VERSION#v}.${{ github.run_number }}" \
             -minsdk 31 \
             -ldflags "-X main.version=$VERSION" \
-            -o pokedex-mobile.apk \
+            -o pokedex-mobile.raw.apk \
             .
-          sha256sum pokedex-mobile.apk > checksums.txt
+
+      # Repackage the native libraries UNCOMPRESSED and page-aligned,
+      # then re-sign.
+      #
+      # gogio writes every entry with zip.Deflate and runs `zipalign 4`.
+      # Modern Android refuses to install an APK whose .so files are
+      # compressed - the loader mmaps them straight out of the APK, so
+      # they must be STORED - and Android 15 wants 16 KB alignment
+      # rather than 4. The failure is the worst kind: the installer
+      # churns and then says only "app not installed", with the real
+      # reason in logcat that a phone user never sees.
+      #
+      # Signing has to happen after, because rewriting the zip
+      # invalidates the v2 block gogio produced.
+      - name: Make the APK installable
+        if: steps.gate.outputs.go == 'true'
+        working-directory: services/pokedex-mobile
+        run: |
+          set -eu
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "build-tools: $BT"
+
+          # -p aligns uncompressed .so files to the page boundary;
+          # 16 is the page size Android 15 requires.
+          "$BT/zipalign" -f -p 16 pokedex-mobile.raw.apk pokedex-mobile.aligned.apk
+
+          # gogio already generated a debug keystore; reuse it so the
+          # signing identity does not change within a build.
+          KS="$HOME/.android/debug.keystore"
+          if [ ! -f "$KS" ]; then
+            mkdir -p "$HOME/.android"
+            keytool -genkeypair -keystore "$KS" -storepass android \
+              -keypass android -alias androiddebugkey -keyalg RSA \
+              -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          "$BT/apksigner" sign \
+            --ks "$KS" --ks-pass pass:android --key-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --v1-signing-enabled true --v2-signing-enabled true \
+            --v3-signing-enabled true --v4-signing-enabled false \
+            --out pokedex-mobile.apk pokedex-mobile.aligned.apk
+
+          "$BT/apksigner" verify --print-certs pokedex-mobile.apk
+          rm -f pokedex-mobile.raw.apk pokedex-mobile.aligned.apk
+
+      # Fails the build rather than publishing an APK a phone refuses.
+      # Both checks are things that shipped broken once.
+      - name: Check the APK will install
+        if: steps.gate.outputs.go == 'true'
+        working-directory: services/pokedex-mobile
+        run: python3 ../../scripts/check_apk.py pokedex-mobile.apk
+
+      - name: Checksums
+        if: steps.gate.outputs.go == 'true'
+        working-directory: services/pokedex-mobile
+        run: sha256sum pokedex-mobile.apk > checksums.txt
 
       - uses: softprops/action-gh-release@v2
         if: steps.gate.outputs.go == 'true'
