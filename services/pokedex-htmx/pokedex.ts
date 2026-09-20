@@ -58,7 +58,8 @@ export function teamSlots(ctx: Ctx): string {
       `<img src="${esc(spriteOf(ctx, name))}" alt="${esc(name)}">` +
       `<button type="button" class="remove" aria-label="remove ${esc(name)} from your team"` +
       ` hx-post="/team?drop=${encodeURIComponent(name)}"` +
-      ` hx-include="#team-form" hx-target="#team" hx-swap="outerHTML"` +
+      ` hx-include="#team-form" hx-sync="#team-form:queue all"` +
+      ` hx-target="#team" hx-swap="outerHTML"` +
       ` hx-vals='{"active":"${esc(ctx.active)}","join":"${esc(ctx.join)}"}'>×</button>` +
       `</div>`
   }).join('')
@@ -97,8 +98,15 @@ export function card(mon: Pokemon, ctx: Ctx): string {
 
   return `<button type="button" id="card-${esc(mon.name)}"` +
     ` class="card${picked ? ' picked' : ''}" aria-pressed="${picked}"${disabled}` +
+    // hx-sync on the FORM, not on the card: every pick posts the team
+    // the form holds at click time, so two requests in flight carry two
+    // different teams and the slower one wins. Clicking three cards
+    // quickly left ONE pokemon picked - the bug a person hits
+    // immediately and a scripted test with waits between clicks never
+    // sees. `queue all` keeps every click instead of dropping any.
     ` hx-post="/team?toggle=${encodeURIComponent(mon.name)}"` +
-    ` hx-include="#team-form" hx-target="#team" hx-swap="outerHTML"` +
+    ` hx-include="#team-form" hx-sync="#team-form:queue all"` +
+    ` hx-target="#team" hx-swap="outerHTML"` +
     ` hx-vals='{"active":"${esc(ctx.active)}","join":"${esc(ctx.join)}"}'>` +
     `<header><span class="num">#${String(mon.id).padStart(3, '0')}</span>` +
     `<h2>${esc(mon.name)}</h2></header>` +
@@ -111,7 +119,13 @@ export function card(mon: Pokemon, ctx: Ctx): string {
 }
 
 export function grid(ctx: Ctx, oob = false): string {
-  return `<main class="grid" id="grid"${oob ? ' hx-swap-oob="true"' : ''}>` +
+  // morph, not the default outerHTML. An OOB swap REPLACES the element,
+  // which threw away every card in the grid - including the one that
+  // was clicked, and any click still queued behind it. Clicking three
+  // cards quickly sent one request and silently dropped the other two,
+  // because the elements they belonged to no longer existed. Morphing
+  // mutates the cards in place, so they survive their own swap.
+  return `<main class="grid" id="grid"${oob ? ' hx-swap-oob="morph:outerHTML"' : ''}>` +
     `${ctx.pokemon.map((p) => card(p, ctx)).join('')}` +
     `<p class="empty" id="no-match" hidden>nothing matches “<span id="no-match-q"></span>”.</p>` +
     `</main>`
@@ -125,7 +139,7 @@ export function filters(ctx: Ctx, oob = false): string {
   // Type filters stay LINKS, as in pokedex-web: each is a real URL you
   // can share. The join id AND the team ride along, or filtering to
   // "water" mid-pick would quietly drop both.
-  return `<nav class="filters" id="filters"${oob ? ' hx-swap-oob="true"' : ''}>` +
+  return `<nav class="filters" id="filters"${oob ? ' hx-swap-oob="morph:outerHTML"' : ''}>` +
     link({}, 'all', !ctx.active) +
     ctx.types.map((t) =>
       link({ active: t.name }, `${esc(t.name)} <small>${t.count}</small>`,

@@ -1,6 +1,7 @@
-import test from 'node:test'
+import test, { after } from 'node:test'
 import assert from 'node:assert/strict'
 
+import { app } from './server.ts'
 import { board, battlePage } from './battle.ts'
 import { downloadsFooter, pickLinks } from './downloads.ts'
 import { lobbyPage, waitingList } from './lobby.ts'
@@ -9,6 +10,8 @@ import { card, filters, grid, page, readyAction, teamSlots, url, type Ctx } from
 const move = (name: string, type: string, power: number) => ({
   name, type, power, description: '', effect: '', pp: 15, damageClass: 'special',
 })
+
+after(() => app.close())
 
 const mon = (name: string, id = 1) => ({
   id, name, description: '', genus: '', types: ['electric'],
@@ -255,10 +258,10 @@ test('a picked pokemon keeps its sprite after filtering it out of the grid', () 
 test('the filter links are re-rendered with the team after a pick', () => {
   const picked = ctx({ team: ['pikachu'], types: [{ name: 'water', count: 18 }] })
   const nav = filters(picked, true)
-  assert.match(nav, /hx-swap-oob="true"/)
+  assert.match(nav, /hx-swap-oob="morph:outerHTML"/)
   assert.match(nav, /href="\/\?type=water&team=pikachu"/)
   // and the grid names itself for the same swap
-  assert.match(grid(picked, true), /id="grid" hx-swap-oob="true"/)
+  assert.match(grid(picked, true), /id="grid" hx-swap-oob="morph:outerHTML"/)
   assert.doesNotMatch(grid(picked), /hx-swap-oob/)
 })
 
@@ -289,4 +292,66 @@ test('the move picker keeps ids so a poll cannot detach the attack button', () =
   for (const id of ['id="pick"', 'id="moves"', 'id="commit"', 'id="go"', 'id="pick-who"']) {
     assert.ok(html.includes(id), `missing ${id}`)
   }
+})
+
+// htmx only swaps a response it considers successful, so a 4xx body is
+// fetched and thrown away. Returning 409 for a taken name meant the
+// page did not move at all: no error, no hint, and every retry did
+// nothing either.
+test('a rejected name comes back as something htmx will actually swap', async () => {
+  const res = await app.inject({
+    method: 'POST', url: '/battle/register',
+    payload: { name: '' },
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  })
+  assert.equal(res.statusCode, 200, 'htmx ignores the body of a 4xx')
+  assert.match(res.body, /role="alert"/)
+  assert.match(res.body, /name is required/)
+})
+
+// The same endpoint serves the lobby row and the pokedex dialog, which
+// have different swap targets. Sending the lobby row into the dialog
+// would delete the dialog and the team it carries.
+test('a rejected name keeps the shape its caller asked for', async () => {
+  const fromDialog = await app.inject({
+    method: 'POST', url: '/battle/register',
+    payload: 'name=&commit=1&team=pikachu&team=onix',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  })
+  assert.match(fromDialog.body, /id="name-dialog"/, 'the dialog must come back as a dialog')
+  assert.match(fromDialog.body, /name="team" value="pikachu"/, 'and keep the picks')
+  assert.match(fromDialog.body, /name="team" value="onix"/)
+
+  const fromLobby = await app.inject({
+    method: 'POST', url: '/battle/register',
+    payload: 'name=',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  })
+  assert.match(fromLobby.body, /id="reg-row"/)
+  assert.doesNotMatch(fromLobby.body, /id="name-dialog"/)
+})
+
+// Every pick posts the team the form holds at click time, so two clicks
+// in flight carry two different teams and the slower one wins. Clicking
+// three cards quickly left ONE pokemon picked.
+test('picking cards in a hurry cannot lose a pick', () => {
+  const html = page(ctx({ team: ['pikachu'] }))
+  const syncs = html.match(/hx-sync="#team-form:queue all"/g) ?? []
+  assert.ok(syncs.length >= 2,
+    'every control that posts the team needs to queue against the form')
+  // the remove button too, not just the cards
+  assert.match(html, /class="remove"[^>]*hx-sync="#team-form:queue all"|hx-sync="#team-form:queue all"[^>]*class="remove"/s)
+})
+
+// An out-of-band swap REPLACES its target, which threw away every card
+// in the grid - including the one just clicked, and any click queued
+// behind it. Clicking three cards quickly sent one request and silently
+// dropped the other two, so you could never get a team picked. Morphing
+// mutates the cards in place, so they survive their own swap.
+test('an out-of-band grid swap does not destroy the cards it swaps', () => {
+  const html = grid(ctx({ team: ['pikachu'] }), true)
+  assert.match(html, /hx-swap-oob="morph:outerHTML"/)
+  assert.doesNotMatch(html, /hx-swap-oob="true"/,
+    'a plain oob swap replaces the element and loses queued clicks')
+  assert.match(filters(ctx(), true), /hx-swap-oob="morph:outerHTML"/)
 })

@@ -225,21 +225,41 @@ export function register(app: FastifyInstance) {
   // pokedex-web posted the name, then RE-POSTED the original request
   // from the browser after a 401. Here the pending team and join id ride
   // along with the name, so one exchange registers and commits.
+  // A rejected name comes back 200 with the form again and the reason
+  // beside it.
+  //
+  // Not 409: htmx only swaps a response it considers successful, so a
+  // 4xx body is fetched, discarded, and the page does not move. Typing
+  // a name that was already taken did NOTHING - no error, no hint - and
+  // every retry did nothing too. The status is the wrong place to carry
+  // this: the request reached the server and the server has something
+  // to say back, which is a 200 whose body happens to be a complaint.
   app.post('/battle/register', async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>
     const name = one(body.name).trim()
-    if (!name) return reply.code(400).type('text/html').send(registerRow())
+    // The same POST serves two forms with two different targets: the
+    // lobby's row, and the dialog the pokedex shows when you hit Ready
+    // without a name. Each has to get its own shape back or the swap
+    // replaces the wrong thing - sending the lobby row into the dialog
+    // deletes the dialog and the team it was carrying.
+    const fromDialog = one(body.commit) !== '' || one(body.join) !== '' ||
+      readTeam(body.team).length > 0
+    const again = (why: string) =>
+      reply.type('text/html').send(fromDialog
+        ? nameDialog(readTeam(body.team), one(body.join), one(body.active), why)
+        : registerRow() + `<p class="sub" role="alert">${esc(why)}</p>`)
+
+    if (!name) return again('a name is required')
 
     let created
     try {
       created = await api.POST('/trainers', { body: { name } })
     } catch (err) {
       request.log.error({ err }, 'pokedex unreachable')
-      return reply.code(502).type('text/html').send(registerRow())
+      return again('the pokedex is unreachable — try again in a moment')
     }
     if (created.error) {
-      return reply.code(409).type('text/html').send(
-        registerRow() + `<p class="sub" role="alert">that name is taken</p>`)
+      return again('that name is taken')
     }
 
     reply.header('set-cookie',
@@ -403,7 +423,7 @@ export const readTurn = (v: Record<string, unknown>): Turn => {
 // The name dialog, returned in place of the action that needed a name.
 // It carries the pending team so registering completes the original
 // intent rather than dropping it.
-function nameDialog(team: string[], join: string, active = ''): string {
+function nameDialog(team: string[], join: string, active = '', why = ''): string {
   const carried = team.map((t) => `<input type="hidden" name="team" value="${esc(t)}">`).join('')
   return `<div class="modal-backdrop" id="name-dialog" role="dialog" aria-modal="true"
        aria-label="Pick a trainer name">
@@ -415,6 +435,7 @@ function nameDialog(team: string[], join: string, active = ''): string {
     <p>Other trainers see this in the lobby.</p>
     <input id="trainer-name" name="name" aria-label="Trainer name" maxlength="32"
            placeholder="e.g. Ash" autocomplete="off" autofocus required>
+    ${why ? `<p class="modal-error" role="alert">${esc(why)}</p>` : ''}
     <div class="modal-actions">
       <!-- Dismissing a dialog changes no server data, so it is not a
            hypermedia exchange: removing the node is the whole action. -->
