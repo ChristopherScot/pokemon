@@ -12,7 +12,6 @@ import (
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
-	"github.com/christopherscot/pokemon/services/pokedex/battletext"
 )
 
 const listWidth = 34
@@ -34,7 +33,7 @@ type errMsg struct{ err error }
 func (e errMsg) Error() string { return e.err.Error() }
 
 func statusFor(err error) string {
-	if advice := battletext.IdentityAdvice(err); advice != "" {
+	if advice := battleclient.IdentityAdvice(err); advice != "" {
 		return advice + " — run `pokedex-cli register <name>`"
 	}
 	return err.Error()
