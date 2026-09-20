@@ -95,8 +95,11 @@ func fromRow(id, status string, version, turn, turnNumber int, winner string,
 		return nil, fmt.Errorf("decoding battle %q: %w", id, err)
 	}
 	b := &battle{
-		id:         id,
-		status:     status,
+		id: id,
+		// The column is TEXT; the field is the enum. This cast is
+		// the one place a database string becomes a status, which
+		// is why the CHECK constraint on the column matters.
+		status:     api.BattleStatus(status),
 		version:    version,
 		turn:       turn,
 		turnNumber: turnNumber,
@@ -145,7 +148,7 @@ func (p *pgStore) create(ctx context.Context, b *battle) error {
 
 	if err := q.CreateBattle(ctx, dbgen.CreateBattleParams{
 		ID:         b.id,
-		Status:     b.status,
+		Status:     string(b.status),
 		Version:    int32(b.version),
 		Turn:       int32(b.turn),
 		TurnNumber: int32(b.turnNumber),
@@ -255,7 +258,7 @@ func (p *pgStore) attemptUpdate(ctx context.Context, id string, fn func(*battle)
 	}
 	if err := q.UpdateBattle(ctx, dbgen.UpdateBattleParams{
 		ID:         b.id,
-		Status:     b.status,
+		Status:     string(b.status),
 		Turn:       int32(b.turn),
 		TurnNumber: int32(b.turnNumber),
 		Winner:     b.winner,
