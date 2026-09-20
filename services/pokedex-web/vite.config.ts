@@ -19,6 +19,11 @@ export default defineConfig({
     // the shipped Node can run natively.
     target: 'node22',
     outDir: 'dist',
+    // Do NOT empty dist/: the browser bundles are built into
+    // dist/client first, and Vite's default would delete them here -
+    // leaving a server that starts, serves a page, and throws on the
+    // first request because the script it inlines is gone.
+    emptyOutDir: false,
     // The bundle is one file and nothing reads it but Node; a sourcemap
     // would double the image's only layer for a stack trace that still
     // points at inlined code.

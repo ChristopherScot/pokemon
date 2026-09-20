@@ -1,5 +1,7 @@
 import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
+
+import { installDom } from './client/testdom.ts'
 import { readFile } from 'node:fs/promises'
 
 import { app } from './server.ts'
@@ -121,170 +123,78 @@ test('every battle route reports 502 when the API is unreachable', async () => {
 // text - the arithmetic is the bug, and only executing it proves the
 // guard works.
 test('a spectator gets a board instead of an endless spinner', async () => {
-  const { battlePage } = await import('./battle.ts')
-  const page = battlePage({ id: 'abc123', trainer: 'not-playing' })
+  // Imports the module. This used to regex the <script> tag out of the
+  // rendered page and eval it, which could only reach what the string
+  // happened to expose and passed whether or not the code compiled.
+  const dom = installDom()
+  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
+  const { render, resetForTest } = await import('./client/battle.ts')
+  resetForTest()
 
-  const open = page.match(/<script[^>]*>/)
-  assert.ok(open, 'the battle page should ship a script')
-  const start = open.index! + open[0].length
-  const script = page.slice(start, page.lastIndexOf('</script>'))
-
-  // Minimal DOM: the script only needs these to render a board.
-  const board: { innerHTML: string; className: string; scrollTop: number } = {
-    innerHTML: 'loading…', className: '', scrollTop: 0,
-  }
-  const els: Record<string, unknown> = { board, log: board }
-  const sandbox = {
-    document: {
-      getElementById: (id: string) => els[id] ?? null,
-      addEventListener: () => {},
-    },
-    location: { pathname: '/battle/abc123', reload: () => {} },
-    fetch: async () => ({ ok: false, status: 404, json: async () => ({}) }),
-    setTimeout: () => 0,
-    setInterval: () => 0,
-    requestAnimationFrame: () => 0,
-    console,
-  }
-
-  // Pull render() out of the script and call it with a battle whose
-  // only side belongs to somebody else.
-  const run = new Function(
-    ...Object.keys(sandbox),
-    script + '\n;return { render };',
-  ) as (...a: unknown[]) => { render: (b: unknown) => void }
-
-  const { render } = run(...Object.values(sandbox))
   render({
-    id: 'abc123',
-    status: 'waiting',
-    version: 1,
-    turn: null,
-    winner: null,
-    log: [],
-    sides: [{
-      trainer: 'someone-else',
-      team: [{
-        name: 'onix', types: ['rock'], hp: 95, maxHp: 95,
-        fainted: false, sprite: '', moves: [],
-      }],
-    }],
-  })
+    id: 'abc123', status: 'waiting', version: 1, turn: null, log: [],
+    sides: [{ trainer: 'misty', team: [
+      { name: 'staryu', hp: 10, maxHp: 10, types: ['water'], moves: [], fainted: false },
+    ] }],
+  } as never)
 
-  assert.notEqual(board.innerHTML, 'loading…',
-    'the board never rendered - a spectator is stuck on the spinner')
-  assert.match(board.innerHTML, /someone-else/,
-    'the spectator board should show the trainer already waiting')
+  const board = dom.get('board')
+  assert.notEqual(board.innerHTML, 'loading…', 'a non-participant must still get a board')
+  assert.match(board.innerHTML, /staryu/, 'and see the team that is waiting')
+  dom.restore()
 })
 
-// A battle that no longer exists must stop the polling loop.
-//
-// A 404 makes res.ok false, so the old loop skipped the body and called
-// setTimeout anyway - forever, with no counter and no ceiling. Battles
-// live in the server's memory, so a deploy ends every one of them, and
-// a tab left open on a finished battle polled once a second for five
-// hours. Loki recorded ~1,760 requests per 30 minutes, unbroken, and
-// that traffic is what pushed this service past its memory limit and
-// got it OOMKilled.
-//
-// Runs the real browser script so the counting is what actually ships.
+// A 404 means the battle is gone. Retrying it forever is what produced
+// 46,000 requests from one tab over thirteen hours, so the loop counts
+// consecutive misses and stops, saying why.
 test('polling stops once the battle is gone', async () => {
-  const { battlePage } = await import('./battle.ts')
-  const page = battlePage({ id: 'abc123', trainer: 'someone' })
+  const dom = installDom()
+  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'someone', colours: {} })
+  dom.replies = [{ ok: false, status: 404 }]
+  const { poll, resetForTest } = await import('./client/battle.ts')
+  resetForTest()
 
-  const open = page.match(/<script[^>]*>/)
-  assert.ok(open, 'the battle page should ship a script')
-  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
-
-  const board = { innerHTML: 'loading…', className: '', scrollTop: 0 }
-  let fetches = 0
-  const pending: Array<() => void> = []
-
-  const sandbox = {
-    document: {
-      getElementById: (id: string) => (id === 'board' || id === 'log' ? board : null),
-      addEventListener: () => {},
-    },
-    location: { pathname: '/battle/abc123', reload: () => {} },
-    // Always gone.
-    fetch: async () => { fetches++; return { ok: false, status: 404, json: async () => ({}) } },
-    // Captured rather than timed, so the test drives the loop.
-    setTimeout: (fn: () => void) => { pending.push(fn); return 0 },
-    setInterval: () => 0,
-    requestAnimationFrame: () => 0,
-    console,
+  // Poll repeatedly. A loop that gives up leaves the last call having
+  // scheduled nothing; one that does not will keep asking forever.
+  for (let i = 0; i < 20; i++) {
+    dom.timers = 0
+    await poll()
+    if (dom.timers === 0) break
   }
 
-  const run = new Function(...Object.keys(sandbox), script + '\n;return {};') as
-    (...a: unknown[]) => unknown
-  run(...Object.values(sandbox))
-
-  // Drive far more turns than the miss ceiling; it must stop on its own.
-  //
-  // A tick is yielded before each one because poll() is async: the
-  // setTimeout it schedules is queued a microtask after its fetch
-  // resolves, so draining immediately finds the queue still empty and
-  // the loop looks like it stopped when it has not started.
-  for (let i = 0; i < 50; i++) {
-    await new Promise((r) => setImmediate(r))
-    const next = pending.shift()
-    if (!next) break
-    next()
-  }
-  await new Promise((r) => setImmediate(r))
-
-  assert.ok(fetches < 20,
-    `polled ${fetches} times against a battle that is gone; the loop never stops`)
-  assert.match(board.innerHTML, /this battle is over/,
+  assert.equal(dom.timers, 0, 'the poll never gave up on a battle that is gone')
+  assert.match(dom.get('board').innerHTML, /this battle is over/,
     'the player is left on a spinner with no explanation')
+  dom.restore()
 })
 
-// Drives the REAL poll() out of the page, so these assert on the code a
-// browser runs rather than on a copy of it.
+// Drives the real poll() against a scripted sequence of replies.
+//
+// Imports the module rather than eval'ing the page's <script>: the
+// browser code is a bundle now, so the old harness could only reach
+// minified names, and it never verified the code compiled at all.
 async function pollHarness(responses: Array<{ ok: boolean; status: number }>) {
-  const { battlePage } = await import('./battle.ts')
-  const page = battlePage({ id: 'abc123', trainer: 'ash' })
-  const open = page.match(/<script[^>]*>/)!
-  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+  const dom = installDom()
+  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
+  dom.replies = responses.map((r) => ({
+    ...r,
+    body: { version: 1, sides: [], log: [] },
+  }))
+  const { poll, resetForTest } = await import('./client/battle.ts')
+  resetForTest()
 
-  const board = { innerHTML: 'loading…', className: '', scrollTop: 0 }
-  const els: Record<string, unknown> = { board, log: board }
-  const sent: Array<Record<string, string>> = []
-  let reschedules = 0
-  let i = 0
-
-  const sandbox = {
-    document: {
-      getElementById: (id: string) => els[id] ?? null,
-      addEventListener: () => {},
-    },
-    location: { pathname: '/battle/abc123', reload: () => {} },
-    fetch: async (_url: string, init?: { headers?: Record<string, string> }) => {
-      sent.push(init?.headers ?? {})
-      const r = responses[Math.min(i++, responses.length - 1)]
-      return { ...r, json: async () => ({ version: 1, sides: [], log: [] }) }
-    },
-    setTimeout: (fn: () => void) => { reschedules++; return 0 },
-    setInterval: () => 0,
-    requestAnimationFrame: () => 0,
-    console,
-  }
-
-  const run = new Function(
-    ...Object.keys(sandbox),
-    script + '\n;return { poll };',
-  ) as (...a: unknown[]) => { poll: () => Promise<void> }
-
-  const { poll } = run(...Object.values(sandbox))
-  // The script calls poll() itself on load, so let that settle and
-  // count only what the explicit call below does.
-  await new Promise((r) => setImmediate(r))
-  sent.length = 0
-  reschedules = 0
-  i = 0
-
+  // The module auto-starts only when #board exists in a real document;
+  // under the test harness it does not, so this is the only poll.
+  dom.fetches.length = 0
+  dom.timers = 0
   await poll()
-  return { sent, reschedules, board }
+
+  return {
+    sent: dom.fetches.map((f) => f.init?.headers ?? {}),
+    reschedules: dom.timers,
+    board: dom.get('board'),
+    dom,
+  }
 }
 
 // The bug this closes: anything that was not 200 or 404 fell through to
@@ -317,57 +227,23 @@ test('every request reports the UI version', async () => {
   }
 })
 
-// Joining used to give you no say in your team at all: the request
-// carried no body, so the server filled it randomly and nothing on
-// screen suggested otherwise. The first fix put a text box here, which
-// was better but still meant typing three names from memory - the card
-// grid that shows you what you are choosing between was wired only to
-// "open a battle", never to joining one.
-//
-// So the requirement these pin is: a joinable battle must offer a route
-// to the real picker, and it must carry the battle id so the picker
-// knows what it is joining.
 test('a joinable battle links to the team picker', async () => {
-  const { battlePage } = await import('./battle.ts')
-  const page = battlePage({ id: 'abc123', trainer: 'ash' })
-  const open = page.match(/<script[^>]*>/)!
-  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
-
-  // The join panel is built by render(), not sent in the HTML, so the
-  // page string never contains it. Run the real thing.
-  const board = { innerHTML: '', className: '', scrollTop: 0 }
-  const stub = {
-    innerHTML: '', textContent: '', className: '', scrollTop: 0, scrollHeight: 0,
-    addEventListener: () => {}, querySelectorAll: () => [],
-    classList: { add: () => {}, remove: () => {} },
-  }
-  const sandbox = {
-    document: {
-      getElementById: (id: string) => (id === 'board' ? board : stub),
-      addEventListener: () => {},
-      querySelectorAll: () => [],
-    },
-    location: { pathname: '/battle/abc123', reload: () => {} },
-    fetch: async () => ({ ok: true, status: 200, json: async () => ({ version: 1, sides: [], log: [] }) }),
-    setTimeout: () => 0,
-    setInterval: () => 0,
-    requestAnimationFrame: () => 0,
-    console,
-  }
-  const run = new Function(...Object.keys(sandbox), script + '\n;return { render };')
-  const { render } = run(...Object.values(sandbox)) as { render: (b: unknown) => void }
+  const dom = installDom()
+  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
+  const { render, resetForTest } = await import('./client/battle.ts')
+  resetForTest()
 
   // One side and still waiting: joinable.
   render({
     id: 'abc123', status: 'waiting', version: 1, turn: null, log: [],
-    sides: [{ trainer: 'misty', team: [{ name: 'staryu', hp: 10, maxHp: 10, types: ['water'], moves: [], fainted: false }] }],
-  })
+    sides: [{ trainer: 'misty', team: [
+      { name: 'staryu', hp: 10, maxHp: 10, types: ['water'], moves: [], fainted: false },
+    ] }],
+  } as never)
 
-  assert.match(
-    board.innerHTML,
-    /href="\/\?join=abc123"/,
-    'the join panel should link to the pokedex picker for THIS battle',
-  )
+  assert.match(dom.get('board').innerHTML, /href="\/\?join=abc123"/,
+    'the join panel should link to the pokedex picker for THIS battle')
+  dom.restore()
 })
 
 test('the lobby sends you to the picker rather than a text box', async () => {
@@ -470,37 +346,29 @@ test('lobby requests report the UI version', async () => {
   }
 })
 
-// Runs the battle page's real render() and returns the float elements
-// it appended for a newly-arrived log entry.
+// Runs the real render() and returns the float elements it appended
+// for a newly-arrived log entry.
 //
 // Asserting on effectBand alone would have missed the bug this covers:
 // the float loop skipped events with `!e.damage`, and an immune hit
 // deals exactly 0, so the "no effect" branch was unreachable. The
 // classifier was right and the screen still showed nothing.
 async function floatsForEvent(ev: Record<string, unknown>) {
-  const { battlePage } = await import('./battle.ts')
-  const page = battlePage({ id: 'abc123', trainer: 'ash' })
-  const open = page.match(/<script[^>]*>/)!
-  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
+  const dom = installDom()
+  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
 
   const appended: Array<{ className: string; textContent: string }> = []
-  const slot = {
-    appendChild: (c: { className: string; textContent: string }) => appended.push(c),
-    classList: { add: () => {}, remove: () => {} },
-    querySelector: () => null,
-  }
-  const board = {
-    innerHTML: '',
-    querySelector: () => slot,
-    querySelectorAll: () => [],
-  }
-  const mkEl = () => ({ className: '', textContent: '', style: {}, appendChild: () => {}, remove: () => {} })
+  const slot = dom.get('slot')
+  slot.appendChild = (c) => { appended.push(c as never); return c }
+  dom.get('board').querySelector = () => slot
 
-  const mon = (name: string) => ({ name, types: ['normal'], hp: 20, maxHp: 20, moves: [] })
+  const { render, resetForTest } = await import('./client/battle.ts')
+  resetForTest()
+  const mon = (name: string) => ({
+    name, types: ['normal'], hp: 20, maxHp: 20, fainted: false, moves: [],
+  })
   const battle = (log: unknown[]) => ({
-    version: log.length + 1,
-    status: 'active',
-    turn: 'ash',
+    id: 'abc123', version: log.length + 1, status: 'active', turn: 'ash',
     sides: [
       { trainer: 'ash', active: 0, team: [mon('pikachu')] },
       { trainer: 'misty', active: 0, team: [mon('gastly')] },
@@ -508,40 +376,13 @@ async function floatsForEvent(ev: Record<string, unknown>) {
     log,
   })
 
-  let frame: (() => void) | null = null
-  const sandbox = {
-    document: {
-      // render() also writes to #log and #banner; a null here surfaces
-      // as "Cannot set properties of null" rather than a useful failure.
-      getElementById: (id: string) =>
-        id === 'board' ? board : {
-          innerHTML: '', textContent: '', className: '',
-          scrollTop: 0, scrollHeight: 0,
-          addEventListener: () => {}, querySelectorAll: () => [],
-          classList: { add: () => {}, remove: () => {} },
-        },
-      addEventListener: () => {},
-      createElement: mkEl,
-      hidden: false,
-    },
-    location: { pathname: '/battle/abc123', href: '', reload: () => {} },
-    fetch: async () => ({ ok: true, status: 200, json: async () => battle([]) }),
-    setTimeout: () => 0,
-    setInterval: () => 0,
-    requestAnimationFrame: (fn: () => void) => { frame = fn; return 0 },
-    alert: () => {},
-    console,
-  }
-
-  const run = new Function(...Object.keys(sandbox), script + '\n;return { render };')
-  const { render } = run(...Object.values(sandbox)) as { render: (b: unknown) => void }
-
   // First render sets the log baseline; the second delivers the new
   // event, which is the only one that animates.
-  render(battle([]))
+  render(battle([]) as never)
   appended.length = 0
-  render(battle([ev]))
-  if (frame) (frame as () => void)()
+  render(battle([ev]) as never)
+  dom.flushFrames()
+  dom.restore()
   return appended
 }
 
@@ -727,35 +568,10 @@ test('pressing Ready with no join id still opens a battle', async () => {
 // identical row directly below - so the thing that fires read as a
 // fifth move.
 test('the attack button is visually distinct from the move buttons', async () => {
-  const { battlePage } = await import('./battle.ts')
-  const page = battlePage({ id: 'abc123', trainer: 'ash' })
-  const open = page.match(/<script[^>]*>/)!
-  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
-
-  const board = {
-    innerHTML: '', className: '', scrollTop: 0,
-    querySelectorAll: () => [], querySelector: () => null,
-  }
-  const stub = {
-    innerHTML: '', textContent: '', className: '', scrollTop: 0, scrollHeight: 0,
-    addEventListener: () => {}, querySelectorAll: () => [], querySelector: () => null,
-    classList: { add: () => {}, remove: () => {} },
-  }
-  const sandbox = {
-    document: {
-      getElementById: (id: string) => (id === 'board' ? board : stub),
-      addEventListener: () => {},
-      querySelectorAll: () => [],
-    },
-    location: { pathname: '/battle/abc123', reload: () => {} },
-    fetch: async () => ({ ok: true, status: 200, json: async () => ({ version: 1, sides: [], log: [] }) }),
-    setTimeout: () => 0,
-    setInterval: () => 0,
-    requestAnimationFrame: () => 0,
-    console,
-  }
-  const run = new Function(...Object.keys(sandbox), script + '\n;return { render };')
-  const { render } = run(...Object.values(sandbox)) as { render: (b: unknown) => void }
+  const dom = installDom()
+  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
+  const { render, resetForTest } = await import('./client/battle.ts')
+  resetForTest()
 
   const mon = (name: string) => ({
     name, hp: 20, maxHp: 20, types: ['normal'], fainted: false,
@@ -767,17 +583,19 @@ test('the attack button is visually distinct from the move buttons', async () =>
       { trainer: 'ash', active: 0, team: [mon('pikachu')] },
       { trainer: 'misty', active: 0, team: [mon('staryu')] },
     ],
-  })
+  } as never)
 
+  const html = dom.get('board').innerHTML
   // Its own container, not a second row of .moves - that separation is
   // what stops it reading as another choice.
-  assert.match(board.innerHTML, /<div class="commit">/, 'attack should sit in its own commit row')
-  assert.match(
-    board.innerHTML,
-    /<div class="commit">\s*<button id="go"/,
-    'and the attack button should be the thing inside it',
-  )
+  assert.match(html, /<div class="commit">/, 'attack should sit in its own commit row')
+  assert.match(html, /<div class="commit">\s*<button id="go"/,
+    'and the attack button should be the thing inside it')
+  dom.restore()
+
   // The style backs it up: red, and pushed to the right.
+  const { battlePage } = await import('./battle.ts')
+  const page = battlePage({ id: 'abc123', trainer: 'ash' })
   assert.match(page, /\.commit\s*\{[^}]*justify-content:flex-end/, 'commit row aligns right')
   assert.match(page, /\.commit button\s*\{[^}]*background:#b42318/, 'attack is red')
 })
@@ -830,27 +648,15 @@ test('a stale trainer reloads into the register form rather than alerting', asyn
   assert.equal(alerted, '', 'and not dead-end in an alert')
 })
 
-// Extracts the real checkTurn out of the shipped page script.
+// checkTurn is an ordinary exported function now, so the test imports
+// it. It used to be pulled out of the page's <script> by regex and
+// eval'd, which is how a test can pass while the code it covers is
+// unreachable.
 async function checkTurnFromPage() {
-  const { battlePage } = await import('./battle.ts')
-  const page = battlePage({ id: 'abc123', trainer: 'ash' })
-  const open = page.match(/<script[^>]*>/)!
-  const script = page.slice(open.index! + open[0].length, page.lastIndexOf('</script>'))
-  const stub = {
-    innerHTML: '', textContent: '', className: '', scrollTop: 0, scrollHeight: 0,
-    addEventListener: () => {}, querySelectorAll: () => [], querySelector: () => null,
-    classList: { add: () => {}, remove: () => {} },
-  }
-  const sandbox = {
-    document: { getElementById: () => stub, addEventListener: () => {}, querySelectorAll: () => [] },
-    location: { pathname: '/battle/abc123', href: '', reload: () => {} },
-    sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
-    fetch: async () => ({ ok: true, status: 200, json: async () => ({ version: 1, sides: [], log: [] }) }),
-    setTimeout: () => 0, setInterval: () => 0, requestAnimationFrame: () => 0, console,
-  }
-  const run = new Function(...Object.keys(sandbox), script + '\n;return { checkTurn };')
-  return run(...Object.values(sandbox)).checkTurn as
-    (b: unknown, me: string, t: {attacker: number; move: number; target: number}) => string
+  const { checkTurn } = await import('./client/shared.ts')
+  return checkTurn as (
+    b: unknown, me: string, t: { attacker: number; move: number; target: number },
+  ) => string
 }
 
 const wMon = (name: string, fainted = false, disabled?: number) => ({

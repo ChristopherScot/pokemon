@@ -28,6 +28,6 @@
     // still checked at every call site, which is the point.
     "skipLibCheck": true
   },
-  "include": ["*.ts"],
+  "include": ["*.ts", "client/*.ts"],
   "exclude": ["node_modules"]
 }
