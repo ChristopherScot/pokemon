@@ -1,6 +1,9 @@
 package main
 
-import "math"
+import (
+	"encoding/json"
+	"math"
+)
 
 // Stat stages are clamped to this range in every generation.
 const (
@@ -14,6 +17,29 @@ type stages struct {
 	defense  int
 	speed    int
 	accuracy int
+}
+
+// Persisted with the battle, so it needs the same explicit JSON as
+// baseStats: unexported fields marshal as {}, and a reloaded battle
+// would silently forget every buff and debuff.
+type stagesJSON struct {
+	Attack   int `json:"attack"`
+	Defense  int `json:"defense"`
+	Speed    int `json:"speed"`
+	Accuracy int `json:"accuracy"`
+}
+
+func (s stages) MarshalJSON() ([]byte, error) {
+	return json.Marshal(stagesJSON{s.attack, s.defense, s.speed, s.accuracy})
+}
+
+func (s *stages) UnmarshalJSON(data []byte) error {
+	var j stagesJSON
+	if err := json.Unmarshal(data, &j); err != nil {
+		return err
+	}
+	s.attack, s.defense, s.speed, s.accuracy = j.Attack, j.Defense, j.Speed, j.Accuracy
+	return nil
 }
 
 func statMultiplier(stage int) float64 {

@@ -250,3 +250,27 @@ func (p *pokedex) types() []api.TypeSummary {
 type baseStats struct {
 	hp, attack, defense, speed int
 }
+
+// A battle is stored in postgres as JSON, and encoding/json cannot see
+// unexported fields: without these, base stats persisted as {} and came
+// back zeroed, so the damage formula divided by a defense of 0 and every
+// move dealt exactly 1.
+type baseStatsJSON struct {
+	HP      int `json:"hp"`
+	Attack  int `json:"attack"`
+	Defense int `json:"defense"`
+	Speed   int `json:"speed"`
+}
+
+func (b baseStats) MarshalJSON() ([]byte, error) {
+	return json.Marshal(baseStatsJSON{b.hp, b.attack, b.defense, b.speed})
+}
+
+func (b *baseStats) UnmarshalJSON(data []byte) error {
+	var j baseStatsJSON
+	if err := json.Unmarshal(data, &j); err != nil {
+		return err
+	}
+	b.hp, b.attack, b.defense, b.speed = j.HP, j.Attack, j.Defense, j.Speed
+	return nil
+}
