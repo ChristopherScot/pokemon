@@ -27,6 +27,7 @@ const (
 
 var (
 	errNoBattle      = errors.New("no such battle")
+	errNoTrainer     = errors.New("unknown trainer token")
 	errNotYourTurn   = errors.New("not your turn")
 	errIllegalMove   = errors.New("illegal move")
 	errBattleOver    = errors.New("battle is already finished")
@@ -136,15 +137,46 @@ func fillTeam(dex *pokedex, chosen []string, rng roller) []string {
 
 	out := append([]string(nil), chosen...)
 	all := dex.list("", 0)
-	for len(out) < teamSize && len(taken) < len(all) {
-		pick := all[rng.Intn(len(all))]
-		if taken[pick.Name] {
+	// Walk a shuffled order rather than drawing until something new
+	// comes up. Rejection sampling here was an unbounded loop on a
+	// request path: `continue` without consuming an attempt, so a
+	// roller that keeps returning the same index spins forever inside
+	// CreateBattle with no ctx check. That is one roller
+	// implementation away from a wedged pod, and fixedRoll in the
+	// test files is already such an implementation.
+	for _, i := range shuffledIndexes(len(all), rng) {
+		if len(out) >= teamSize {
+			break
+		}
+		if taken[all[i].Name] {
 			continue
 		}
-		taken[pick.Name] = true
-		out = append(out, pick.Name)
+		taken[all[i].Name] = true
+		out = append(out, all[i].Name)
 	}
 	return out
+}
+
+// shuffledIndexes returns 0..n-1 in a random order.
+//
+// One pass, no rejection, so every caller terminates in exactly n
+// steps whatever the roller does.
+func shuffledIndexes(n int, rng roller) []int {
+	idx := make([]int, n)
+	for i := range idx {
+		idx[i] = i
+	}
+	// Fisher-Yates. rng.Intn(i+1) is in range for any roller that
+	// honours its contract, and a roller that does not still
+	// terminates - it just shuffles badly.
+	for i := n - 1; i > 0; i-- {
+		j := rng.Intn(i + 1)
+		if j < 0 || j > i {
+			j = 0
+		}
+		idx[i], idx[j] = idx[j], idx[i]
+	}
+	return idx
 }
 
 func randomTeam(dex *pokedex, rng roller) []string {
@@ -157,14 +189,13 @@ func randomTeam(dex *pokedex, rng roller) []string {
 		return names
 	}
 
-	picked := make(map[int]bool, teamSize)
+	// Same shuffle as fillTeam, for the same reason: the previous
+	// draw-until-new loop could not terminate for some rollers.
 	team := make([]string, 0, teamSize)
-	for len(team) < teamSize {
-		i := rng.Intn(len(all))
-		if picked[i] {
-			continue
+	for _, i := range shuffledIndexes(len(all), rng) {
+		if len(team) >= teamSize {
+			break
 		}
-		picked[i] = true
 		team = append(team, all[i].Name)
 	}
 	return team
@@ -198,9 +229,16 @@ func damage(attacker, defender *combatant, move api.Move, rng roller) (int, floa
 
 type store interface {
 	create(ctx context.Context, b *battle) error
-	get(ctx context.Context, id string) (*api.Battle, bool)
-	waiting(ctx context.Context) []api.WaitingBattle
-	trainerByToken(ctx context.Context, token string) (string, bool)
+	// get returns errNoBattle when there is no such battle, and any
+	// other error when the store itself failed. A bool cannot tell
+	// those apart, and the version that returned one reported a dead
+	// database to the client as "no such battle".
+	get(ctx context.Context, id string) (*api.Battle, error)
+	waiting(ctx context.Context) ([]api.WaitingBattle, error)
+	// trainerByToken returns errNoTrainer for an unknown token. Same
+	// reason: a store failure used to surface as a 401, which looks
+	// like an auth bug to whoever debugs it.
+	trainerByToken(ctx context.Context, token string) (string, error)
 	registerTrainer(ctx context.Context, name string) (string, error)
 
 	update(ctx context.Context, id string, fn func(*battle) error) error
@@ -259,11 +297,14 @@ func (m *memStore) registerTrainer(_ context.Context, name string) (string, erro
 	return token, nil
 }
 
-func (m *memStore) trainerByToken(_ context.Context, token string) (string, bool) {
+func (m *memStore) trainerByToken(_ context.Context, token string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	n, ok := m.trainers[token]
-	return n, ok
+	if !ok {
+		return "", errNoTrainer
+	}
+	return n, nil
 }
 
 func (m *memStore) create(_ context.Context, b *battle) error {
@@ -275,14 +316,14 @@ func (m *memStore) create(_ context.Context, b *battle) error {
 	return nil
 }
 
-func (m *memStore) get(_ context.Context, id string) (*api.Battle, bool) {
+func (m *memStore) get(_ context.Context, id string) (*api.Battle, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	b, ok := m.battles[id]
 	if !ok {
-		return nil, false
+		return nil, errNoBattle
 	}
-	return b.toAPI(), true
+	return b.toAPI(), nil
 }
 
 func (m *memStore) rawForTest(id string) (*battle, bool) {
@@ -306,7 +347,7 @@ func (m *memStore) update(_ context.Context, id string, fn func(*battle) error) 
 	return nil
 }
 
-func (m *memStore) waiting(_ context.Context) []api.WaitingBattle {
+func (m *memStore) waiting(_ context.Context) ([]api.WaitingBattle, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sweepLocked()
@@ -320,7 +361,8 @@ func (m *memStore) waiting(_ context.Context) []api.WaitingBattle {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].CreatedAt.After(out[j].CreatedAt)
 	})
-	return out
+	// Cannot fail: the error exists for the Postgres implementation.
+	return out, nil
 }
 
 func (b *battle) toWaiting() api.WaitingBattle {
@@ -466,6 +508,16 @@ func (b *battle) finishTurn(me, opponent *side, hurt *combatant) {
 		b.turn = 1 - b.turn
 	}
 
+	// Bumped here AND by `version = version + 1` in UpdateBattle,
+	// which reads as a double increment and is not one: pgStore.update
+	// re-reads the row inside its transaction, so this value is
+	// overwritten before it is ever written back. The SQL owns the
+	// number for the Postgres path.
+	//
+	// It cannot simply be deleted, though - memStore has no SQL, so
+	// this line is the only thing that moves the version there.
+	// Removing it fails TestVersionAdvancesOnEveryChange, which is
+	// how I found out.
 	b.version++
 	b.touched = time.Now()
 }

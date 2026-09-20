@@ -29,13 +29,19 @@ func (s service) RegisterTrainer(ctx context.Context, req *api.RegisterTrainer) 
 
 // ListWaitingTrainers is the lobby: who is looking for a battle.
 func (s service) ListWaitingTrainers(ctx context.Context) (*api.WaitingList, error) {
-	open := s.battles.waiting(ctx)
+	open, err := s.battles.waiting(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing the lobby: %w", err)
+	}
 	return &api.WaitingList{Count: len(open), Waiting: open}, nil
 }
 
 func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params api.CreateBattleParams) (api.CreateBattleRes, error) {
-	trainer, ok := s.battles.trainerByToken(ctx, params.XTrainerToken)
-	if !ok {
+	trainer, err := s.battles.trainerByToken(ctx, params.XTrainerToken)
+	if err != nil && !errors.Is(err, errNoTrainer) {
+		return nil, fmt.Errorf("authenticating: %w", err)
+	}
+	if errors.Is(err, errNoTrainer) {
 		return &api.CreateBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
 	names := fillTeam(s.dex, req.Team, s.rng)
@@ -68,8 +74,11 @@ func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params
 }
 
 func (s service) GetBattle(ctx context.Context, params api.GetBattleParams) (api.GetBattleRes, error) {
-	b, ok := s.battles.get(ctx, params.ID)
-	if !ok {
+	b, err := s.battles.get(ctx, params.ID)
+	if err != nil && !errors.Is(err, errNoBattle) {
+		return nil, fmt.Errorf("reading battle: %w", err)
+	}
+	if errors.Is(err, errNoBattle) {
 		return &api.Error{Message: "no such battle"}, nil
 	}
 	return b, nil
@@ -77,8 +86,11 @@ func (s service) GetBattle(ctx context.Context, params api.GetBattleParams) (api
 
 // JoinBattle fills the second side and starts play.
 func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api.JoinBattleParams) (api.JoinBattleRes, error) {
-	trainer, ok := s.battles.trainerByToken(ctx, params.XTrainerToken)
-	if !ok {
+	trainer, err := s.battles.trainerByToken(ctx, params.XTrainerToken)
+	if err != nil && !errors.Is(err, errNoTrainer) {
+		return nil, fmt.Errorf("authenticating: %w", err)
+	}
+	if errors.Is(err, errNoTrainer) {
 		return &api.JoinBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
 	names := fillTeam(s.dex, req.Team, s.rng)
@@ -126,7 +138,10 @@ func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api
 
 // TakeTurn resolves one attack.
 func (s service) TakeTurn(ctx context.Context, req *api.TakeTurn, params api.TakeTurnParams) (api.TakeTurnRes, error) {
-	if _, ok := s.battles.trainerByToken(ctx, params.XTrainerToken); !ok {
+	if _, err := s.battles.trainerByToken(ctx, params.XTrainerToken); err != nil {
+		if !errors.Is(err, errNoTrainer) {
+			return nil, fmt.Errorf("authenticating: %w", err)
+		}
 		return &api.TakeTurnUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
 	var out *api.Battle

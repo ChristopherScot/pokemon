@@ -39,9 +39,9 @@ func TestPGRegisterTrainer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registering: %v", err)
 	}
-	name, ok := store.trainerByToken(context.Background(), token)
-	if !ok || name != "Ash" {
-		t.Fatalf("trainerByToken = %q, %v; want Ash, true", name, ok)
+	name, lookupErr := store.trainerByToken(context.Background(), token)
+	if lookupErr != nil || name != "Ash" {
+		t.Fatalf("trainerByToken = %q, %v; want Ash, nil", name, lookupErr)
 	}
 
 	// Case-insensitive, matching the in-memory store.
@@ -102,8 +102,8 @@ func TestPGBattleSurvivesANewStore(t *testing.T) {
 	store.create(context.Background(), b)
 
 	other := newPGStore(pool, 2)
-	got, ok := other.get(context.Background(), b.id)
-	if !ok {
+	got, getErr := other.get(context.Background(), b.id)
+	if getErr != nil {
 		t.Fatalf("battle %s not found by a second store", b.id)
 	}
 	if string(got.Status) != b.status || len(got.Sides) != len(b.sides) {
@@ -156,8 +156,8 @@ func TestPGConcurrentUpdatesAllLand(t *testing.T) {
 		}
 	}
 
-	got, ok := store.get(context.Background(), b.id)
-	if !ok {
+	got, getErr := store.get(context.Background(), b.id)
+	if getErr != nil {
 		t.Fatal("battle disappeared")
 	}
 	if len(got.Log) != writers {
@@ -213,7 +213,7 @@ func TestPGWaitingLists(t *testing.T) {
 	b := newTestBattle(t, dex, "Ash", token)
 	store.create(context.Background(), b)
 
-	waiting := store.waiting(context.Background())
+	waiting, _ := store.waiting(context.Background())
 	if len(waiting) != 1 || waiting[0].BattleId != b.id {
 		t.Fatalf("waiting() returned %d battles, want the one just created", len(waiting))
 	}
@@ -225,7 +225,7 @@ func TestPGWaitingLists(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	if got := store.waiting(context.Background()); len(got) != 0 {
+	if got, _ := store.waiting(context.Background()); len(got) != 0 {
 		t.Errorf("waiting() returned %d battles after the only one went active", len(got))
 	}
 }

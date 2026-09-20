@@ -47,6 +47,15 @@ ingress:
 # flaky network rather than missing shared state.
 replicas: 1
 
+# 64Mi was the template default and too tight here: the whole move
+# catalogue is loaded into memory at startup and ListMoves serves all
+# ~9000 rows uncached, so a few concurrent catalogue reads could
+# OOMKill the only replica. Headroom is nearly free in a homelab; an
+# OOMKill with one replica is an outage.
+resources:
+    memoryRequest: 64Mi
+    memoryLimit: 256Mi
+
 # The NetworkPolicy this service owns. Raw Kubernetes, because a
 # policy is about the cluster rather than about the service.
 manifests:

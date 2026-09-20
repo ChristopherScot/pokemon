@@ -91,12 +91,26 @@ func (s service) ListTypes(context.Context) (*api.TypeList, error) {
 	return &api.TypeList{Types: s.dex.types()}, nil
 }
 
+// NewError is the last resort: anything a handler returns as a real
+// error, rather than as a typed response, arrives here.
+//
+// The message is deliberately generic. Errors are wrapped with
+// operation context on the way up - "inserting battle %s", "writing
+// battle %s" - and a wrapped *pgconn.PgError stringifies with
+// SQLSTATE, the constraint name and often the table and column. That
+// was going straight into the 500 body of an internet-reachable
+// service, which is free schema reconnaissance.
+//
+// The id is what keeps this debuggable: it appears in the response
+// and in the log line, so a player can quote it and the real error is
+// one Loki query away.
 func (service) NewError(_ context.Context, err error) *api.ErrorStatusCode {
-	slog.Error("handler failed", "err", err)
+	id := newToken()[:8]
+	slog.Error("handler failed", "err", err, "error_id", id)
 
 	return &api.ErrorStatusCode{
 		StatusCode: http.StatusInternalServerError,
-		Response:   api.Error{Message: err.Error()},
+		Response:   api.Error{Message: "internal error (" + id + ")"},
 	}
 }
 

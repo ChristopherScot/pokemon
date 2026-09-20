@@ -25,6 +25,22 @@ metadata:
   name: pokedex-db
 spec:
   instances: 1
+
+  # Both of these are 0 by default, which means "no limit".
+  #
+  # Without statement_timeout a stuck query runs forever and holds
+  # back autovacuum; without the idle-in-transaction timeout a
+  # connection that dies mid-transaction during a failover leaves the
+  # server side holding locks indefinitely. Verified absent on the
+  # live cluster before setting them.
+  #
+  # 10s is enormously generous for this workload: the turn path is a
+  # single-row read and a single-row update. Migrations set their own
+  # timeout, so a future backfill is not bound by this.
+  postgresql:
+    parameters:
+      statement_timeout: "10s"
+      idle_in_transaction_session_timeout: "30s"
   monitoring:
     enablePodMonitor: true
   storage:
