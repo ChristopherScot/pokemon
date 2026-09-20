@@ -1,0 +1,160 @@
+# Builds an APK you can put on a phone, and a desktop binary for each
+# platform. Triggered by a VERSION change so a release is deliberate -
+# tests run on every push and PR.
+#
+# Android only. iOS is deliberately absent: an .ipa needs a macOS
+# runner, an Apple certificate and a provisioning profile, and without
+# a paid developer account the result expires after seven days. That
+# is a subscription and a weekly rebuild to install one app on one
+# phone, so this scaffolds the half that works.
+name: pokedex-mobile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/pokedex-mobile/**'
+      # It shares api/ and battletext/ with the CLI and TUI through a
+      # replace directive, so the API service is a build input here.
+      - 'services/pokedex/**'
+      - '.github/workflows/pokedex-mobile.yaml'
+  pull_request:
+    paths:
+      - 'services/pokedex-mobile/**'
+      - 'services/pokedex/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: services/pokedex-mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/pokedex-mobile/go.mod
+          cache: true
+          cache-dependency-path: services/pokedex-mobile/go.sum
+
+      # Gio links against X11 and Wayland to build for desktop, and the
+      # runner has neither. Without these the build fails on a missing
+      # C header, which reads like a Go problem and is not.
+      - name: Install Gio's desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libgles2-mesa-dev \
+            libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+  release:
+    # Only when VERSION changed, and only from main.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Release only on a VERSION change
+        id: gate
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -qx 'services/pokedex-mobile/VERSION'; then
+            echo "go=true" >> $GITHUB_OUTPUT
+          else
+            echo "go=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-go@v5
+        if: steps.gate.outputs.go == 'true'
+        with:
+          go-version-file: services/pokedex-mobile/go.mod
+          cache: true
+          cache-dependency-path: services/pokedex-mobile/go.sum
+
+      # JDK 8 specifically. Gio's own install guide says "more recent
+      # versions of Java will break the build" - this is not caution,
+      # the Android build tooling gogio drives fails on newer JDKs.
+      - uses: actions/setup-java@v4
+        if: steps.gate.outputs.go == 'true'
+        with:
+          distribution: temurin
+          java-version: "8"
+
+      # SDK >= 31, which is Gio's stated minimum. The NDK is what
+      # cross-compiles the Go code for the phone's CPU.
+      - uses: android-actions/setup-android@v3
+        if: steps.gate.outputs.go == 'true'
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 ndk;26.1.10909125'
+
+      - name: Read version
+        if: steps.gate.outputs.go == 'true'
+        id: v
+        run: echo "version=$(head -n1 services/pokedex-mobile/VERSION)" >> $GITHUB_OUTPUT
+
+      - name: Install gogio
+        if: steps.gate.outputs.go == 'true'
+        run: go install gioui.org/cmd/gogio@latest
+
+      # gogio signs the APK itself. Given no keystore it generates a
+      # debug one and signs with that, which is enough for a phone to
+      # install after allowing unknown sources - no Play Console, no
+      # certificate to obtain.
+      #
+      # The cost of a debug key: Android identifies an app by the pair
+      # (app id, signing key), and CI generates a fresh key each run.
+      # So an upgrade over a previous install is REFUSED, and the fix
+      # is to uninstall first. A real keystore held in Vault removes
+      # that, and is the upgrade path when this stops being a toy.
+      #
+      # gogio strips the leading v from the version: it wants semver.
+      - name: Build the APK
+        if: steps.gate.outputs.go == 'true'
+        working-directory: services/pokedex-mobile
+        run: |
+          set -eu
+          VERSION="${{ steps.v.outputs.version }}"
+          gogio \
+            -target android \
+            -appid com.github.christopherscot.pokemon.services.pokedex_mobile \
+            -name 'Pokedex Mobile' \
+            -version "${VERSION#v}" \
+            -minsdk 31 \
+            -ldflags "-X main.version=$VERSION" \
+            -o pokedex-mobile.apk \
+            .
+          sha256sum pokedex-mobile.apk > checksums.txt
+
+      - uses: softprops/action-gh-release@v2
+        if: steps.gate.outputs.go == 'true'
+        with:
+          tag_name: ${{ steps.v.outputs.version }}
+          files: |
+            services/pokedex-mobile/pokedex-mobile.apk
+            services/pokedex-mobile/checksums.txt
+          body: |
+            ## Install on Android
+
+            Download `pokedex-mobile.apk` below and open it on your phone.
+            Android will ask permission to install from this source the
+            first time.
+
+            **Signed with a throwaway debug key**, which CI regenerates
+            on every release. Android refuses to upgrade an app whose
+            signing key changed, so uninstall the previous version
+            before installing this one.
