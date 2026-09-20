@@ -88,7 +88,14 @@ type Querier interface {
 	// goroutine to supervise, a store that is never written does not
 	// grow, and with several replicas a timer in each would mean several
 	// sweeps racing. battle_sides goes with it by ON DELETE CASCADE.
-	SweepBattles(ctx context.Context, touchedAt pgtype.Timestamptz) error
+	//
+	// Two cutoffs, because touched_at means different things for the two
+	// statuses. An active battle is touched by every turn, so a stale
+	// touched_at genuinely means abandoned. A WAITING battle is never
+	// touched at all - a join is its first update - so its touched_at is
+	// just its creation time, and one cutoff deleted players who were
+	// sitting in the lobby doing exactly what they should.
+	SweepBattles(ctx context.Context, arg SweepBattlesParams) error
 	// Drops trainers nobody has been in a long time, so a name someone
 	// registered once and abandoned can be claimed again. Names are unique
 	// and were never released, so without this every name is spent the

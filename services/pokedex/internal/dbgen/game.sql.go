@@ -288,8 +288,15 @@ func (q *Queries) RegisterTrainer(ctx context.Context, arg RegisterTrainerParams
 }
 
 const sweepBattles = `-- name: SweepBattles :exec
-DELETE FROM battles WHERE touched_at < $1
+DELETE FROM battles
+WHERE (status <> 'waiting' AND touched_at < $1)
+   OR (status =  'waiting' AND touched_at < $2)
 `
+
+type SweepBattlesParams struct {
+	ActiveBefore  pgtype.Timestamptz
+	WaitingBefore pgtype.Timestamptz
+}
 
 // Drops battles nobody has touched inside the TTL.
 //
@@ -297,8 +304,15 @@ DELETE FROM battles WHERE touched_at < $1
 // goroutine to supervise, a store that is never written does not
 // grow, and with several replicas a timer in each would mean several
 // sweeps racing. battle_sides goes with it by ON DELETE CASCADE.
-func (q *Queries) SweepBattles(ctx context.Context, touchedAt pgtype.Timestamptz) error {
-	_, err := q.db.Exec(ctx, sweepBattles, touchedAt)
+//
+// Two cutoffs, because touched_at means different things for the two
+// statuses. An active battle is touched by every turn, so a stale
+// touched_at genuinely means abandoned. A WAITING battle is never
+// touched at all - a join is its first update - so its touched_at is
+// just its creation time, and one cutoff deleted players who were
+// sitting in the lobby doing exactly what they should.
+func (q *Queries) SweepBattles(ctx context.Context, arg SweepBattlesParams) error {
+	_, err := q.db.Exec(ctx, sweepBattles, arg.ActiveBefore, arg.WaitingBefore)
 	return err
 }
 

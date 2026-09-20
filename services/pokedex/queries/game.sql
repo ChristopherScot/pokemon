@@ -105,7 +105,16 @@ LIMIT 100;
 -- goroutine to supervise, a store that is never written does not
 -- grow, and with several replicas a timer in each would mean several
 -- sweeps racing. battle_sides goes with it by ON DELETE CASCADE.
-DELETE FROM battles WHERE touched_at < $1;
+--
+-- Two cutoffs, because touched_at means different things for the two
+-- statuses. An active battle is touched by every turn, so a stale
+-- touched_at genuinely means abandoned. A WAITING battle is never
+-- touched at all - a join is its first update - so its touched_at is
+-- just its creation time, and one cutoff deleted players who were
+-- sitting in the lobby doing exactly what they should.
+DELETE FROM battles
+WHERE (status <> 'waiting' AND touched_at < @active_before)
+   OR (status =  'waiting' AND touched_at < @waiting_before);
 
 -- name: AddBattleSide :exec
 INSERT INTO battle_sides (battle_id, idx, trainer_token)
