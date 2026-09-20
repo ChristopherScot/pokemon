@@ -90,7 +90,7 @@ jobs:
 
       - name: Check deploy manifests
         run: |
-          curl -fsSL https://github.com/ChristopherScot/ci-scripts/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
+          curl -fsSL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
           ./homelabctl check deploy
 
       # ghcr.io specifically: github.actor + GITHUB_TOKEN authenticate
