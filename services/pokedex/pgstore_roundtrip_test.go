@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -134,3 +135,57 @@ func (fixedRoll) Intn(n int) int {
 	return 0
 }
 func (fixedRoll) Float64() float64 { return 0.5 }
+
+// Every field of an in-memory struct has a home in its persisted form.
+//
+// The test above walks battleState and proves everything IN it
+// survives the round trip. It cannot see a field that was never added
+// to it - so adding one to `combatant` and forgetting `combatantState`
+// compiles, vets, and passes the entire suite, including that test.
+// The field then works perfectly under memStore, which is what the
+// rules tests use, and silently resets on every turn under Postgres,
+// which is what production runs. A reviewer demonstrated exactly that
+// with a synthetic status effect.
+//
+// So: compare the two shapes directly. This is the same class as the
+// 1-damage bug - state the engine keeps that the database does not -
+// caught one struct further out.
+func TestEveryEngineFieldHasSomewhereToBePersisted(t *testing.T) {
+	// The persisted counterpart of each in-memory struct. A new pair
+	// belongs here; a pair that is deliberately partial belongs in
+	// `except` below, with the reason.
+	pairs := []struct {
+		live, stored any
+		except       map[string]string
+	}{
+		{live: combatant{}, stored: combatantState{}},
+		{live: side{}, stored: sideState{}},
+	}
+
+	for _, p := range pairs {
+		lt := reflect.TypeOf(p.live)
+		st := reflect.TypeOf(p.stored)
+
+		// Persisted names are the live ones capitalised, which is the
+		// convention every field here already follows.
+		have := map[string]bool{}
+		for i := 0; i < st.NumField(); i++ {
+			have[strings.ToLower(st.Field(i).Name)] = true
+		}
+
+		for i := 0; i < lt.NumField(); i++ {
+			f := lt.Field(i)
+			name := strings.ToLower(f.Name)
+			if why, ok := p.except[f.Name]; ok {
+				t.Logf("%s.%s is deliberately not persisted: %s", lt.Name(), f.Name, why)
+				continue
+			}
+			if !have[name] {
+				t.Errorf("%s.%s has no field in %s, so it is dropped on every write: "+
+					"it will work under memStore and silently reset every turn against "+
+					"postgres. Add it to %s, or list it as a deliberate exception.",
+					lt.Name(), f.Name, st.Name(), st.Name())
+			}
+		}
+	}
+}
