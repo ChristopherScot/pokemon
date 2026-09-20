@@ -60,10 +60,16 @@ func spacer(h int) layout.FlexChild {
 // create a trainer itself. This screen is the one thing the terminal
 // clients do not need.
 func (a *ui) registerScreen(gtx layout.Context, th *material.Theme) layout.Dimensions {
-	if a.regBtn.Clicked(gtx) {
-		if name := strings.TrimSpace(a.nameInput.Text()); name != "" {
-			a.register(name)
+	submit := func() {
+		name := strings.TrimSpace(a.nameInput.Text())
+		if why := badTrainerName(name); why != "" {
+			a.status = why
+			return
 		}
+		a.register(name)
+	}
+	if a.regBtn.Clicked(gtx) {
+		submit()
 	}
 	// Enter submits too - a phone keyboard shows a Go key and people
 	// press it rather than dismissing the keyboard to find a button.
@@ -73,9 +79,7 @@ func (a *ui) registerScreen(gtx layout.Context, th *material.Theme) layout.Dimen
 			break
 		}
 		if _, isSubmit := ev.(widget.SubmitEvent); isSubmit {
-			if name := strings.TrimSpace(a.nameInput.Text()); name != "" {
-				a.register(name)
-			}
+			submit()
 		}
 	}
 
