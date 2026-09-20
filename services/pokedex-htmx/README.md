@@ -80,7 +80,12 @@ which is how the image lays it out.
 make test         # typecheck, then node --test
 ```
 
-### The browser journey
+### The browser journey — run this by hand
+
+**`make test` does not run this, and neither does CI.** It needs a
+browser and a running stack, and Playwright is deliberately not a
+dependency of this service. Nothing will tell you if it breaks; run it
+yourself when you change how the page behaves.
 
 `e2e/journey.js` drives two players through a whole game in a real
 browser: pick a team, register, open, join from the lobby, take a turn,
@@ -92,14 +97,20 @@ already taken did nothing at all — htmx discards the body of a 4xx, so
 the page never moved — and clicking three cards quickly left ONE
 pokemon picked, because the out-of-band grid swap replaced the cards
 mid-click and took the queued clicks with them. Neither reproduces with
-a wait between clicks.
+a wait between clicks, which is why the scripted tests all passed.
 
-Playwright is not a dependency here; run it from somewhere that has it:
+The whole stack, no database needed — the API keeps state in memory
+when `DATABASE_URL` is unset:
 
 ```sh
-PORT=3001 npm start &
+(cd ../pokedex && PORT=3000 go run .) &
+POKEDEX_URL=http://127.0.0.1:3000 PORT=3001 INSECURE_COOKIES=1 npm start &
+
+# from a directory that has playwright installed
 B=http://127.0.0.1:3001 node e2e/journey.js
 ```
+
+It prints PASS/FAIL per step and exits non-zero on the first failure.
 
 If you bump htmx or idiomorph in `vendor/`, run `npm run vendor` to
 regenerate `vendor/sources.ts`. They are compiled into the bundle as

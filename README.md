@@ -138,6 +138,18 @@ cd services/pokedex-htmx && npm test
 CI runs all of this per service on push, against the same postgres
 image.
 
+### What CI does not cover
+
+Each service is tested on its own. Nothing starts the API and a front
+end together and drives them, so a break in how they talk to each other
+only shows up when someone uses it — which is how two htmx bugs reached
+production with every suite green.
+
+`services/pokedex-htmx/e2e/journey.js` is that test, but you have to run
+it yourself; it needs a browser and a running stack. The next step is a
+compose file that brings every service in the repo up together so CI can
+do the same thing, rather than leaving it to whoever remembers.
+
 ## 4. The services
 
 Each has its own README with what it is and how to work on it.

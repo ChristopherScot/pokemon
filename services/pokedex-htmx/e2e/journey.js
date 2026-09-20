@@ -5,10 +5,13 @@
 // that left one pokemon picked. Both need a real browser and no
 // artificial waiting between clicks to reproduce.
 //
-//   node --test e2e/          with a server on $B (default :3000)
+// NOT run by `make test`, and NOT run by CI. It needs a browser and a
+// running stack, and Playwright is deliberately not a dependency here.
+// Nothing will tell you if it breaks - run it yourself when you change
+// how the page behaves. See the README for the two commands that bring
+// the stack up without a database.
 //
-// Playwright is not a dependency of this service - install it where you
-// run this, or let CI do it.
+//   B=http://127.0.0.1:3001 node e2e/journey.js
 import { chromium } from 'playwright'
 const B = process.env.B || 'http://127.0.0.1:3001'
 const errs=[]; let failed=0
