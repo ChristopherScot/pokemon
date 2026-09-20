@@ -2,8 +2,8 @@
 # so a typo in SQL is a build error rather than a 500 in the cluster.
 #
 # Run `go generate ./...` after editing migrations/ or queries/ - the
-# //go:generate line is in db.go, alongside the ogen one, so one command
-# regenerates everything derived.
+# //go:generate line is in generate.go, alongside the ogen one, so one
+# command regenerates everything derived.
 version: "2"
 sql:
   - engine: postgresql
