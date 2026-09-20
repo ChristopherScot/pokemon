@@ -286,6 +286,12 @@ func (p *pgStore) waiting(ctx context.Context) ([]api.WaitingBattle, error) {
 	if err := q.SweepBattles(ctx, pgTime(time.Now().Add(-battleTTL))); err != nil {
 		slog.Warn("sweeping expired battles", "error", err)
 	}
+	// After the battles, never before: a trainer is spared while they
+	// are in one, so sweeping battles first is what releases the
+	// trainers whose games have expired.
+	if err := q.SweepTrainers(ctx, pgTime(time.Now().Add(-trainerTTL))); err != nil {
+		slog.Warn("sweeping idle trainers", "error", err)
+	}
 
 	rows, err := q.ListWaitingBattles(ctx)
 	if err != nil {
@@ -308,8 +314,19 @@ func (p *pgStore) waiting(ctx context.Context) ([]api.WaitingBattle, error) {
 	return out, nil
 }
 
+// Reading a token is also how we learn the trainer is still around.
+//
+// Every authenticated call comes through here - opening, joining and
+// taking a turn - so last_seen tracks real use without anything else
+// having to remember to say so. Before this it was written once at
+// registration and never again, which made a sweep on it a sweep of
+// everybody.
+//
+// The touch is best-effort: a trainer who acted is not turned away
+// because we failed to write down that they did.
 func (p *pgStore) trainerByToken(ctx context.Context, token string) (string, error) {
-	t, err := dbgen.New(p.pool).TrainerByToken(ctx, token)
+	q := dbgen.New(p.pool)
+	t, err := q.TrainerByToken(ctx, token)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", errNoTrainer
 	}
@@ -318,6 +335,9 @@ func (p *pgStore) trainerByToken(ctx context.Context, token string) (string, err
 		// 401, and an auth error is the last place anyone looks for
 		// a database outage.
 		return "", fmt.Errorf("looking up trainer: %w", err)
+	}
+	if err := q.TouchTrainer(ctx, token); err != nil {
+		slog.Warn("recording that a trainer was seen", "err", err)
 	}
 	return t.Name, nil
 }

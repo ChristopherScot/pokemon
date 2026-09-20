@@ -18,9 +18,27 @@ RETURNING token, name, created_at, last_seen;
 SELECT token, name, created_at, last_seen FROM trainers WHERE token = $1;
 
 -- name: TouchTrainer :exec
--- Records that a token was used, for a future sweep of trainers nobody
--- has been since. Separate from TrainerByToken so a read stays a read.
+-- Records that a token was used, which is what SweepTrainers reads.
+-- Separate from TrainerByToken so a read stays a read.
 UPDATE trainers SET last_seen = now() WHERE token = $1;
+
+-- name: SweepTrainers :exec
+-- Drops trainers nobody has been in a long time, so a name someone
+-- registered once and abandoned can be claimed again. Names are unique
+-- and were never released, so without this every name is spent the
+-- moment it is typed - including by whoever loses their token.
+--
+-- NOT IN a battle, whatever last_seen says. A trainer waiting in the
+-- lobby for an opponent may sit for hours without making a request,
+-- and deleting them would cascade their side away and strand the other
+-- player mid-game. Battles are swept on their own TTL first, so a
+-- trainer only becomes sweepable once their battles have gone.
+--
+-- Called on write, like SweepBattles: no background goroutine to
+-- supervise, and no timer in each replica racing the others.
+DELETE FROM trainers
+WHERE last_seen < $1
+  AND token NOT IN (SELECT trainer_token FROM battle_sides);
 
 -- name: CreateBattle :exec
 INSERT INTO battles (

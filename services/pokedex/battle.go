@@ -20,6 +20,18 @@ const (
 
 	battleTTL = 2 * time.Hour
 
+	// How long a name is held for someone who never comes back.
+	//
+	// Names are unique and nothing released them, so every name ever
+	// typed was spent forever - including by anyone who lost their
+	// token, who could not re-register it and could not recover it
+	// either. A week is long enough that a real player keeps their
+	// name across a fortnight of not playing (any request refreshes
+	// it), and short enough that the namespace is not landfill.
+	//
+	// A trainer in a battle is never swept, whatever this says.
+	trainerTTL = 7 * 24 * time.Hour
+
 	damageSpread = 0.15
 
 	damageScale = 0.85
@@ -252,8 +264,9 @@ type store interface {
 type memStore struct {
 	mu       sync.Mutex
 	battles  map[string]*battle
-	trainers map[string]string // token -> name
-	names    map[string]bool   // claimed names
+	trainers map[string]string    // token -> name
+	lastSeen map[string]time.Time // token -> when it was last used
+	names    map[string]bool      // claimed names
 	rng      *rand.Rand
 }
 
@@ -261,6 +274,7 @@ func newMemStore(seed int64) *memStore {
 	return &memStore{
 		battles:  map[string]*battle{},
 		trainers: map[string]string{},
+		lastSeen: map[string]time.Time{},
 		names:    map[string]bool{},
 		rng:      rand.New(rand.NewSource(seed)),
 	}
@@ -299,9 +313,13 @@ func (m *memStore) registerTrainer(_ context.Context, name string) (string, erro
 	token := newToken()
 	m.names[strings.ToLower(name)] = true
 	m.trainers[token] = name
+	m.lastSeen[token] = time.Now()
 	return token, nil
 }
 
+// Reading a token is also how we learn the trainer is still around -
+// the same rule the postgres store follows, so a name expires the same
+// way whichever store is behind it.
 func (m *memStore) trainerByToken(_ context.Context, token string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -309,6 +327,7 @@ func (m *memStore) trainerByToken(_ context.Context, token string) (string, erro
 	if !ok {
 		return "", errNoTrainer
 	}
+	m.lastSeen[token] = time.Now()
 	return n, nil
 }
 
@@ -387,6 +406,29 @@ func (m *memStore) sweepLocked() {
 	for id, b := range m.battles {
 		if b.touched.Before(cutoff) {
 			delete(m.battles, id)
+		}
+	}
+
+	// Trainers after battles, so the ones whose games just expired are
+	// released in the same pass. A trainer still in a battle is kept
+	// however long they have been idle: someone waiting in the lobby
+	// for an opponent makes no requests, and deleting them would strand
+	// whoever eventually joins.
+	inBattle := map[string]bool{}
+	for _, b := range m.battles {
+		for _, side := range b.sides {
+			inBattle[side.token] = true
+		}
+	}
+	idle := time.Now().Add(-trainerTTL)
+	for token, name := range m.trainers {
+		if inBattle[token] {
+			continue
+		}
+		if seen, ok := m.lastSeen[token]; ok && seen.Before(idle) {
+			delete(m.trainers, token)
+			delete(m.lastSeen, token)
+			delete(m.names, strings.ToLower(name))
 		}
 	}
 }

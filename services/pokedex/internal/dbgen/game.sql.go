@@ -253,12 +253,36 @@ func (q *Queries) SweepBattles(ctx context.Context, touchedAt pgtype.Timestamptz
 	return err
 }
 
+const sweepTrainers = `-- name: SweepTrainers :exec
+DELETE FROM trainers
+WHERE last_seen < $1
+  AND token NOT IN (SELECT trainer_token FROM battle_sides)
+`
+
+// Drops trainers nobody has been in a long time, so a name someone
+// registered once and abandoned can be claimed again. Names are unique
+// and were never released, so without this every name is spent the
+// moment it is typed - including by whoever loses their token.
+//
+// NOT IN a battle, whatever last_seen says. A trainer waiting in the
+// lobby for an opponent may sit for hours without making a request,
+// and deleting them would cascade their side away and strand the other
+// player mid-game. Battles are swept on their own TTL first, so a
+// trainer only becomes sweepable once their battles have gone.
+//
+// Called on write, like SweepBattles: no background goroutine to
+// supervise, and no timer in each replica racing the others.
+func (q *Queries) SweepTrainers(ctx context.Context, lastSeen pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, sweepTrainers, lastSeen)
+	return err
+}
+
 const touchTrainer = `-- name: TouchTrainer :exec
 UPDATE trainers SET last_seen = now() WHERE token = $1
 `
 
-// Records that a token was used, for a future sweep of trainers nobody
-// has been since. Separate from TrainerByToken so a read stays a read.
+// Records that a token was used, which is what SweepTrainers reads.
+// Separate from TrainerByToken so a read stays a read.
 func (q *Queries) TouchTrainer(ctx context.Context, token string) error {
 	_, err := q.db.Exec(ctx, touchTrainer, token)
 	return err

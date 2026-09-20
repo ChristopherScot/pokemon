@@ -66,8 +66,22 @@ type Querier interface {
 	// grow, and with several replicas a timer in each would mean several
 	// sweeps racing. battle_sides goes with it by ON DELETE CASCADE.
 	SweepBattles(ctx context.Context, touchedAt pgtype.Timestamptz) error
-	// Records that a token was used, for a future sweep of trainers nobody
-	// has been since. Separate from TrainerByToken so a read stays a read.
+	// Drops trainers nobody has been in a long time, so a name someone
+	// registered once and abandoned can be claimed again. Names are unique
+	// and were never released, so without this every name is spent the
+	// moment it is typed - including by whoever loses their token.
+	//
+	// NOT IN a battle, whatever last_seen says. A trainer waiting in the
+	// lobby for an opponent may sit for hours without making a request,
+	// and deleting them would cascade their side away and strand the other
+	// player mid-game. Battles are swept on their own TTL first, so a
+	// trainer only becomes sweepable once their battles have gone.
+	//
+	// Called on write, like SweepBattles: no background goroutine to
+	// supervise, and no timer in each replica racing the others.
+	SweepTrainers(ctx context.Context, lastSeen pgtype.Timestamptz) error
+	// Records that a token was used, which is what SweepTrainers reads.
+	// Separate from TrainerByToken so a read stays a read.
 	TouchTrainer(ctx context.Context, token string) error
 	TrainerByToken(ctx context.Context, token string) (Trainer, error)
 	// version is bumped here rather than by the caller, so no path can
