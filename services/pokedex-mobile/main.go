@@ -24,6 +24,7 @@ import (
 	"gioui.org/font/gofont"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
@@ -253,13 +254,16 @@ const tapTarget = unit.Dp(48)
 
 func (a *ui) layout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	a.handleNav(gtx)
+	paint.Fill(gtx.Ops, m3.surface)
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.header(gtx, th)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{
+				Left: gapL, Right: gapL, Top: gapM,
+			}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				switch a.screen {
 				case screenRegister:
 					return a.registerScreen(gtx, th)
@@ -286,16 +290,15 @@ func (a *ui) layout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	)
 }
 
+// header is the M3 top app bar: a surface-container strip, not a
+// coloured banner. The trainer name is supporting text rather than
+// being crammed into the title with an em dash.
 func (a *ui) header(gtx layout.Context, th *material.Theme) layout.Dimensions {
-	return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		t := "Pokedex"
-		if a.id.Name != "" {
-			t = "Pokedex — " + a.id.Name
-		}
-		l := material.H6(th, t)
-		l.Color = accent
-		return l.Layout(gtx)
-	})
+	sub := ""
+	if a.id.Name != "" {
+		sub = "Trainer " + a.id.Name
+	}
+	return topBar(gtx, th, "Pokedex", sub)
 }
 
 func (a *ui) statusBar(gtx layout.Context, th *material.Theme) layout.Dimensions {

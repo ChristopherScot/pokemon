@@ -67,8 +67,7 @@ func TestPlayATurnByTapping(t *testing.T) {
 		t.Fatalf("opening stage = %q", h.ui.sel.stage())
 	}
 
-	// The first control button sits just above the nav bar. Tap it.
-	h.tap(phoneW/2, firstButtonY)
+	h.tapOn("choose Pikachu")
 	if !h.ui.sel.haveAttacker {
 		t.Fatal("tapping a pokemon did not select it")
 	}
@@ -76,12 +75,11 @@ func TestPlayATurnByTapping(t *testing.T) {
 		t.Fatalf("after picking a pokemon, stage = %q", h.ui.sel.stage())
 	}
 
-	// Now the same row holds moves. With two living opponents the
-	// selection would wait for a target; the fixture has one, so
-	// tapping a move sends the turn and clears the selection. Either
-	// way the move tap must be OBSERVED - a stage that does not
-	// advance is a player stuck on their own turn.
-	h.tap(phoneW/2, firstButtonY)
+	// With two living opponents the selection would wait for a
+	// target; the fixture has one, so tapping a move sends the turn
+	// and clears the selection. Either way the tap must be OBSERVED -
+	// a stage that does not advance is a player stuck on their turn.
+	h.tapOn("choose Thunderbolt  ·  90")
 	if h.ui.sel.haveAttacker && !h.ui.sel.haveMove {
 		t.Fatal("tapping a move neither selected it nor sent the turn")
 	}
@@ -104,8 +102,8 @@ func TestOneTargetSkipsTheThirdTap(t *testing.T) {
 		t.Fatal("fixture should leave exactly one living opponent")
 	}
 
-	h.tap(phoneW/2, firstButtonY) // pokemon
-	h.tap(phoneW/2, firstButtonY) // move -> should send immediately
+	h.tapOn("choose Pikachu")            // attacker
+	h.tapOn("choose Thunderbolt  ·  90") // move -> should send immediately
 
 	// Sending clears the selection, which is how we know it fired
 	// rather than waiting for a target tap.
@@ -129,7 +127,7 @@ func TestBrowseScrollsAndPicks(t *testing.T) {
 	h.frame()
 
 	// Tap the first row to pick it.
-	h.tap(phoneW/2, 165)
+	h.tapOn("Mon0")
 	if len(h.ui.team) == 0 {
 		t.Fatal("tapping a row picked nothing")
 	}

@@ -30,11 +30,6 @@ import (
 	"gioui.org/widget/material"
 )
 
-// firstButtonY is where the first control button sits: above the nav
-// bar, which is tapTarget high with a little padding. Derived rather
-// than hardcoded per test so a layout change moves one constant.
-const firstButtonY = phoneH - 48 - 8 - 48 - 4 - 26
-
 // phoneSize is a mid-range Android in density-independent pixels.
 const phoneW, phoneH = 411, 891
 
@@ -151,6 +146,72 @@ func (h *harness) scroll(x, y, dy int) {
 		Time:     time.Since(time.Time{}),
 	})
 	h.frame()
+}
+
+// find returns the on-screen bounds of the widget whose accessibility
+// description matches, so a test can say "tap Pikachu" rather than
+// "tap at 205,208".
+//
+// Coordinates worked out by hand are a liability: they encode the
+// layout into every test, so changing a padding breaks tests that
+// have nothing to do with padding - which is exactly what happened
+// twice while restyling this app. Semantics are what the widget
+// already publishes for TalkBack, so this reuses a thing that has to
+// be right anyway.
+func (h *harness) find(desc string) (image.Point, bool) {
+	h.t.Helper()
+	// SemanticNode carries no public bounds, so this asks the router
+	// what is under each point of a coarse grid and returns the first
+	// hit. A 4px step is finer than any control here is small.
+	want := map[input.SemanticID]bool{}
+	var walk func([]input.SemanticNode)
+	walk = func(ns []input.SemanticNode) {
+		for _, n := range ns {
+			if n.Desc.Description == desc || n.Desc.Label == desc {
+				want[n.ID] = true
+			}
+			walk(n.Children)
+		}
+	}
+	walk(h.rtr.AppendSemantics(nil))
+	if len(want) == 0 {
+		return image.Point{}, false
+	}
+	for y := 0; y < phoneH; y += 4 {
+		for x := 0; x < phoneW; x += 4 {
+			if id, ok := h.rtr.SemanticAt(f32.Pt(float32(x), float32(y))); ok && want[id] {
+				return image.Pt(x, y), true
+			}
+		}
+	}
+	return image.Point{}, false
+}
+
+// tapOn taps the centre of the named widget.
+func (h *harness) tapOn(desc string) {
+	h.t.Helper()
+	p, ok := h.find(desc)
+	if !ok {
+		h.t.Fatalf("no widget described %q on screen; visible: %v", desc, h.visible())
+	}
+	h.tap(p.X, p.Y)
+}
+
+// visible lists what a test could have tapped, so a failure names the
+// alternatives instead of just saying no.
+func (h *harness) visible() []string {
+	var out []string
+	var walk func([]input.SemanticNode)
+	walk = func(ns []input.SemanticNode) {
+		for _, n := range ns {
+			if d := n.Desc.Description; d != "" {
+				out = append(out, d)
+			}
+			walk(n.Children)
+		}
+	}
+	walk(h.rtr.AppendSemantics(nil))
+	return out
 }
 
 // notBlank reports whether anything was drawn, so a test that taps into
