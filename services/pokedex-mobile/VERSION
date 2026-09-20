@@ -1,5 +1,6 @@
-v0.3.2
+v0.3.3
 
+v0.3.3 the repack actually decompresses: zipalign -p alone left them Defl
 v0.3.2 the APK actually installs: native libs stored and page-aligned
 v0.3.1 the palette comes from the Pokemon brand colours, and surfaces are neutral again
 v0.3.0 sprites, type chips, and an Android back button that navigates
