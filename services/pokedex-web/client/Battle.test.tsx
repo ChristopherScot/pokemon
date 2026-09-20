@@ -30,7 +30,7 @@ const mon = (name: string, over: Record<string, unknown> = {}): Mon => ({
     move({
       name: 'growl', power: 0, pp: 40, damageClass: 'status',
       description:
-        'The user growls in an endearing way, making opposing Pokemon less wary. This lowers their Attack stats.',
+        'The user growls in an endearing way, making opposing Pok\u00e9mon less wary. This lowers their Attack stats.',
       effect: 'Lowers the target\u2019s Attack by one stage.',
     }),
   ],

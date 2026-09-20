@@ -4,9 +4,11 @@ export default defineConfig({
   // The pokedex client is a file: dependency, so node_modules holds a
   // SYMLINK to ../pokedex/clients/ts. Without this, Rollup resolves the
   // client's own imports from that real path, walks up looking for
-  // node_modules, finds none, and fails on "openapi-fetch". Node's
-  // runtime resolver follows the link back here; the bundler does not
-  // unless told to.
+  // node_modules, finds none, and fails on "openapi-fetch".
+  //
+  // Node resolves the same way for the same reason - it realpaths by
+  // default - which is why package.json runs server.ts with
+  // --preserve-symlinks. Both the bundler and the runtime need telling.
   resolve: {
     preserveSymlinks: true,
   },

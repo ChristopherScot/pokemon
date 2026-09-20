@@ -5,11 +5,26 @@
 name: build pokedex-web
 
 on:
+  # The client is a file: dependency, so services/pokedex is a BUILD
+  # INPUT here, not just a neighbour. Without these paths a spec change
+  # skips this job entirely - and `vite build` does not typecheck, so
+  # the break is invisible until some later, unrelated commit rebuilds
+  # against the changed client and ships it.
+  #
+  # openapi.yml as well as clients/ts, so a spec edit committed without
+  # running regen still triggers the consumer.
   push:
     branches: [main]
-    paths: ['services/pokedex-web/**', '.github/workflows/pokedex-web.yaml']
+    paths:
+      - 'services/pokedex-web/**'
+      - 'services/pokedex/clients/ts/**'
+      - 'services/pokedex/openapi.yml'
+      - '.github/workflows/pokedex-web.yaml'
   pull_request:
-    paths: ['services/pokedex-web/**']
+    paths:
+      - 'services/pokedex-web/**'
+      - 'services/pokedex/clients/ts/**'
+      - 'services/pokedex/openapi.yml'
   workflow_dispatch:
 
 # Two pushes in quick succession otherwise race to publish :latest, and
@@ -43,6 +58,17 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      # npm ci accepts a lockfile whose entry for the linked client is a
+      # version behind what the client now says - verified, it exits 0
+      # and warns about nothing. That is the same silent staleness this
+      # service moved to file: to escape, so it gets checked rather than
+      # trusted.
+      - name: Check the lockfile matches the linked client
+        run: |
+          npm install --package-lock-only
+          git diff --exit-code -- package-lock.json \
+            || { echo "::error::package-lock.json is stale - run 'npm install' and commit it"; exit 1; }
 
       # Not --if-present: the scaffold always ships tests, so a missing
       # script means someone removed them, and CI should say so rather
