@@ -396,6 +396,62 @@ func randomID(rng roller, n int) string {
 	return string(b)
 }
 
+// newBattle opens a battle waiting for an opponent.
+//
+// Here rather than in the handler: status, version, the timestamps
+// and the opening log line are battle invariants, and the HTTP layer
+// was setting them field by field. takeTurn and finishTurn maintain
+// exactly the same invariants in this file, so a transition living
+// anywhere else is a second place to forget one.
+func newBattle(id, trainer, token string, team []*combatant, now time.Time) *battle {
+	b := &battle{
+		id:      id,
+		status:  "waiting",
+		version: 1,
+		created: now,
+		touched: now,
+		sides: []*side{{
+			trainer: trainer,
+			token:   token,
+			team:    team,
+		}},
+	}
+	b.log = append(b.log, api.BattleEvent{
+		TurnNumber: 0,
+		Text:       fmt.Sprintf("%s is looking for a battle.", trainer),
+	})
+	return b
+}
+
+// join adds the second side and starts the battle.
+//
+// Returns errBattleFull if it is not waiting and errAlreadyIn if the
+// same trainer tries to join their own battle. The bookkeeping -
+// status, turn, version, touched, the log line - is the engine's, the
+// way it is for every other transition.
+func (b *battle) join(trainer, token string, team []*combatant) error {
+	if b.status != "waiting" {
+		return errBattleFull
+	}
+	if b.sides[0].token == token {
+		return errAlreadyIn
+	}
+	b.sides = append(b.sides, &side{
+		trainer: trainer,
+		token:   token,
+		team:    team,
+	})
+	b.status = "active"
+	b.turn = 0
+	b.version++
+	b.touched = time.Now()
+	b.log = append(b.log, api.BattleEvent{
+		TurnNumber: 0,
+		Text:       fmt.Sprintf("%s joined. %s moves first!", trainer, b.sides[0].trainer),
+	})
+	return nil
+}
+
 func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng roller) error {
 	if b.status == "finished" {
 		return errBattleOver
