@@ -13,6 +13,7 @@ import (
 
 	"strings"
 
+	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -180,18 +181,15 @@ func (a *ui) dexRow(gtx layout.Context, th *material.Theme, p api.Pokemon, i int
 		return layout.Dimensions{}
 	}
 	pos := teamPosition(a.team, p.Name)
-	// The leading slot carries the pick order when picked and the
-	// dex number otherwise, so a glance down the list reads as a team
-	// sheet rather than as a column of identical buttons.
-	leading := "#" + strconv.Itoa(p.ID)
-	trailing := ""
+	trailing := "#" + strconv.Itoa(p.ID)
 	if pos > 0 {
-		leading = strconv.Itoa(pos)
-		trailing = "on team"
+		trailing = "#" + strconv.Itoa(pos) + " on team"
+	}
+	lead := func(gtx layout.Context) layout.Dimensions {
+		return a.spriteOrMonogram(gtx, th, p.Sprite, strings.ToUpper(p.Name[:1]), unit.Dp(48), pos > 0)
 	}
 	return layout.Inset{Bottom: gapXS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return listItem(gtx, th, &a.dexClicks[i], leading,
-			title(p.Name), strings.Join(p.Types, " · "), trailing, pos > 0)
+		return listItemTyped(gtx, th, &a.dexClicks[i], lead, title(p.Name), p.Types, trailing, pos > 0)
 	})
 }
 
@@ -423,6 +421,60 @@ func (a *ui) handleNav(gtx layout.Context) {
 			if dest[i] == screenLobby {
 				a.loadLobby()
 			}
+		}
+	}
+}
+
+// --- back navigation ------------------------------------------------
+
+// handleBack implements the Android back button.
+//
+// Unhandled, back kills the app - mid-battle, with no warning. That is
+// a hard Android expectation rather than a nicety: every screen that
+// is not the root must go somewhere, and the root exits.
+//
+// Returning false lets the platform close the app, which is correct
+// only from the Pokedex.
+func (a *ui) handleBack(gtx layout.Context) bool {
+	// Inside a turn, back undoes the selection rather than leaving
+	// the screen - the same thing the on-screen Back does, so the two
+	// gestures agree.
+	if a.screen == screenBattle && a.sel.canGoBack() {
+		a.sel.back()
+		return true
+	}
+	switch a.screen {
+	case screenBrowse, screenRegister:
+		return false // root: let Android close the app
+	case screenBattle:
+		// A live battle is not something to leave by accident. One
+		// back arms it, a second within the window leaves.
+		if a.battle != nil && a.battle.Status != "finished" && !a.confirmLeave {
+			a.confirmLeave = true
+			a.status = "Press back again to leave the battle"
+			return true
+		}
+		a.battle = nil
+		a.confirmLeave = false
+		a.sel.reset()
+		a.screen = screenLobby
+		a.loadLobby()
+		return true
+	default:
+		a.screen = screenBrowse
+		return true
+	}
+}
+
+// readKeys drains key events, which is how the back button arrives.
+func (a *ui) readKeys(gtx layout.Context) {
+	for {
+		ev, ok := gtx.Event(key.Filter{Name: key.NameBack})
+		if !ok {
+			return
+		}
+		if ke, isKey := ev.(key.Event); isKey && ke.State == key.Press {
+			a.handleBack(gtx)
 		}
 	}
 }

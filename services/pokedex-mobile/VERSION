@@ -1,5 +1,6 @@
-v0.2.1
+v0.3.0
 
+v0.3.0 sprites, type chips, and an Android back button that navigates
 v0.2.1 review fixes: the theme is actually applied, a real data race, and who won
 v0.2.0 Material 3: colour roles, cards, tonal buttons, and a real nav bar
 v0.1.0 the playable game: browse, team, lobby and battle, laid out for a thumb

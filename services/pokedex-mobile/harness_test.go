@@ -151,6 +151,18 @@ func (h *harness) scroll(x, y, dy int) {
 	h.frame()
 }
 
+// gtx builds a context for calling layout logic directly, where a
+// test drives a handler rather than a tap.
+func (h *harness) gtx() layout.Context {
+	return layout.Context{
+		Ops:         &h.ops,
+		Constraints: layout.Exact(image.Pt(phoneW, phoneH)),
+		Metric:      unit.Metric{PxPerDp: 1, PxPerSp: 1},
+		Now:         time.Now(),
+		Source:      h.rtr.Source(),
+	}
+}
+
 // find returns the on-screen bounds of the widget whose accessibility
 // description matches, so a test can say "tap Pikachu" rather than
 // "tap at 205,208".

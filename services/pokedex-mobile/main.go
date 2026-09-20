@@ -90,6 +90,13 @@ type ui struct {
 	// there is no UI left to take it.
 	done chan struct{}
 
+	// confirmLeave arms the second back press that leaves a live
+	// battle, so one stray gesture does not forfeit it.
+	confirmLeave bool
+
+	// sprites decodes and caches the images the API points at.
+	sprites *spriteCache
+
 	api *api.Client
 	bc  *battleclient.Client
 	id  battleclient.Identity
@@ -150,6 +157,7 @@ func newUI(w *app.Window) *ui {
 	a.monBtns = make([]widget.Clickable, 8)
 	a.moveBtns = make([]widget.Clickable, 8)
 	a.tgtBtns = make([]widget.Clickable, 8)
+	a.sprites = newSpriteCache(a.invalidate)
 	return a
 }
 
@@ -278,6 +286,7 @@ const tapTarget = unit.Dp(48)
 
 func (a *ui) layout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	a.handleNav(gtx)
+	a.readKeys(gtx)
 	paint.Fill(gtx.Ops, m3.surface)
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
