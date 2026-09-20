@@ -20,6 +20,19 @@ func main() {
 		"version", version,
 	))
 
+	// `pokedex seed` loads the reference data and exits. It is a
+	// separate command because the data changes when the binary does,
+	// not when a pod restarts - seeding on every boot rewrote ~9,000
+	// rows that were already correct, and crashlooped the pod when the
+	// cluster was slow enough for that to miss its deadline.
+	if len(os.Args) > 1 && os.Args[1] == "seed" {
+		if err := runSeed(); err != nil {
+			slog.Error("seeding", "err", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	h, err := handler()
 	if err != nil {
 		slog.Error("building handler", "err", err)

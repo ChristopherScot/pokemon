@@ -135,6 +135,8 @@ func handler() (http.Handler, error) {
 	)
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		var pool *pgxpool.Pool
+		// Connect, migrate and load. NOT seed - that is `pokedex seed`,
+		// run when the data changes rather than when a pod restarts.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -144,9 +146,6 @@ func handler() (http.Handler, error) {
 		}
 		if err = migrate(ctx, pool); err != nil {
 			return nil, fmt.Errorf("migrating: %w", err)
-		}
-		if err = seed(ctx, pool); err != nil {
-			return nil, fmt.Errorf("seeding: %w", err)
 		}
 		if dex, err = loadPokedexFromDB(ctx, pool); err != nil {
 			return nil, fmt.Errorf("loading the pokedex: %w", err)

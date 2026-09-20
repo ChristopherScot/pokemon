@@ -3,8 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -28,6 +32,7 @@ func seed(ctx context.Context, pool *pgxpool.Pool) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := dbgen.New(tx)
+	var links moveLinks
 
 	for _, m := range doc.Moves {
 		var accuracy *int32
@@ -77,25 +82,17 @@ func seed(ctx context.Context, pool *pgxpool.Pool) error {
 			return fmt.Errorf("clearing moves for %q: %w", e.Name, err)
 		}
 		for i, name := range e.Moves {
-			if err := q.UpsertPokemonMove(ctx, dbgen.UpsertPokemonMoveParams{
-				PokemonID: int32(e.ID),
-				MoveName:  name,
-				Kind:      "battle",
-				Slot:      int32(i),
-			}); err != nil {
-				return fmt.Errorf("linking battle move %q to %q: %w", name, e.Name, err)
-			}
+			links.add(e.ID, name, "battle", i)
 		}
 		for i, name := range e.LearnableMoves {
-			if err := q.UpsertPokemonMove(ctx, dbgen.UpsertPokemonMoveParams{
-				PokemonID: int32(e.ID),
-				MoveName:  name,
-				Kind:      "learnable",
-				Slot:      int32(i),
-			}); err != nil {
-				return fmt.Errorf("linking learnable move %q to %q: %w", name, e.Name, err)
-			}
+			links.add(e.ID, name, "learnable", i)
 		}
+	}
+
+	// One statement for every link. This was one round trip per row -
+	// about 9,000 of them - which took minutes against a real database.
+	if err := q.UpsertPokemonMoves(ctx, links.params()); err != nil {
+		return fmt.Errorf("linking moves: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -213,4 +210,64 @@ func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error
 		return nil, err
 	}
 	return p, nil
+}
+
+// runSeed loads the embedded reference data into the database and
+// returns. It is what `pokedex seed` runs.
+//
+// Deliberately not part of startup: the data changes when the binary
+// changes, so a pod restart has nothing to do. Doing it on every boot
+// rewrote ~9,000 rows that were already correct and shared one 30s
+// budget with connect, migrate and load - which crashlooped the pod
+// whenever the cluster was slow enough to miss it.
+func runSeed() error {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		return errors.New("DATABASE_URL is not set")
+	}
+
+	// Its own generous budget: this writes thousands of rows and is a
+	// job, not a request.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		return fmt.Errorf("connecting: %w", err)
+	}
+	defer pool.Close()
+
+	if err := migrate(ctx, pool); err != nil {
+		return fmt.Errorf("migrating: %w", err)
+	}
+	if err := seed(ctx, pool); err != nil {
+		return err
+	}
+	slog.Info("seeded")
+	return nil
+}
+
+// moveLinks collects every pokemon-to-move link so they can be written
+// in one statement rather than one per row.
+type moveLinks struct {
+	pokemonIDs []int32
+	names      []string
+	kinds      []string
+	slots      []int32
+}
+
+func (l *moveLinks) add(pokemonID int, name, kind string, slot int) {
+	l.pokemonIDs = append(l.pokemonIDs, int32(pokemonID))
+	l.names = append(l.names, name)
+	l.kinds = append(l.kinds, kind)
+	l.slots = append(l.slots, int32(slot))
+}
+
+func (l *moveLinks) params() dbgen.UpsertPokemonMovesParams {
+	return dbgen.UpsertPokemonMovesParams{
+		PokemonIds: l.pokemonIDs,
+		MoveNames:  l.names,
+		Kinds:      l.kinds,
+		Slots:      l.slots,
+	}
 }

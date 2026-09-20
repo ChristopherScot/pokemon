@@ -272,26 +272,32 @@ func (q *Queries) UpsertPokemon(ctx context.Context, arg UpsertPokemonParams) er
 	return err
 }
 
-const upsertPokemonMove = `-- name: UpsertPokemonMove :exec
+const upsertPokemonMoves = `-- name: UpsertPokemonMoves :exec
 INSERT INTO pokemon_moves (pokemon_id, move_name, kind, slot)
-VALUES ($1, $2, $3, $4)
+SELECT
+    unnest($1::int[]),
+    unnest($2::text[]),
+    unnest($3::text[]),
+    unnest($4::int[])
 ON CONFLICT (pokemon_id, move_name, kind) DO UPDATE SET
     slot = EXCLUDED.slot
 `
 
-type UpsertPokemonMoveParams struct {
-	PokemonID int32
-	MoveName  string
-	Kind      string
-	Slot      int32
+type UpsertPokemonMovesParams struct {
+	PokemonIds []int32
+	MoveNames  []string
+	Kinds      []string
+	Slots      []int32
 }
 
-func (q *Queries) UpsertPokemonMove(ctx context.Context, arg UpsertPokemonMoveParams) error {
-	_, err := q.db.Exec(ctx, upsertPokemonMove,
-		arg.PokemonID,
-		arg.MoveName,
-		arg.Kind,
-		arg.Slot,
+// Every link in one statement. unnest turns four parallel arrays into
+// rows, so seeding is one round trip instead of ~9,000.
+func (q *Queries) UpsertPokemonMoves(ctx context.Context, arg UpsertPokemonMovesParams) error {
+	_, err := q.db.Exec(ctx, upsertPokemonMoves,
+		arg.PokemonIds,
+		arg.MoveNames,
+		arg.Kinds,
+		arg.Slots,
 	)
 	return err
 }

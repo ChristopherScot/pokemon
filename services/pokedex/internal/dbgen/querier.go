@@ -82,7 +82,9 @@ type Querier interface {
 	// silently skips existing rows would leave the database on an old
 	// version of the Pokedex with no sign of it.
 	UpsertPokemon(ctx context.Context, arg UpsertPokemonParams) error
-	UpsertPokemonMove(ctx context.Context, arg UpsertPokemonMoveParams) error
+	// Every link in one statement. unnest turns four parallel arrays into
+	// rows, so seeding is one round trip instead of ~9,000.
+	UpsertPokemonMoves(ctx context.Context, arg UpsertPokemonMovesParams) error
 }
 
 var _ Querier = (*Queries)(nil)

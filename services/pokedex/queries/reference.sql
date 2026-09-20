@@ -72,9 +72,15 @@ ON CONFLICT (name) DO UPDATE SET
     pp = EXCLUDED.pp,
     damage_class = EXCLUDED.damage_class;
 
--- name: UpsertPokemonMove :exec
+-- name: UpsertPokemonMoves :exec
+-- Every link in one statement. unnest turns four parallel arrays into
+-- rows, so seeding is one round trip instead of ~9,000.
 INSERT INTO pokemon_moves (pokemon_id, move_name, kind, slot)
-VALUES ($1, $2, $3, $4)
+SELECT
+    unnest(@pokemon_ids::int[]),
+    unnest(@move_names::text[]),
+    unnest(@kinds::text[]),
+    unnest(@slots::int[])
 ON CONFLICT (pokemon_id, move_name, kind) DO UPDATE SET
     slot = EXCLUDED.slot;
 
