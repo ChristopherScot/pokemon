@@ -14,15 +14,27 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
-// defaultAPI matches the TUI's, so a phone and a terminal talk to the
-// same server without configuration.
-const defaultAPI = "https://pokemon.home.chrisscotmartin.com/api"
+// apiBase is the server to talk to.
+//
+// The default differs by platform and is chosen at compile time, in
+// api_android.go and api_desktop.go: the packaged app must reach the
+// public API with no setup, and a desktop build is a development build,
+// so it should find a server started by `make run` rather than talk to
+// the cluster. POKEDEX_URL overrides either.
+func apiBase() string {
+	if v := strings.TrimSpace(os.Getenv("POKEDEX_URL")); v != "" {
+		return v
+	}
+	return defaultAPI
+}
 
 // requestTimeout bounds every call. A phone changes networks mid-tap -
 // wifi to cellular, or a tunnel dropping - and without this the UI
@@ -114,7 +126,7 @@ func (u *ui) loadDex() {
 func (u *ui) register(name string) {
 	u.busy = true
 	u.go1(requestTimeout, func(ctx context.Context) result {
-		id, err := battleclient.Register(ctx, defaultAPI, name)
+		id, err := battleclient.Register(ctx, apiBase(), name)
 		return result{kind: resRegistered, ident: id, err: err}
 	})
 }

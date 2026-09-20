@@ -52,6 +52,9 @@ jobs:
       - name: Test
         run: make test
 
+      - name: Build
+        run: make build
+
   release:
     # Only when VERSION changed, and only from main.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -115,14 +118,17 @@ jobs:
         id: v
         run: echo "version=$(head -n1 services/pokedex-mobile/VERSION)" >> $GITHUB_OUTPUT
 
-      - name: Install gogio
-        if: steps.gate.outputs.go == 'true'
-        run: go install gioui.org/cmd/gogio@latest
-
-      # gogio signs the APK itself. Given no keystore it generates a
-      # debug one and signs with that, which is enough for a phone to
-      # install after allowing unknown sources - no Play Console, no
-      # certificate to obtain.
+      # A debug key is enough for a phone to install after allowing
+      # unknown sources - no Play Console, no certificate. The cost:
+      # Android identifies an app by (app id, signing key) and CI
+      # generates a fresh key each run, so upgrading over a previous
+      # install is REFUSED and you uninstall first. A keystore in Vault
+      # is the upgrade path when this stops being a toy.
+      # One command, the same one a person runs. The APK needs a
+      # four-part version, a repack because gogio compresses the
+      # native libraries, and a re-sign after that - keeping those in
+      # the Makefile rather than here means a break shows up locally
+      # instead of only on main.
       #
       # The cost of a debug key: Android identifies an app by the pair
       # (app id, signing key), and CI generates a fresh key each run.
@@ -136,6 +142,9 @@ jobs:
       # a downgrade. github.run_number is used for it because it only
       # ever goes up; deriving it from VERSION would mean encoding a
       # fourth number by hand and never being allowed to get it wrong.
+      # VERSION_CODE is Android's integer versionCode, which must
+      # increase on every release or a phone refuses the upgrade as a
+      # downgrade. github.run_number only ever goes up.
       - name: Build the APK
         if: steps.gate.outputs.go == 'true'
         working-directory: services/pokedex-mobile
@@ -198,6 +207,7 @@ jobs:
         if: steps.gate.outputs.go == 'true'
         working-directory: services/pokedex-mobile
         run: python3 check_apk.py pokedex-mobile.apk
+        run: make build TARGET=apk VERSION_CODE=${{ github.run_number }}
 
       - name: Checksums
         if: steps.gate.outputs.go == 'true'
