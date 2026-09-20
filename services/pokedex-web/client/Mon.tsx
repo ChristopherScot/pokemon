@@ -1,9 +1,3 @@
-// One Pokemon on the board.
-//
-// A button when it can be chosen, a plain div when it cannot - which is
-// how a keyboard reaches it and how a screen reader is told it is
-// pressable. The old markup was a div with a delegated click handler,
-// so the board was mouse-only.
 import type { components } from '@christopherscot/pokedex-client'
 
 import { colour } from '../types.ts'
@@ -24,13 +18,10 @@ export function MonView({
   selectable: boolean
   selected: boolean
   onPick: (i: number) => void
-  /** Damage numbers currently rising off this Pokemon. */
   floats?: Array<{ id: number; text: string; band: string }>
 }) {
   const pct = mon.maxHp > 0 ? Math.max(0, (mon.hp / mon.maxHp) * 100) : 0
 
-  // A hit shakes, and a super-effective one shakes harder. Animating
-  // only 2x meant most turns had no feedback beyond a bar moving.
   const hit = floats.some((f) => f.band !== 'immune')
   const hard = floats.some((f) => f.band === 'super')
 

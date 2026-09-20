@@ -47,8 +47,6 @@ func (m model) lobbyView() string {
 	return sb.String()
 }
 
-// teamView reuses the browse list to pick three Pokemon, rather than
-// inventing a second picker for the same data.
 func (m model) teamView() string {
 	head := "  " + titleStyle.Render("Choose three Pokemon")
 	if m.joining != "" {
@@ -57,19 +55,12 @@ func (m model) teamView() string {
 		head += dimStyle.Render("  ·  opening a new battle")
 	}
 
-	// An empty slot shows a die, not an ellipsis, and says so in the
-	// hint below. The server fills whatever is left out, so starting
-	// with one pick - or none - is a real option, and an ellipsis reads
-	// as "incomplete, keep going" rather than "this will be random".
-	// The web picker uses the same die for the same reason.
 	picked := "  "
 	for i := 0; i < battleclient.TeamSize; i++ {
 		if i < len(m.team) {
 			picked += selStyle.Render(fmt.Sprintf("%d. %-14s", i+1, m.team[i]))
 			continue
 		}
-		// Padded to 13, not 14: the die is two columns wide and
-		// %-14s counts it as one, so the columns step right without it.
 		picked += dimStyle.Render(fmt.Sprintf("%d. \U0001F3B2 %-13s", i+1, "random"))
 	}
 

@@ -23,9 +23,6 @@ func battle(status api.BattleStatus, turn string, sides ...string) *api.Battle {
 	return b
 }
 
-// MyTurn exists because every caller needs it and comparing the wrong
-// field is an easy mistake: a client that thinks it is always its turn
-// spams 409s, and one that never thinks so hangs forever.
 func TestMyTurn(t *testing.T) {
 	c := &Client{Name: "ash"}
 	for _, tc := range []struct {
@@ -35,8 +32,6 @@ func TestMyTurn(t *testing.T) {
 	}{
 		{"my move", battle(api.BattleStatusActive, "ash", "ash", "gary"), true},
 		{"their move", battle(api.BattleStatusActive, "gary", "ash", "gary"), false},
-		// Waiting and finished have no turn; treating an absent turn as
-		// "mine" would make a client attack into a battle that is over.
 		{"still waiting", battle(api.BattleStatusWaiting, "", "ash"), false},
 		{"finished", battle(api.BattleStatusFinished, "", "ash", "gary"), false},
 	} {
@@ -48,9 +43,6 @@ func TestMyTurn(t *testing.T) {
 	}
 }
 
-// SideFor must not depend on which slot the server happened to put this
-// trainer in - the creator is index 0 and the joiner is index 1, so a
-// client that assumed one would be wrong half the time.
 func TestSideForWorksFromEitherSlot(t *testing.T) {
 	c := &Client{Name: "ash"}
 
@@ -64,20 +56,11 @@ func TestSideForWorksFromEitherSlot(t *testing.T) {
 		t.Errorf("as joiner: mine=%q theirs=%q ok=%v", mine.Trainer, theirs.Trainer, ok)
 	}
 
-	// A battle with one side is not yet playable; ok must say so rather
-	// than the caller indexing past the end.
 	if _, _, ok := c.SideFor(battle(api.BattleStatusWaiting, "", "ash")); ok {
 		t.Error("SideFor reported ok for a battle with one side")
 	}
 }
 
-// An empty team means "pick for me", and has to be sent as an ABSENT
-// field rather than an empty array.
-//
-// The spec says minItems 3, so `"team": []` is a validation error - and
-// the 400 it produces does not even decode as the client's Error type,
-// so the caller sees "invalid: message (field required)" instead of
-// anything about teams. A nil slice is what makes ogen omit the field.
 func TestEmptyTeamIsSentAsAbsent(t *testing.T) {
 	var got string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -104,19 +87,10 @@ func TestEmptyTeamIsSentAsAbsent(t *testing.T) {
 	}
 }
 
-// Every Go client points at the same deployed API by default.
-//
-// They did not: the CLI defaulted to the in-cluster address while the
-// TUI defaulted to the public URL. The CLI is published as a release
-// binary and run on laptops, where pokedex.pokedex.svc.cluster.local
-// does not resolve - and "no such host" reads as a broken install
-// rather than a default that only works inside the cluster.
 func TestDefaultAPIIsReachableFromAnywhere(t *testing.T) {
 	if !strings.HasPrefix(DefaultAPI, "https://") {
 		t.Errorf("DefaultAPI = %q, which is not a public address", DefaultAPI)
 	}
-	// An in-cluster name resolves nowhere else, so it cannot be the
-	// default for a binary people download.
 	if strings.Contains(DefaultAPI, ".svc.cluster.local") {
 		t.Errorf("DefaultAPI = %q, an in-cluster address", DefaultAPI)
 	}
@@ -152,14 +126,6 @@ func TestUnauthorizedIsAStaleIdentity(t *testing.T) {
 	}
 }
 
-// A spectator is not a participant, and must not be told otherwise.
-//
-// SideFor used to check only Sides[0]: a name matching neither side
-// fell through to "then it must be side 1" and returned ok=true with
-// the sides swapped. The CLI's `watch <id>` and `battle <id>` accept
-// any battle id, so pasting a link someone shared labelled a stranger's
-// team "you" - and MyTurn was coincidentally false, so it printed
-// "waiting on X" and looked plausible.
 func TestSideForRefusesANonParticipant(t *testing.T) {
 	b := &api.Battle{Sides: []api.Side{
 		{Trainer: "ash"}, {Trainer: "misty"},
@@ -293,13 +259,6 @@ func TestCheckTurnRefusesASpectator(t *testing.T) {
 	}
 }
 
-// The ORDER is the point, not just the set.
-//
-// A client that reports a different FIRST reason than the server would
-// teach the player a rule that is not the rule. With several things
-// wrong at once, the earliest server check must win: here the battle is
-// over AND it is not this player's turn AND the attacker has fainted -
-// the answer is "this battle is over".
 func TestCheckTurnReportsTheSameFirstReasonAsTheServer(t *testing.T) {
 	c := &Client{Name: "ash"}
 
@@ -323,8 +282,6 @@ func TestCheckTurnReportsTheSameFirstReasonAsTheServer(t *testing.T) {
 		t.Errorf("bad indices on someone else's turn = %v, want ErrNotYourTurn", err)
 	}
 
-	// A fainted ATTACKER outranks a bad move index, as it does on the
-	// server - attacker.fainted() is checked before the move range.
 	downed := activeBattleFor(
 		[]api.BattlePokemon{testMon("pikachu", true, "thunderbolt")},
 		[]api.BattlePokemon{testMon("staryu", false, "bubble")},

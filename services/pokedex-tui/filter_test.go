@@ -9,13 +9,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// The team picker renders m.list, so it has to update m.list too.
-//
-// It used to update the list only on the browse screen. Pressing "/" on
-// the picker opened the list's filter, the FilterState guard then routed
-// every following key to the list, and the screen check threw them away:
-// the filter could not take text and escape could not close it. The TUI
-// ate input until it was killed.
 func TestTheTeamPickerUpdatesTheListItRenders(t *testing.T) {
 	for _, s := range []screen{screenBrowse, screenTeam} {
 		m := model{screen: s}
@@ -25,8 +18,6 @@ func TestTheTeamPickerUpdatesTheListItRenders(t *testing.T) {
 	}
 }
 
-// A screen that does not show the list must not be sent its messages,
-// or a keypress scrolls something nobody can see.
 func TestScreensWithoutTheListAreNotRoutedToIt(t *testing.T) {
 	for _, s := range []screen{screenLobby, screenBattle} {
 		m := model{screen: s}
@@ -36,9 +27,6 @@ func TestScreensWithoutTheListAreNotRoutedToIt(t *testing.T) {
 	}
 }
 
-// Escape must be able to close the filter on the picker. With the old
-// routing this key never reached the list, so the filter stayed open
-// forever.
 func TestEscapeReachesTheListFilterOnThePicker(t *testing.T) {
 	m := newModel(nil, "http://example.invalid")
 	m.screen = screenTeam

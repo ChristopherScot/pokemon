@@ -1,11 +1,4 @@
 // @vitest-environment jsdom
-//
-// Component tests for the battle screen.
-//
-// These replace assertions that used to match the SERVER's markup with
-// a regex. That worked while the page was a template literal and stops
-// being meaningful the moment the board is a component: what matters is
-// what React renders, not what the shell HTML contains.
 import { act, render, screen } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 
@@ -25,9 +18,6 @@ const mon = (name: string, over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-// Typed against the generated schema rather than cast to never: a
-// fixture that casts away its type cannot catch a renamed or misspelt
-// field, which is most of what a fixture is for.
 const battle = (over: Partial<Battle> = {}): Battle => ({
   id: 'abc123', status: 'active', version: 1, turn: 'ash', log: [],
   sides: [
@@ -37,10 +27,6 @@ const battle = (over: Partial<Battle> = {}): Battle => ({
   ...over,
 })
 
-// A screen-reader user has to be TOLD their turn began; it is the one
-// thing this game must announce. The old banner was rebuilt inside a
-// full innerHTML swap, and a live region that is destroyed and
-// recreated announces nothing.
 test('the banner is a live region that says whose turn it is', () => {
   render(<BattleBoard battle={battle()} me="ash" />)
   const banner = screen.getByRole('status')
@@ -52,8 +38,6 @@ test('the banner names the opponent when it is not your turn', () => {
   expect(screen.getByRole('status')).toHaveTextContent('waiting on misty')
 })
 
-// The spec says of disabledMove: "Selecting it is a 409, so a client
-// should show it as unavailable rather than letting the turn fail."
 test('a disabled move is a disabled button', () => {
   const b = battle({
     sides: [
@@ -66,9 +50,6 @@ test('a disabled move is a disabled button', () => {
   expect(screen.getByRole('button', { name: /tackle/ })).toBeEnabled()
 })
 
-// Every Pokemon you can choose is a real button, so the board is
-// reachable by keyboard. It used to be a div with a delegated click
-// handler, which made the game mouse-only.
 test('choosable pokemon are buttons, and fainted ones are not', () => {
   const b = battle({
     sides: [
@@ -81,20 +62,11 @@ test('choosable pokemon are buttons, and fainted ones are not', () => {
   expect(screen.queryByRole('button', { name: /geodude/ })).toBeNull()
 })
 
-// A non-participant sees the battle rather than a broken board. The
-// arithmetic that produced this bug - 1 - findIndex(...) with -1 - made
-// BOTH sides undefined and left the page on "loading…" forever.
 test('a spectator gets a board, not a crash', () => {
   render(<BattleBoard battle={battle()} me="brock" />)
   expect(screen.getByRole('status')).toHaveTextContent('watching ash vs misty')
 })
 
-// The damage float, restored after the React port dropped it.
-//
-// The bug it exists to prevent: the old loop was guarded by
-// `!e.damage`, and an immune hit deals exactly 0, so the branch that
-// says "no effect" was unreachable - the classifier was right and the
-// screen showed nothing.
 const withLog = (log: Battle['log']) => battle({ log })
 
 test('a hit floats its damage over the target', () => {
@@ -144,15 +116,6 @@ test('a status move floats nothing', () => {
   expect(screen.queryByText('no effect')).toBeNull()
 })
 
-// Floats have to EXPIRE, and the only way to see that they do not is to
-// keep polling while they are on screen.
-//
-// The expiry timer was returned as effect cleanup, and useBattle hands
-// down a new battle object every second - so the effect re-ran and
-// cancelled the timer before it ever fired. The float stayed forever
-// and, because the shake class derives from the same array, so did the
-// shake. Every existing float test rendered once and never polled,
-// which is exactly why the suite was green.
 test('a float expires even while the battle keeps polling', async () => {
   vi.useFakeTimers()
   try {
@@ -161,8 +124,6 @@ test('a float expires even while the battle keeps polling', async () => {
     rerender(<BattleBoard battle={withLog([hit])} me="ash" />)
     expect(screen.getByText('-7')).toBeTruthy()
 
-    // Four seconds of polling, a new object each time, as the real poll
-    // produces. The float's life is 2400ms.
     for (let i = 0; i < 4; i++) {
       await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
       rerender(<BattleBoard battle={{ ...battle({ log: [hit] }), version: 2 + i }} me="ash" />)

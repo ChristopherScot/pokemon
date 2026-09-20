@@ -15,8 +15,6 @@ func TestVersionIsSet(t *testing.T) {
 	}
 }
 
-// The root command wires every subcommand; if one is dropped the CLI still
-// compiles and the command silently disappears.
 func TestRootHasExpectedCommands(t *testing.T) {
 	want := map[string]bool{"update": false, "version": false}
 	for _, c := range rootCmd().Commands() {
@@ -43,10 +41,6 @@ func TestIsNewer(t *testing.T) {
 		{"v1.1.0", "v1.1.0", false, "equal is not newer"},
 		{"v1.1.1", "v1.1", true, "an omitted patch reads as .0"},
 
-		// Double digits. A comparison that reads components pairwise
-		// gets these backwards and then reports "already up to date"
-		// forever - a failure nobody notices, because it looks like
-		// there simply being no new release.
 		{"v1.10.0", "v1.2.0", true, "10 is newer than 2, not older"},
 		{"v1.2.0", "v1.10.0", false, "and the reverse still holds"},
 		{"v2.0.0", "v1.99.99", true, "major wins over any minor"},
@@ -55,8 +49,6 @@ func TestIsNewer(t *testing.T) {
 		{"v1.0.0", "v1.0.0-rc1", true, "release supersedes its rc"},
 		{"v1.0.0-rc1", "v1.0.0", false, "an rc does not supersede the release"},
 
-		// Unparseable means "not newer": leaving someone on a working
-		// binary beats talking them into replacing it.
 		{"not-a-version", "v1.0.0", false, "unparseable latest"},
 		{"v1.0.0", "garbage", false, "unparseable current"},
 		{"dev", "v1.0.0", false, "a dev build is not a version"},
@@ -68,10 +60,6 @@ func TestIsNewer(t *testing.T) {
 	}
 }
 
-// The caller hands isNewer whatever the tag and the ldflags say, which
-// may or may not carry a v. semver.IsValid rejects the unprefixed
-// spelling, and an invalid version means "not newer" - so if this
-// normalisation broke, update would go silent rather than fail loudly.
 func TestEnsureVAcceptsEitherSpelling(t *testing.T) {
 	for _, in := range []string{"1.2.3", "v1.2.3"} {
 		if got := ensureV(in); got != "v1.2.3" {
@@ -83,14 +71,6 @@ func TestEnsureVAcceptsEitherSpelling(t *testing.T) {
 	}
 }
 
-// TAB must complete every team slot, not just the first.
-//
-// makeCompleter deliberately stops after one argument, which is right
-// for `show pikachu` and wrong for a team of three: `open pikachu <TAB>`
-// went silent and sent the player to look the next two names up
-// somewhere else. That is the CLI's version of the bug the web had -
-// the names existed, the completer existed, and the two were never
-// connected on the commands that take a team.
 func TestTeamCompleterOffersEverySlot(t *testing.T) {
 	names := func() ([]string, error) { return []string{"pikachu", "onix", "gengar"}, nil }
 	complete := makeTeamCompleter(names, 0, 3)
@@ -114,8 +94,6 @@ func TestTeamCompleterOffersEverySlot(t *testing.T) {
 	}
 }
 
-// A name already on the team is not offered again: the server rejects a
-// duplicate team, so suggesting one is suggesting a mistake.
 func TestTeamCompleterSkipsWhatIsAlreadyPicked(t *testing.T) {
 	names := func() ([]string, error) { return []string{"pikachu", "onix", "gengar"}, nil }
 	got, _ := makeTeamCompleter(names, 0, 3)(nil, []string{"ONIX "}, "")
@@ -148,13 +126,6 @@ func TestTeamCompleterSkipsTheBattleID(t *testing.T) {
 	}
 }
 
-// "Not your battle" and "not started yet" are different answers.
-//
-// printBattle branched on SideFor's ok alone, which conflated them. That
-// was invisible while SideFor wrongly claimed every non-participant was
-// side 1; once it started telling the truth, watching someone else's
-// active battle printed "waiting for an opponent" about a battle that
-// had two trainers and a turn in progress.
 func TestSpectatingAnActiveBattleDoesNotClaimItIsWaiting(t *testing.T) {
 	mon := api.BattlePokemon{Name: "abra", Hp: 10, MaxHp: 10, Types: []string{"psychic"}}
 	b := &api.Battle{
@@ -195,10 +166,6 @@ func TestAOneSidedBattleStillReadsAsWaiting(t *testing.T) {
 	}
 }
 
-// captureStdout runs fn with os.Stdout redirected, because these
-// printers write there directly - see battle_print.go's note on why an
-// io.Writer seam is not worth it until something needs one. This is
-// that something, and it is cheaper than the seam.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()

@@ -14,10 +14,6 @@ const release = (tag: string, assets: string[], over = {}) => ({
   ...over,
 })
 
-// The tools are released independently - the TUI can be on v0.1.1 and
-// the CLI on v0.1.2 - so /latest would return whichever released most
-// recently and hide the other. Walking newest-first finds the current
-// release of each.
 test('each tool gets its own newest release', () => {
   const links = pickLinks([
     release('v0.1.2', ['pokedex-cli_darwin_arm64.tar.gz']),
@@ -43,9 +39,6 @@ test('a build for another machine is not offered', () => {
   expect(links).toHaveLength(0)
 })
 
-// Offline, rate-limited, blocked, or a platform with no build: all of
-// them render nothing. A footer saying "could not load downloads" is
-// worse than no footer, because there is nothing the reader can do.
 test('a failed fetch shows nothing at all', async () => {
   vi.stubGlobal('fetch', async () => { throw new Error('offline') })
   const { container } = render(<Downloads />)

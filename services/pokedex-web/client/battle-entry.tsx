@@ -1,8 +1,3 @@
-// The battle page's entry point.
-//
-// Reads what the server knew from a JSON island rather than having
-// values interpolated into the code, which is what lets every file
-// here be ordinary TypeScript the compiler checks.
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 

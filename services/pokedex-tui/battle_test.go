@@ -1,9 +1,5 @@
 package main
 
-// The battle screen's logic, driven directly. Update is a pure function,
-// so animation and cursor behaviour can be tested frame by frame without
-// a terminal or a server.
-
 import (
 	"fmt"
 	"strings"
@@ -46,9 +42,6 @@ func twoSided(version int, mine, theirs []api.BattlePokemon) *api.Battle {
 	}
 }
 
-// A bar must animate towards the new HP rather than snapping, and must
-// arrive exactly - an interpolation that overshoots shows a Pokemon with
-// less HP than the server says it has.
 func TestHPDrainsTowardsTheServerValueAndStops(t *testing.T) {
 	bs := testBattleState(t)
 	bs.applyBattle(twoSided(1,
@@ -80,8 +73,6 @@ func TestHPDrainsTowardsTheServerValueAndStops(t *testing.T) {
 	}
 }
 
-// Damage floats come from the log, because the log distinguishes one big
-// hit from two small ones inside a single poll - an HP diff cannot.
 func TestDamageFloatsComeFromTheLog(t *testing.T) {
 	bs := testBattleState(t)
 	first := twoSided(1,
@@ -112,8 +103,6 @@ func TestDamageFloatsComeFromTheLog(t *testing.T) {
 	}
 }
 
-// Floats expire, or they pile up over a long battle and never leave the
-// screen.
 func TestFloatsExpire(t *testing.T) {
 	bs := testBattleState(t)
 	bs.applyBattle(twoSided(1,
@@ -129,8 +118,6 @@ func TestFloatsExpire(t *testing.T) {
 	}
 }
 
-// The cursor must never rest on a fainted Pokemon: selecting one and
-// attacking is a guaranteed 409.
 func TestCursorSkipsFaintedPokemon(t *testing.T) {
 	bs := testBattleState(t)
 	team := []api.BattlePokemon{
@@ -147,8 +134,6 @@ func TestCursorSkipsFaintedPokemon(t *testing.T) {
 		t.Errorf("target cursor on %d, want 1", got)
 	}
 
-	// Cycling must stay on the living one rather than walking onto a
-	// corpse.
 	if got := nextAlive(team, 1); got != 1 {
 		t.Errorf("nextAlive wrapped onto a fainted pokemon: %d", got)
 	}
@@ -157,8 +142,6 @@ func TestCursorSkipsFaintedPokemon(t *testing.T) {
 	}
 }
 
-// A poll that brings nothing new must not restart animations, or a
-// static screen redraws forever and burns CPU.
 func TestUnchangedPollAddsNoFloats(t *testing.T) {
 	bs := testBattleState(t)
 	b := twoSided(3,
@@ -177,20 +160,6 @@ func TestUnchangedPollAddsNoFloats(t *testing.T) {
 	}
 }
 
-// A styled column must be padded BY ITS STYLE, never by fmt.
-//
-// This is the bug, measured: fmt pads to byte count, and lipgloss styles
-// wrap their content in escape sequences. A strikethrough "charmander"
-// is 116 bytes for 12 visible columns, so %-24s considers it already
-// over width and adds nothing - while an unstyled name in the same
-// column pads normally. The rows then start at different places, which
-// is exactly what the battle screen did to its fainted Pokemon.
-//
-//	%-24s of an unstyled name  -> 24 columns
-//	%-24s of a styled name     -> 12 columns
-//
-// nameCol.Width(24) pads the visible text instead, so every row lines up
-// whatever escapes it carries.
 func TestStyledColumnsArePaddedByTheirStyleNotByFmt(t *testing.T) {
 	for _, style := range []lipgloss.Style{
 		lipgloss.NewStyle(),
@@ -203,8 +172,6 @@ func TestStyledColumnsArePaddedByTheirStyleNotByFmt(t *testing.T) {
 		}
 	}
 
-	// And the failure mode it replaces, so the reason this test exists
-	// is visible rather than folklore.
 	plain := lipgloss.Width(fmt.Sprintf("%-24s", "  charmander"))
 	styled := lipgloss.Width(fmt.Sprintf("%-24s", faintStyle.Render("  charmander")))
 	if plain == styled {
@@ -236,9 +203,6 @@ func TestRowsAlignWhateverTheStyling(t *testing.T) {
 	}
 }
 
-// A hit flashes and shakes its row for a few frames, and the effect
-// expires. An impact that never cleared would leave a row permanently
-// mid-shake.
 func TestImpactsFlashAndExpire(t *testing.T) {
 	bs := testBattleState(t)
 	bs.applyBattle(twoSided(1,
@@ -271,8 +235,6 @@ func TestImpactsFlashAndExpire(t *testing.T) {
 	}
 }
 
-// The banner pulses when the turn becomes yours, and settles. A pulse
-// that never stopped would flicker for the rest of the battle.
 func TestBannerPulsesWhenTheTurnArrives(t *testing.T) {
 	bs := testBattleState(t)
 	theirs := twoSided(1, nil, nil)
@@ -302,13 +264,6 @@ func TestBannerPulsesWhenTheTurnArrives(t *testing.T) {
 	}
 }
 
-// An immune hit must not read as a hit that landed.
-//
-// renderFloat had no case for effect == 0, so a 0x hit fell through to
-// the default hpDanger style and printed "-0" in damage red. logView,
-// three functions away in this same file, already gave 0 its own case -
-// so one event was styled two different ways on one screen. That is the
-// same split the web had between its log and its floating number.
 func TestAnImmuneHitDoesNotFloatAsDamage(t *testing.T) {
 	got := renderFloat(damageFloat{slot: slot{0, 0}, amount: 0, effect: 0, life: floatLife})
 	if strings.Contains(got, "-0") {
@@ -335,12 +290,6 @@ func TestFloatsKeepTheirEffectivenessMarkers(t *testing.T) {
 	}
 }
 
-// Pressing enter on a disabled move must not send it.
-//
-// battle_view strikes a disabled move through, but the move cursor only
-// bounds-checked against the move count - so the screen said the move
-// was unusable and enter used it anyway, producing a 409. The cursor
-// skipping fainted Pokemon is an affordance; this is the enforcement.
 func TestEnterRefusesADisabledMove(t *testing.T) {
 	bs := testBattleState(t)
 	mine := mon("pikachu", 20, 20, false)

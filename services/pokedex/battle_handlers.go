@@ -1,9 +1,5 @@
 package main
 
-// The battle endpoints. Thin: they authenticate the caller, translate
-// between wire types and the engine, and map engine errors onto the
-// statuses the spec declares. Every rule lives in battle.go.
-
 import (
 	"context"
 	"errors"
@@ -16,8 +12,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// RegisterTrainer claims a name and mints the token that authorises this
-// trainer's moves.
 func (s service) RegisterTrainer(ctx context.Context, req *api.RegisterTrainer) (api.RegisterTrainerRes, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -26,13 +20,8 @@ func (s service) RegisterTrainer(ctx context.Context, req *api.RegisterTrainer) 
 	token, err := s.battles.registerTrainer(ctx, name)
 	switch {
 	case errors.Is(err, errNameTaken):
-		// The spec's only non-201 here is 409, which ogen models as the
-		// bare Error type.
 		return &api.Error{Message: fmt.Sprintf("%q is taken, pick another", name)}, nil
 	case err != nil:
-		// Anything else is not the player's fault. Reporting a database
-		// outage as "that name is taken" sends them off to invent a new
-		// one against a problem no name can fix.
 		return nil, fmt.Errorf("registering %q: %w", name, err)
 	}
 	return &api.Trainer{Name: name, Token: token}, nil
@@ -44,15 +33,11 @@ func (s service) ListWaitingTrainers(ctx context.Context) (*api.WaitingList, err
 	return &api.WaitingList{Count: len(open), Waiting: open}, nil
 }
 
-// CreateBattle opens an invitation. The battle sits in `waiting` until
-// someone joins, which is when turn order is decided.
 func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params api.CreateBattleParams) (api.CreateBattleRes, error) {
 	trainer, ok := s.battles.trainerByToken(ctx, params.XTrainerToken)
 	if !ok {
 		return &api.CreateBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
-	// A short or absent team is filled at random, so a client can offer
-	// "pick the ones you care about" rather than all-or-nothing.
 	names := fillTeam(s.dex, req.Team, s.rng)
 	team, err := newCombatants(s.dex, names)
 	if err != nil {
@@ -76,21 +61,12 @@ func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params
 		TurnNumber: 0,
 		Text:       fmt.Sprintf("%s is looking for a battle.", trainer),
 	})
-	// Surfaced, not swallowed. This used to be a bare call and the
-	// handler answered 201 regardless, so a failed insert handed the
-	// player a battle id that was never written - they shared it, and
-	// every later read 404'd with nothing in the logs to say why.
-	//
-	// NewError logs it and renders a 500, which is the honest answer:
-	// the battle does not exist.
 	if err := s.battles.create(ctx, b); err != nil {
 		return nil, fmt.Errorf("creating battle: %w", err)
 	}
 	return b.toAPI(), nil
 }
 
-// GetBattle is what clients poll. Cheap on purpose: `version` lets a
-// caller skip re-rendering when nothing has changed.
 func (s service) GetBattle(ctx context.Context, params api.GetBattleParams) (api.GetBattleRes, error) {
 	b, ok := s.battles.get(ctx, params.ID)
 	if !ok {
@@ -105,27 +81,6 @@ func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api
 	if !ok {
 		return &api.JoinBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
-	// Built before update() and not inside it, matching CreateBattle.
-	//
-	// A team is valid or not on its own: it depends on the dex, which
-	// is immutable after startup, and on nothing about the battle. So
-	// it does not belong in a closure that update() documents as
-	// runnable more than once. Doing it inside meant carrying the
-	// failure back out through a captured variable that nothing reset,
-	// and then ordering the response switch around that variable -
-	// `badTeam != nil` had to sit after errNoBattle and before the
-	// conflict cases, an invariant nothing stated or tested.
-	//
-	// That was not a live bug: newCombatants fails only on a name the
-	// caller supplied or a wrong count, both deterministic, so every
-	// attempt failed the same way and the stale value always matched.
-	// It was one refactor away from being one, and the ordering was
-	// load-bearing for no reason. Hoisting it also stops a retry from
-	// rerolling the random fill the player was about to be given.
-	//
-	// The seat race stays inside update(), which is what it was always
-	// guarding: two players racing for the last seat would both pass a
-	// check made outside it, and the second would overwrite the first.
 	names := fillTeam(s.dex, req.Team, s.rng)
 	team, err := newCombatants(s.dex, names)
 	if err != nil {
@@ -147,9 +102,6 @@ func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api
 			team:    team,
 		})
 		b.status = "active"
-		// The player who waited moves first: a small reward for
-		// opening the invitation, and it makes turn order
-		// deterministic rather than a coin flip nobody can see.
 		b.turn = 0
 		b.version++
 		b.touched = time.Now()
@@ -177,10 +129,6 @@ func (s service) TakeTurn(ctx context.Context, req *api.TakeTurn, params api.Tak
 	if _, ok := s.battles.trainerByToken(ctx, params.XTrainerToken); !ok {
 		return &api.TakeTurnUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
-	// The turn resolves inside the transaction that reads and writes
-	// the battle. Two players moving at once used to be impossible
-	// because one process held a mutex; with several replicas this is
-	// what replaces it.
 	var out *api.Battle
 	err := s.battles.update(ctx, params.ID, func(b *battle) error {
 		if err := b.takeTurn(params.XTrainerToken, req.Attacker, req.Move, req.Target, s.rng); err != nil {
@@ -199,28 +147,12 @@ func (s service) TakeTurn(ctx context.Context, req *api.TakeTurn, params api.Tak
 		errors.Is(err, errTargetFainted),
 		errors.Is(err, errBattleOver),
 		errors.Is(err, errNotWaiting):
-		// A 409 rather than a 400: the request is well-formed, it is the
-		// state that makes it impossible. A client can retry after the
-		// state moves on, which is not true of a malformed request.
 		return &api.TakeTurnConflict{Message: err.Error()}, nil
 	default:
 		return nil, err
 	}
 }
 
-// lockedRand is a *rand.Rand every handler can reach.
-//
-// One generator is shared by every request, and *rand.Rand is not safe
-// for concurrent use: two simultaneous turns race on its internal
-// state, which the race detector reports inside rngSource.Uint64.
-//
-// The obvious fix - switch to math/rand/v2's top-level functions, as
-// the Postgres store's retry jitter already does - would cost the
-// seeding, and seeding is why this field exists: a test seeds it and
-// gets the same battle twice. So the generator stays and gains a lock.
-//
-// Only the two methods the engine actually calls are exposed, so the
-// unguarded ones cannot be reached by accident.
 type lockedRand struct {
 	mu sync.Mutex
 	r  *rand.Rand
@@ -238,8 +170,6 @@ func (l *lockedRand) Float64() float64 {
 	return l.r.Float64()
 }
 
-// rngFor keeps damage rolls deterministic in tests while staying
-// unpredictable in production.
 func rngFor(seed int64) *lockedRand {
 	return &lockedRand{r: rand.New(rand.NewSource(seed))}
 }

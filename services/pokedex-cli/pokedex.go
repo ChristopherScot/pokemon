@@ -1,15 +1,5 @@
 package main
 
-// The `pokemon`, `types` and `show` commands, backed by the pokedex
-// service's GENERATED client.
-//
-// Nothing here hand-writes a URL, a query string or a JSON struct: api/
-// is committed in the service repo, so this imports it the way any Go
-// consumer would. When the spec changes, regenerating the service and
-// bumping this dependency makes the compiler point at whatever no longer
-// fits - which is the whole reason the client is generated rather than
-// written twice.
-
 import (
 	"context"
 	"fmt"
@@ -24,16 +14,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// defaultBaseURL is the DEPLOYED Pokedex, reachable from anywhere.
-// $POKEDEX_URL overrides it, so the same binary works against a local
-// server or a port-forward without a rebuild.
-//
-// Not the in-cluster address, which is what this used to be: this
-// binary is published as a release and run on laptops, where
-// pokedex.pokedex.svc.cluster.local does not resolve and the failure -
-// "no such host" - reads as a broken install rather than a default
-// that only works in one place. The TUI already pointed here; the two
-// disagreeing was the bug.
 const defaultBaseURL = "https://pokemon.home.chrisscotmartin.com/api"
 
 func baseURL() string {
@@ -43,9 +23,6 @@ func baseURL() string {
 	return defaultBaseURL
 }
 
-// client builds the generated client. The timeout is short on purpose:
-// this is an interactive CLI, and a request that has not answered in a
-// few seconds should say so rather than appear to hang.
 func client() (*api.Client, error) {
 	return api.NewClient(baseURL())
 }
@@ -127,9 +104,6 @@ func showCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("fetching %s: %w", args[0], err)
 			}
-			// The spec declares a 404, so the generated client returns it
-			// as a VALUE rather than an error - an unknown name is an
-			// answer, and this switch is the compiler making us handle it.
 			switch v := res.(type) {
 			case *api.Pokemon:
 				printCard(*v)
@@ -173,13 +147,9 @@ func typesCmd() *cobra.Command {
 	}
 }
 
-// printCard renders a Pokemon the way the web UI renders a card, so the
-// two consumers show the same thing in their own idiom.
 func printCard(p api.Pokemon) {
 	fmt.Printf("\n  #%03d  %s\n", p.ID, strings.ToUpper(p.Name))
 	fmt.Printf("  %s\n\n", strings.Join(p.Types, " / "))
-	// Decimetres and hectograms are what the Pokedex reports; converting
-	// here keeps the API honest to its source and the CLI readable.
 	fmt.Printf("  height  %.1f m\n", float64(p.Height)/10)
 	fmt.Printf("  weight  %.1f kg\n", float64(p.Weight)/10)
 	fmt.Printf("  sprite  %s\n", p.Sprite)

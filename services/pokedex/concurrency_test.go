@@ -10,18 +10,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// Concurrency regression tests. Run with -race.
-//
-// Two real races lived here for months because every other test drives
-// the engine from one goroutine, and the detector only finds what you
-// exercise. These are the tests that would have caught them.
-
-// One *rand.Rand was shared by every handler, and *rand.Rand is not
-// safe for concurrent use - the detector reports it inside
-// rngSource.Uint64 on any two simultaneous requests that roll damage. *rand.Rand is
-// not safe for concurrent use, so two simultaneous requests race on its
-// internal state. pgstore.go already documents this exact hazard for
-// its retry jitter; the same reasoning was never applied here.
 func TestConcurrentHandlersDoNotRaceOnRNG(t *testing.T) {
 	s := testService(t)
 	var wg sync.WaitGroup
@@ -29,8 +17,6 @@ func TestConcurrentHandlersDoNotRaceOnRNG(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// Register gets a real token, so CreateBattle reaches
-			// fillTeam(s.rng) and randomID(s.rng).
 			r, err := s.RegisterTrainer(context.Background(), &api.RegisterTrainer{Name: name()})
 			if err != nil {
 				return
@@ -50,10 +36,6 @@ var n atomic.Int64
 
 func name() string { return fmt.Sprintf("t%d", n.Add(1)) }
 
-// memStore.get used to return the *battle and release the lock, and
-// the handler then called toAPI() outside it - reading sides, log and
-// every combatant while another request mutated exactly those fields.
-// The mutex was protecting the map, not the battle the map points at.
 func TestReadingABattleDoesNotRaceWithATurn(t *testing.T) {
 	s := testService(t)
 	b, tokA, _ := activeBattle(t, s)

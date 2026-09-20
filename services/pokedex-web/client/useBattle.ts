@@ -1,17 +1,3 @@
-// Polling a battle, as a hook.
-//
-// The rules it encodes are the ones that came out of real incidents,
-// and they are why this is not just setInterval(fetch):
-//
-//   - A 404 means the battle is GONE, and retrying it forever is what
-//     produced 46,000 requests from one tab over thirteen hours. Five
-//     consecutive misses and it stops, saying why.
-//   - 410/501/505 mean the server is refusing THIS client. Retrying
-//     cannot help, because the code in this tab will not change on its
-//     own, so those stop immediately.
-//   - Anything else is transient and worth another go.
-//   - A hidden tab does not poll. A lobby left open in a background tab
-//     is the shape that produced the 46,000 requests.
 import { useEffect, useState } from 'react'
 
 import type { components } from '@christopherscot/pokedex-client'
@@ -35,17 +21,6 @@ export function useBattle(id: string): BattleState {
     let live = true
     let timer: ReturnType<typeof setTimeout> | undefined
 
-    // Plain locals, not refs. The loop closes over them, so it still
-    // sees the current value - and their lifetime is now exactly one
-    // polling run, which is what they describe.
-    //
-    // As refs they outlived the id: after one battle spent its miss
-    // budget, the NEXT battle in the same mounted component stopped on
-    // its first 404 and reported "this battle is over" for one that was
-    // merely slow. `seen` leaked the same way - a new battle whose
-    // version happened to match the old one rendered nothing at all.
-    // Unreachable today because the page mounts per battle, which makes
-    // it a trap for whoever adds client routing rather than a bug.
     let seen = -1
     let misses = 0
 
@@ -77,8 +52,6 @@ export function useBattle(id: string): BattleState {
         } else if (res.ok) {
           misses = 0
           const b = (await res.json()) as Battle
-          // Only re-render when the server says something changed;
-          // repainting an identical board fights the animations.
           if (b.version !== seen) {
             seen = b.version
             setState({ kind: 'ok', battle: b })

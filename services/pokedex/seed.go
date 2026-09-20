@@ -1,17 +1,5 @@
 package main
 
-// Seeding the reference data from pokedex.json into Postgres.
-//
-// The file stays embedded and stays the source of truth: it is what
-// fetch_pokedex.py writes, what review sees as a diff, and what a
-// fresh database is built from. The database is where the service
-// reads it, not where it is authored.
-//
-// Runs at startup, after migrate. Two replicas start together, so this
-// has to be safe concurrently - every statement is an upsert, and the
-// whole thing is one transaction, so the loser of a race rewrites the
-// same rows with the same values rather than colliding.
-
 import (
 	"context"
 	"encoding/json"
@@ -24,12 +12,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/internal/dbgen"
 )
 
-// seed writes the embedded Pokedex into the database.
-//
-// Unconditional rather than "only if empty": the data file changes
-// when fetch_pokedex.py is re-run, and a seed that skipped a populated
-// database would leave the cluster on an old Pokedex with nothing to
-// show for it. Upserts make the repeat cheap.
 func seed(ctx context.Context, pool *pgxpool.Pool) error {
 	var doc dataset
 	if err := json.Unmarshal(pokedexJSON, &doc); err != nil {
@@ -47,8 +29,6 @@ func seed(ctx context.Context, pool *pgxpool.Pool) error {
 
 	q := dbgen.New(tx)
 
-	// Moves first: pokemon_moves has a foreign key to both sides, and
-	// a link cannot be written before the move it names.
 	for _, m := range doc.Moves {
 		var accuracy *int32
 		if m.Accuracy != nil {
@@ -93,10 +73,6 @@ func seed(ctx context.Context, pool *pgxpool.Pool) error {
 			return fmt.Errorf("seeding pokemon %q: %w", e.Name, err)
 		}
 
-		// Cleared and rewritten rather than upserted in place. A move
-		// dropped from a Pokemon upstream has no upsert that removes
-		// it, and a stale link would put a move in a battle that the
-		// data file no longer lists.
 		if err := q.DeletePokemonMovesFor(ctx, int32(e.ID)); err != nil {
 			return fmt.Errorf("clearing moves for %q: %w", e.Name, err)
 		}
@@ -128,13 +104,6 @@ func seed(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-// loadPokedexFromDB reads the reference data back out, into the same
-// shape loadPokedex builds from the file.
-//
-// Held in memory for the life of the process: 100 Pokemon and 562
-// moves that cannot change without a deploy, so a query per request
-// would put the database on the path of every /pokemon call and buy
-// nothing. The database is the source of truth; this is a cache of it.
 func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error) {
 	q := dbgen.New(pool)
 
@@ -154,8 +123,6 @@ func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error
 		return nil, fmt.Errorf("no pokemon in the database - seeding did not run")
 	}
 
-	// One query for every link rather than one per Pokemon: a hundred
-	// round trips at startup for data that fits in a single result.
 	links, err := q.ListPokemonMoves(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("reading pokemon moves: %w", err)
@@ -187,8 +154,6 @@ func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error
 		p.moveByName[m.Name] = mv
 	}
 
-	// Links arrive ordered by (pokemon_id, kind, slot), so appending in
-	// order preserves the slot ordering the battle depends on.
 	battleMoves := map[int32][]string{}
 	learnMoves := map[int32][]string{}
 	for _, l := range links {

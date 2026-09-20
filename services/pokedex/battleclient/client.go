@@ -1,23 +1,4 @@
 // Package battleclient is the part of playing a battle that every Go
-// client needs and none of them should write twice.
-//
-// It sits beside the generated API client rather than inside a CLI or a
-// TUI, because both import services/pokedex already: the CLI and the TUI
-// are separate modules that each `replace` to it, so a package here is
-// importable from both with no new wiring.
-//
-// What it does NOT do is render. A CLI prints lines and a TUI owns a
-// frame; one abstraction over both suits neither. This package deals in
-// state and transitions, and leaves the drawing to the caller.
-//
-// That was not true for a while: StageLabel, Conditions, EventIcon and
-// IdentityAdvice lived here and returned display strings, emoji and an
-// English sentence. They are in battletext now, and this comment is a
-// promise again rather than an aspiration.
-//
-// MoveUsable stays, despite reading as presentation at both call sites.
-// It answers "would this be a 409?" - a protocol precondition, and the
-// reason a client must not offer a disabled move.
 package battleclient
 
 import (
@@ -35,46 +16,20 @@ import (
 // DefaultAPI is the deployed Pokedex.
 const DefaultAPI = "https://pokemon.home.chrisscotmartin.com/api"
 
-// PollInterval is how often Watch asks for new state.
-//
-// Battles are turn-based and a human takes seconds to decide, so a
-// tighter loop would spend requests to shave latency nobody notices.
 const PollInterval = time.Second
 
-// LobbyPollInterval is how often the lobby re-reads the waiting list.
-//
-// Slower than PollInterval because the lobby is a waiting room rather
-// than a game in progress: the thing it is watching for is another
-// person deciding to open a battle, which happens on human timescales.
 const LobbyPollInterval = 3 * time.Second
 
 var ErrNoIdentity = errors.New("no trainer registered; run register first")
 
-// ErrStaleIdentity is a token the server does not recognise: it was
-// issued by a process that has since restarted.
-//
-// Distinct from ErrNoIdentity because the fix is the same command for a
-// different reason, and because the stored token is now junk - a client
-// that keeps it will fail identically on every command until someone
-// works out to re-register. Battles and trainers live in the server's
-// memory, so this happens on every deploy, not only on a crash.
 var ErrStaleIdentity = errors.New("this trainer is no longer registered; run register again")
 
-// Identity is a trainer name and the token that authorises its moves.
-//
-// Persisted so a CLI - which exits between commands - can take a second
-// turn without registering again. The TUI keeps one process alive and
-// does not strictly need this, but sharing it means both clients answer
-// "who am I" the same way, and a player can start in one and continue in
-// the other.
 type Identity struct {
 	Name  string `json:"name"`
 	Token string `json:"token"`
 	API   string `json:"api"`
 }
 
-// identityPath keeps the token out of the working directory, where it
-// would eventually be committed by someone.
 func identityPath() (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -98,8 +53,6 @@ func LoadIdentity() (Identity, error) {
 	}
 	var id Identity
 	if err := json.Unmarshal(b, &id); err != nil {
-		// A corrupt file is the same as no identity from the caller's
-		// side: re-register rather than making them find and delete it.
 		return Identity{}, ErrNoIdentity
 	}
 	if id.Token == "" {
@@ -108,8 +61,6 @@ func LoadIdentity() (Identity, error) {
 	return id, nil
 }
 
-// SaveIdentity writes the trainer, 0600 because the token authorises
-// moves on that trainer's behalf.
 func SaveIdentity(id Identity) error {
 	path, err := identityPath()
 	if err != nil {
@@ -125,14 +76,6 @@ func SaveIdentity(id Identity) error {
 	return os.WriteFile(path, b, 0o600)
 }
 
-// ClearIdentity removes the stored trainer.
-//
-// Called when the server rejects the token, because the file is now
-// junk: every later command fails the same way, and the CLI cannot tell
-// "I have never registered" from "the token I have is dead" without it.
-// Removing it makes the next run take the ordinary unregistered path.
-//
-// A missing file is success - the caller wants it gone, and it is.
 func ClearIdentity() error {
 	path, err := identityPath()
 	if err != nil {
@@ -144,8 +87,6 @@ func ClearIdentity() error {
 	return nil
 }
 
-// Client wraps the generated client with the trainer's token, so callers
-// never thread it through by hand and cannot forget it on one call.
 type Client struct {
 	API   *api.Client
 	Token string
@@ -189,12 +130,6 @@ func Register(ctx context.Context, apiURL, name string) (Identity, error) {
 	}
 }
 
-// Create opens a battle with three Pokemon, or a random team when team
-// is empty.
-//
-// An empty team is sent as an ABSENT field, not an empty array: the spec
-// says minItems 3, so `"team": []` is a validation error rather than
-// "pick for me". A nil slice is what makes ogen omit the field.
 func (c *Client) Create(ctx context.Context, team []string) (*api.Battle, error) {
 	if len(team) == 0 {
 		team = nil
@@ -284,12 +219,6 @@ func (c *Client) Lobby(ctx context.Context) (*api.WaitingList, error) {
 	return c.API.ListWaitingTrainers(ctx)
 }
 
-// Watch polls until the battle changes past the version the caller has
-// already seen, then returns the new state.
-//
-// Comparing version rather than diffing state is the whole reason the
-// API exposes it: a caller can sit in this loop cheaply and only
-// re-render when something actually happened.
 func (c *Client) Watch(ctx context.Context, id string, seen int) (*api.Battle, error) {
 	ticker := time.NewTicker(PollInterval)
 	defer ticker.Stop()
@@ -309,16 +238,10 @@ func (c *Client) Watch(ctx context.Context, id string, seen int) (*api.Battle, e
 	}
 }
 
-// MyTurn reports whether it is this client's move. Every caller needs
-// this and it is easy to get subtly wrong by comparing the wrong field.
 func (c *Client) MyTurn(b *api.Battle) bool {
 	return b.Status == api.BattleStatusActive && b.Turn.Value == c.Name
 }
 
-// SideFor splits the battle into this client's side and the opponent's,
-// so a caller never indexes Sides by a number it guessed.
-//
-// Returns false while a battle is still waiting for its second trainer.
 func (c *Client) SideFor(b *api.Battle) (mine, theirs api.Side, ok bool) {
 	mi, ti, ok := c.SideIndex(b)
 	if !ok {
@@ -327,18 +250,6 @@ func (c *Client) SideFor(b *api.Battle) (mine, theirs api.Side, ok bool) {
 	return b.Sides[mi], b.Sides[ti], true
 }
 
-// SideIndex is SideFor when the caller needs the positions rather than
-// the sides - to index a parallel array of cursors, say.
-//
-// It exists because callers were recomputing it: the TUI called SideFor
-// and then wrote `mineIdx, theirsIdx := 0, 1; if Sides[1].Trainer ==
-// name {...}` three lines later, which is the same decision made twice
-// and the kind that drifts.
-//
-// ok is false for a SPECTATOR as well as for a battle still waiting.
-// It used to be true: a name matching neither side fell through to the
-// "must be side 1" branch and got the two sides back swapped, so
-// watching someone else's battle labelled a stranger's team "you".
 func (c *Client) SideIndex(b *api.Battle) (mine, theirs int, ok bool) {
 	if len(b.Sides) < 2 {
 		return 0, 0, false
@@ -352,25 +263,11 @@ func (c *Client) SideIndex(b *api.Battle) (mine, theirs int, ok bool) {
 	return 0, 0, false
 }
 
-// MoveUsable reports whether a move can be selected right now.
-//
-// A disabled move is a 409 rather than a wasted turn, so a client that
-// shows it as available is setting the player up to fail.
 func MoveUsable(p api.BattlePokemon, moveIdx int) bool {
 	i, ok := p.DisabledMove.Get()
 	return !ok || i != moveIdx
 }
 
-// The reasons a turn cannot be played. They mirror the server's checks
-// in services/pokedex/battle.go takeTurn, which is the authority; these
-// exist so a client can refuse a turn locally instead of learning about
-// it from a 409 that names nothing.
-//
-// Sentinels rather than a (bool, string): a caller that wants to branch
-// uses errors.Is, one that wants to show the player something returns
-// the error, and one that only wants a yes/no compares against nil. A
-// string that is empty on success is the same in-band trap in a
-// different costume.
 var (
 	ErrBattleOver  = errors.New("this battle is over")
 	ErrNotActive   = errors.New("this battle has not started")
@@ -382,38 +279,14 @@ var (
 	ErrDisabled    = errors.New("that move is disabled this turn")
 )
 
-// TeamSize is how many Pokemon a side holds.
-//
-// Shared because it is a rule of the game, not a client's taste: the
-// server enforces it, the CLI limits its arguments by it, the TUI
-// auto-starts a battle when the picker reaches it. It was a named
-// constant in the CLI - with a comment about keeping two literals from
-// disagreeing - and three bare 3s in the TUI, which is the same problem
-// that comment describes, one package over.
 const TeamSize = 3
 
-// Turn is one proposed attack: 0-based indices, matching what Attack
-// sends and what the API expects. A CLI that shows 1-based positions
-// converts at its own edge.
 type Turn struct {
 	Attacker int
 	Move     int
 	Target   int
 }
 
-// CheckTurn reports why t cannot be played now, or nil if it can.
-//
-// The check ORDER matters and is not arbitrary: it is the same order as
-// the server's takeTurn. A client that reports a different first reason
-// than the server would teach the player a rule that is not the rule -
-// "your pokemon has fainted" when the server would have said "not your
-// turn" is worse than saying nothing, because it is confidently wrong.
-//
-// This does not make the server's checks redundant. A client's view is
-// up to PollInterval stale and two players race, so a locally-legal
-// turn can still be rejected. Callers must keep handling that error.
-// What this removes is the common case: the turn that was knowably
-// illegal before it was ever sent.
 func (c *Client) CheckTurn(b *api.Battle, t Turn) error {
 	switch b.Status {
 	case api.BattleStatusFinished:
@@ -424,8 +297,6 @@ func (c *Client) CheckTurn(b *api.Battle, t Turn) error {
 	}
 	mine, theirs, ok := c.SideFor(b)
 	if !ok || !c.MyTurn(b) {
-		// A spectator and the player whose turn it is not are the same
-		// answer from here, exactly as the server treats them.
 		return ErrNotYourTurn
 	}
 

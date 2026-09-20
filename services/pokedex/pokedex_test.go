@@ -8,16 +8,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// Both loaders must enforce the same invariants, because the one that
-// production uses is not the one the checks were written into.
-//
-// loadPokedex (embedded JSON) refused to start on a zero base stat;
-// loadPokedexFromDB (Postgres, and what server.go runs) did not, and
-// also never sorted its entries - it relied on the query's ORDER BY.
-// So the guard whose comment says the failure is "invisible until
-// someone notices the numbers never differ" was absent from the only
-// path where it could fire. This drives finish() directly, since
-// reaching it through the DB loader needs a database.
 func TestAPokedexWithAZeroBaseStatIsRefused(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -44,9 +34,6 @@ func TestAPokedexWithAZeroBaseStatIsRefused(t *testing.T) {
 	}
 }
 
-// An entry with no stats row at all is the shape a partial seed leaves
-// behind, and it would panic on the first damage roll rather than at
-// startup.
 func TestAPokedexEntryWithNoStatsIsRefused(t *testing.T) {
 	p := &pokedex{
 		stats:   map[int]baseStats{},
@@ -57,8 +44,6 @@ func TestAPokedexEntryWithNoStatsIsRefused(t *testing.T) {
 	}
 }
 
-// finish() sorts, so neither loader depends on the order its source
-// happened to supply.
 func TestFinishPutsEntriesInDexOrder(t *testing.T) {
 	good := baseStats{hp: 5, attack: 5, defense: 5, speed: 5}
 	p := &pokedex{

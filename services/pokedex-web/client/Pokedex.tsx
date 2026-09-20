@@ -1,8 +1,3 @@
-// The pokedex: browse, filter, and pick a team.
-//
-// The card grid IS the team picker. That is why every card is a real
-// button - as an <article> with a delegated click handler the whole
-// product was mouse-only, and picking a team is the product.
 import { useMemo, useState } from 'react'
 
 import type { components } from '@christopherscot/pokedex-client'
@@ -25,11 +20,8 @@ export function Pokedex({
 }: {
   pokemon: Pokemon[]
   types: TypeSummary[]
-  /** The type currently filtered on, or "" for all. */
   active: string
-  /** A battle id when this page is "pick a team, then join THAT". */
   join: string
-  /** A battle already in progress, so leaving is not a one-way trip. */
   resume: string
 }) {
   const { team, toggle, removeAt, clear } = useTeam()

@@ -59,8 +59,6 @@ func TestMetricsAreExposed(t *testing.T) {
 		t.Fatalf("metrics status = %d, want %d", w.Code, http.StatusOK)
 	}
 	body := w.Body.String()
-	// The counter the deployment's scrape annotation exists to collect,
-	// labelled by the spec's operation ID.
 	if !strings.Contains(body, `http_requests_total{method="GET",operation="getRoot"`) {
 		t.Errorf("no request counter for getRoot:\n%s", body)
 	}
@@ -69,9 +67,6 @@ func TestMetricsAreExposed(t *testing.T) {
 	}
 }
 
-// Labels come from the spec's operation IDs, so a request path can never
-// reach a metric label - not by a fallback that has to stay correct, but
-// because an unrouted request never reaches the middleware at all.
 func TestRequestPathNeverBecomesALabel(t *testing.T) {
 	h := newHandler(t)
 	get(t, h, "/secret-token-value/deadbeef")

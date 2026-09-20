@@ -1,13 +1,5 @@
 package main
 
-// The battle screen.
-//
-// Animation here is entirely presentational: the server sends the new HP
-// and this interpolates towards it over a few frames. Sending
-// intermediate values would make the API's state ambiguous - a client
-// asking "what is the HP" would get a number that depends on when it
-// asked.
-
 import (
 	"time"
 
@@ -17,13 +9,8 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
-// frameRate drives HP drain and damage floats. 30fps is smooth enough
-// for a bar and cheap enough that a terminal over ssh keeps up.
 const frameRate = time.Second / 30
 
-// drainPerFrame is how much HP a bar gives up per frame. Tuned so a
-// heavy hit takes roughly half a second to play out: fast enough not to
-// delay the next turn, slow enough to read as damage rather than a jump.
 const drainPerFrame = 4
 
 // frameMsg advances animations.
@@ -34,42 +21,28 @@ type battleMsg struct {
 	battle *api.Battle
 	err    error
 
-	// misses counts consecutive failed polls, so a battle that is gone
-	// stops the loop instead of being asked about forever.
 	misses int
 }
 
 // lobbyMsg carries the list of open battles.
 type lobbyMsg struct {
-	// polled marks a result from the timer rather than an explicit
-	// action. A background refresh that fails should not overwrite
-	// whatever the user was last told - they did not ask for it.
 	polled bool
 	list   *api.WaitingList
 	err    error
 }
 
-// shownHP is the HP a bar is currently drawing, which lags the real
-// value while a drain animates. Keyed by side and slot, because a name
-// is not unique - both trainers can bring the same Pokemon.
 type slot struct {
 	side, index int
 }
 
-// maxPollMisses is how many consecutive failed polls end the battle
-// screen. Matches the web client's ceiling.
 const maxPollMisses = 5
 
-// battleState is everything the battle screen needs. Split from model so
-// the browse screen's fields are not tangled with it.
 type battleState struct {
 	client *battleclient.Client
 	id     string
 	battle *api.Battle
 	err    error
 
-	// misses counts consecutive failed polls, so a battle that is gone
-	// stops the loop instead of being asked about forever.
 	misses int
 
 	// shown lags battle for the drain animation.
@@ -81,8 +54,6 @@ type battleState struct {
 	// impacts are the shake-and-flash on a row that was just hit.
 	impacts map[slot]*impact
 
-	// banner pulses for a few frames when the turn changes, so a player
-	// who looked away notices it is their move.
 	bannerPulse int
 
 	// Cursor state for choosing a move.
@@ -91,12 +62,8 @@ type battleState struct {
 	pickTarget   int
 	focus        pickFocus
 
-	// seen is the last version rendered, so a poll that returns nothing
-	// new does not restart animations.
 	seen int
 
-	// logFrom is how much of the log has scrolled past, so a long battle
-	// does not push the board off screen.
 	logFrom int
 }
 
@@ -116,9 +83,6 @@ type damageFloat struct {
 	life int
 }
 
-// impact is a hit landing: the row shakes and flashes for a few frames.
-// Separate from the float because it decays faster - the number should
-// still be readable after the row has settled.
 type impact struct {
 	slot   slot
 	effect float64
@@ -129,8 +93,6 @@ const (
 	floatLife  = 24
 	impactLife = 7
 
-	// A KO gets its own, longer flash, because it is the moment worth
-	// noticing in a battle.
 	faintLife = 14
 )
 
@@ -139,8 +101,6 @@ func tick() tea.Cmd {
 	return tea.Tick(frameRate, func(t time.Time) tea.Msg { return frameMsg(t) })
 }
 
-// poll asks for state after a short delay, which is what keeps two
-// clients in step without websockets.
 func pollBattle(c *battleclient.Client, id string) tea.Cmd {
 	return tea.Tick(battleclient.PollInterval, func(time.Time) tea.Msg {
 		ctx, cancel := shortCtx()
@@ -150,17 +110,6 @@ func pollBattle(c *battleclient.Client, id string) tea.Cmd {
 	})
 }
 
-// pollLobby re-reads the waiting list on a timer.
-//
-// The lobby used to load once and never change, so a battle opened by
-// somebody else after you arrived never appeared - you would sit on a
-// "nobody is waiting" screen while an opponent sat on theirs. Every
-// other path into the lobby refetches on a keypress; this is the one
-// case where nothing the user does triggers the update.
-//
-// Re-armed from the lobbyMsg handler, and only while the lobby is on
-// screen: a tick that keeps firing during a battle would spend requests
-// on a list nobody is looking at.
 func pollLobby(c *battleclient.Client) tea.Cmd {
 	return tea.Tick(battleclient.LobbyPollInterval, func(time.Time) tea.Msg {
 		ctx, cancel := shortCtx()
@@ -179,8 +128,6 @@ func fetchLobby(c *battleclient.Client) tea.Cmd {
 	}
 }
 
-// applyBattle folds new server state in, starting animations for
-// anything that changed.
 func (bs *battleState) applyBattle(b *api.Battle) {
 	if bs.shown == nil {
 		bs.shown = map[slot]int{}
@@ -192,16 +139,11 @@ func (bs *battleState) applyBattle(b *api.Battle) {
 		for pi, p := range side.Team {
 			k := slot{si, pi}
 			if _, ok := bs.shown[k]; !ok {
-				// First sight of this Pokemon: draw it at its real HP
-				// rather than animating up from zero.
 				bs.shown[k] = p.Hp
 			}
 		}
 	}
 
-	// Damage floats come from the log rather than from diffing HP: the
-	// log already says who hit whom for how much, and a diff cannot tell
-	// one big hit from two small ones in the same poll.
 	if prev != nil && b.Version > prev.Version {
 		for _, ev := range b.Log[min(len(prev.Log), len(b.Log)):] {
 			dmg, ok := ev.Damage.Get()
@@ -231,8 +173,6 @@ func (bs *battleState) applyBattle(b *api.Battle) {
 			}
 		}
 	}
-	// A turn arriving is worth announcing: the banner pulses so someone
-	// who looked away sees it change rather than having to read it.
 	if prev != nil && bs.client.MyTurn(b) && !bs.client.MyTurn(prev) {
 		bs.bannerPulse = 18
 	}
@@ -241,9 +181,6 @@ func (bs *battleState) applyBattle(b *api.Battle) {
 	bs.clampCursors()
 }
 
-// findSlot locates a Pokemon by name on the side that is NOT the
-// viewer's, falling back to either side. Damage lands on a target, and a
-// target is on the opponent's side by definition.
 func (bs *battleState) findSlot(name string) (slot, bool) {
 	if bs.battle == nil {
 		return slot{}, false
@@ -258,9 +195,6 @@ func (bs *battleState) findSlot(name string) (slot, bool) {
 	return slot{}, false
 }
 
-// advance moves every animation on by one frame, and reports whether
-// anything is still moving - so the model can stop ticking when the
-// screen is static.
 func (bs *battleState) advance() bool {
 	moving := false
 
@@ -277,8 +211,6 @@ func (bs *battleState) advance() bool {
 					bs.shown[k] = cur
 					moving = true
 				} else if cur < p.Hp {
-					// Healing does not exist yet, but snapping up rather
-					// than ignoring it keeps the bar honest if it does.
 					bs.shown[k] = p.Hp
 					moving = true
 				}
@@ -312,8 +244,6 @@ func (bs *battleState) advance() bool {
 	return moving
 }
 
-// clampCursors keeps the selection inside the team after a faint, so the
-// cursor never points at a Pokemon that cannot act.
 func (bs *battleState) clampCursors() {
 	b := bs.battle
 	if b == nil || len(b.Sides) < 2 {
@@ -348,8 +278,6 @@ func clampAlive(team []api.BattlePokemon, i int) int {
 	return 0
 }
 
-// startBattle opens or joins, depending on how the team screen was
-// reached.
 func (m model) startBattle() tea.Cmd {
 	team := append([]string(nil), m.team...)
 	id, bc := m.joining, m.bc
@@ -369,12 +297,6 @@ func (m model) startBattle() tea.Cmd {
 	}
 }
 
-// resumeBattle walks back into a battle already in progress.
-//
-// It reuses startedMsg, because "here is the battle you are now on" is
-// the same event however it was reached - opened, joined, or returned
-// to. The lobby cannot offer this: it lists only WAITING battles, and
-// the one you walked out of is active.
 func (m model) resumeBattle() tea.Cmd {
 	id, bc := m.lastBattle, m.bc
 	return func() tea.Msg {
@@ -391,9 +313,6 @@ type startedMsg struct {
 	err    error
 }
 
-// attack sends the chosen move. A rejection is shown rather than
-// swallowed: a 409 means the state moved on, and the player should see
-// why their turn did not happen.
 func (m model) attack() tea.Cmd {
 	bs := m.battle
 	bc := m.bc

@@ -1,11 +1,5 @@
 package main
 
-// The Postgres store, against a real database. Skipped without
-// POKEDEX_TEST_DSN.
-//
-// These are the tests that justify the whole change: state surviving a
-// restart, and two replicas not corrupting a battle between them.
-
 import (
 	"context"
 	"errors"
@@ -56,8 +50,6 @@ func TestPGRegisterTrainer(t *testing.T) {
 	}
 }
 
-// The race the UNIQUE index exists for: many clients claiming one name
-// at the same moment. Exactly one may win.
 func TestPGRegisterTrainerRace(t *testing.T) {
 	_, store, _ := freshPG(t)
 
@@ -99,8 +91,6 @@ func TestPGRegisterTrainerRace(t *testing.T) {
 	}
 }
 
-// A battle written by one store is readable by another - which is what
-// "survives a restart" and "two replicas" both come down to.
 func TestPGBattleSurvivesANewStore(t *testing.T) {
 	pool, store, dex := freshPG(t)
 
@@ -111,16 +101,11 @@ func TestPGBattleSurvivesANewStore(t *testing.T) {
 	b := newTestBattle(t, dex, "Ash", token)
 	store.create(context.Background(), b)
 
-	// A different store on the same database: a second replica, or the
-	// same one after a restart.
 	other := newPGStore(pool, 2)
 	got, ok := other.get(context.Background(), b.id)
 	if !ok {
 		t.Fatalf("battle %s not found by a second store", b.id)
 	}
-	// Asserted on the API view, which is what get() now returns: the
-	// store converts under its own lock so nothing reachable from it
-	// escapes.
 	if string(got.Status) != b.status || len(got.Sides) != len(b.sides) {
 		t.Errorf("read back status %q with %d sides, want %q with %d",
 			got.Status, len(got.Sides), b.status, len(b.sides))
@@ -137,9 +122,6 @@ func TestPGBattleSurvivesANewStore(t *testing.T) {
 	}
 }
 
-// The heart of it: concurrent updates to one battle must serialise, so
-// every mutation lands. Without SERIALIZABLE and the retry, some of
-// these overwrite each other and the count comes up short.
 func TestPGConcurrentUpdatesAllLand(t *testing.T) {
 	_, store, dex := freshPG(t)
 
@@ -150,9 +132,6 @@ func TestPGConcurrentUpdatesAllLand(t *testing.T) {
 	b := newTestBattle(t, dex, "Ash", token)
 	store.create(context.Background(), b)
 
-	// Each writer appends one event. If two interleave and one is
-	// lost, the log is short - a silent corruption, which is exactly
-	// the failure mode this design exists to prevent.
 	const writers = 10
 	var wg sync.WaitGroup
 	errs := make([]error, writers)
@@ -185,16 +164,12 @@ func TestPGConcurrentUpdatesAllLand(t *testing.T) {
 		t.Errorf("log has %d events after %d concurrent writers, want %d - "+
 			"a write was lost", len(got.Log), writers, writers)
 	}
-	// version moves once per successful update, which is what clients
-	// poll on.
 	if got.Version < writers {
 		t.Errorf("version is %d after %d updates, want at least %d",
 			got.Version, writers, writers)
 	}
 }
 
-// An error from the closure rolls back and is returned as-is, rather
-// than being retried or swallowed.
 func TestPGUpdatePropagatesClosureError(t *testing.T) {
 	_, store, dex := freshPG(t)
 

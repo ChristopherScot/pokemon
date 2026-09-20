@@ -1,14 +1,5 @@
 package main
 
-// The battle engine. Every rule lives here: damage, turn order, legality
-// and the win condition. Clients post intents and render what comes
-// back, so three client implementations cannot disagree about what
-// happened.
-//
-// State is in memory behind the store interface. The service runs
-// replicas: 1 and has no database, which makes that viable; the
-// interface is what keeps the swap to a real store from being a rewrite.
-
 import (
 	"context"
 	crand "crypto/rand"
@@ -27,28 +18,14 @@ import (
 const (
 	teamSize = 3
 
-	// A battle nobody touches is collected. Without this an abandoned
-	// match leaks its memory until the process restarts.
 	battleTTL = 2 * time.Hour
 
-	// Damage varies by +/-15%, as the games do, so identical matchups do
-	// not play out identically every time.
 	damageSpread = 0.15
 
-	// Scales raw move power into the HP range below. Tuned so a neutral
-	// hit takes roughly a fifth of a healthy Pokemon's HP: long enough to
-	// make targeting choices matter, short enough to finish.
-	// Tuned after attack and defense entered the formula: the ratio
-	// averages near 1 but swings from about 0.3 (Gengar into Onix) to
-	// 3 (Machamp into a frail target), and the old 0.55 left the slow
-	// end at nine turns for one Pokemon.
 	damageScale = 0.85
 )
 
 var (
-	// errNoBattle is update()'s "no such id", distinct from any error
-	// the closure itself returns - a caller needs to tell "the battle
-	// is gone" (404) from "that move is illegal" (409).
 	errNoBattle      = errors.New("no such battle")
 	errNotYourTurn   = errors.New("not your turn")
 	errIllegalMove   = errors.New("illegal move")
@@ -61,48 +38,19 @@ var (
 	errTargetFainted = errors.New("that target has already fainted")
 )
 
-// Battle level, and the IV/EV the formula is evaluated at.
-//
-// Level 50 is the competitive standard and keeps the spread readable: at
-// level 50 the formula reduces to base + 60, so the frailest Pokemon in
-// this dataset (Diglett, base 10) has 70 HP and the bulkiest (Wigglytuff,
-// base 140) has 200. Level 100 does not buy more variety - the flat
-// +level+10 term grows with it, so the bulk ratio stays ~3x - it only
-// makes battles longer.
-//
-// IVs and EVs are pinned to their minimums for now. They are parameters
-// rather than constants folded into the formula so per-Pokemon values
-// become a caller decision later rather than a rewrite.
 const (
 	battleLevel = 50
 	battleIV    = 0
 	battleEV    = 0
 )
 
-// maxHP is the Generation III+ HP formula:
-//
-//	HP = floor((2*Base + IV + floor(EV/4)) * Level / 100) + Level + 10
-//
-// Integer division in Go truncates toward zero, which equals floor for
-// the non-negative inputs here - so no math.Floor and no float64
-// round-trip.
-//
-// The multiply must come before the divide. Dividing first loses about
-// 43%: base 45 at level 50 is 105 the right way round and 60 the wrong
-// way, which is a difference no test of a single Pokemon would catch.
 func maxHP(base, iv, ev, level int) int {
 	if base <= 0 {
-		// Shedinja is the one Pokemon whose HP the formula does not
-		// describe - it is always 1. Not in this dataset, but loading
-		// refuses a zero base anyway, so reaching here means a caller
-		// passed something impossible.
 		return 1
 	}
 	return (2*base+iv+ev/4)*level/100 + level + 10
 }
 
-// battle is the server's copy. The API type is derived from it, so
-// internal bookkeeping - tokens, timestamps - never leaks to clients.
 type battle struct {
 	id      string
 	status  string
@@ -134,12 +82,8 @@ type combatant struct {
 	// The game's base stats, which the damage formula needs.
 	base baseStats
 
-	// Stat changes accumulated this battle, from moves like
-	// swords-dance and leer.
 	stages stages
 
-	// confused halves nothing directly - it gives a chance to hit
-	// yourself instead, resolved at attack time.
 	confused bool
 
 	// disabled is a move index this Pokemon cannot use, or -1.
@@ -157,9 +101,6 @@ func (s *side) defeated() bool {
 	return true
 }
 
-// newCombatants builds a team from names, rejecting anything the Pokedex
-// does not know. Validating here rather than at the handler keeps the
-// rule with the engine that depends on it.
 func newCombatants(dex *pokedex, names []string) ([]*combatant, error) {
 	if len(names) != teamSize {
 		return nil, fmt.Errorf("need %d pokemon, got %d", teamSize, len(names))
@@ -179,26 +120,6 @@ func newCombatants(dex *pokedex, names []string) ([]*combatant, error) {
 	return team, nil
 }
 
-// randomTeam picks three distinct Pokemon.
-//
-// Distinct because a team of three identical Pokemon is both a worse
-// game and confusing to read: the board would show the same name three
-// times with different HP, and a target index would be the only way to
-// tell them apart.
-
-// fillTeam completes a partial selection with random Pokemon.
-//
-// A client offering "pick the ones you care about" sends one or two
-// names, and the rest are the server's to choose - which is what makes
-// the empty slots in the web UI mean something rather than being a
-// validation error waiting to happen.
-
-// roller is the randomness the battle engine needs: two methods, and
-// no opinion about whether they are guarded.
-//
-// Named as an interface so the engine does not require a *rand.Rand.
-// The service shares one generator across concurrent handlers and must
-// wrap it in a lock; a test wants a bare seeded one. Both satisfy this.
 type roller interface {
 	Intn(n int) int
 	Float64() float64
@@ -208,9 +129,6 @@ func fillTeam(dex *pokedex, chosen []string, rng roller) []string {
 	if len(chosen) >= teamSize {
 		return chosen
 	}
-	// Not already on the team: a random fill that duplicates a pick
-	// gives two of the same Pokemon with different HP, which reads as a
-	// bug rather than a roster.
 	taken := make(map[string]bool, len(chosen))
 	for _, n := range chosen {
 		taken[strings.ToLower(strings.TrimSpace(n))] = true
@@ -232,9 +150,6 @@ func fillTeam(dex *pokedex, chosen []string, rng roller) []string {
 func randomTeam(dex *pokedex, rng roller) []string {
 	all := dex.list("", 0)
 	if len(all) < teamSize {
-		// Cannot happen with the shipped dataset, which is why this
-		// returns what it has rather than an error: a caller cannot do
-		// anything useful with "the pokedex is too small".
 		names := make([]string, 0, len(all))
 		for _, m := range all {
 			names = append(names, m.Name)
@@ -255,19 +170,12 @@ func randomTeam(dex *pokedex, rng roller) []string {
 	return team
 }
 
-// damage resolves one attack. Returns the damage dealt and the type
-// multiplier that produced it, so the caller can narrate the hit.
-//
-// rng is passed in so tests are deterministic: the engine never reaches
-// for a package-level source.
 func damage(attacker, defender *combatant, move api.Move, rng roller) (int, float64) {
 	mult := multiplier(move.Type, defender.mon.Types)
 	if mult == 0 || move.Power == 0 {
 		return 0, mult
 	}
 
-	// Same-type attack bonus, as the games have: a fire Pokemon hits
-	// harder with a fire move.
 	stab := 1.0
 	for _, t := range attacker.mon.Types {
 		if t == move.Type {
@@ -276,10 +184,6 @@ func damage(attacker, defender *combatant, move api.Move, rng roller) (int, floa
 		}
 	}
 
-	// Attack over defense, each scaled by its stat stages. This is what
-	// makes swords-dance and harden mean something, and what makes a
-	// Machamp (130 attack) hit harder than a Gengar (65) with the same
-	// move.
 	atk := float64(attacker.base.attack) * statMultiplier(attacker.stages.attack)
 	def := float64(defender.base.defense) * statMultiplier(defender.stages.defense)
 
@@ -287,66 +191,18 @@ func damage(attacker, defender *combatant, move api.Move, rng roller) (int, floa
 	spread := 1 + (rng.Float64()*2-1)*damageSpread
 	d := int(base * spread)
 	if d < 1 {
-		// A move that connects always does something; rounding to zero
-		// reads as a bug to the player.
 		d = 1
 	}
 	return d, mult
 }
 
-// store holds battles. An interface because replicas: 1 is what makes a
-// map correct today, and that is a deployment detail rather than a
-// design one.
-// Every method takes a context.
-//
-// The handlers receive one per request and used to discard it, and the
-// Postgres store then manufactured context.Background(). That made
-// `case <-ctx.Done()` in its retry loop dead code: a client that
-// disconnects mid-turn left ten SERIALIZABLE retries with exponential
-// backoff grinding against a database nobody was waiting on, and
-// srv.Shutdown could not interrupt in-flight work.
 type store interface {
-	// create returns an error because the Postgres implementation can
-	// fail and used to say nothing. Begin, the inserts and the commit
-	// each returned bare on failure, and the handler then answered 201
-	// with a battle id that was never written - the player shared it,
-	// and every later read 404'd with nothing in the logs.
-	//
-	// The memory store cannot fail and returns nil.
 	create(ctx context.Context, b *battle) error
-	// get and waiting return CONVERTED values, not *battle.
-	//
-	// They used to hand the pointer back and release the lock, and the
-	// handler then walked sides, log and every combatant outside it
-	// while another request mutated exactly those fields. The mutex was
-	// protecting the map, not the battle the map points at - the race
-	// detector reports writes to combatant.hp and battle.turn against
-	// reads from toAPI().
-	//
-	// Converting inside the lock is the fix that keeps the lock's
-	// meaning honest: nothing reachable from the store escapes it.
 	get(ctx context.Context, id string) (*api.Battle, bool)
 	waiting(ctx context.Context) []api.WaitingBattle
 	trainerByToken(ctx context.Context, token string) (string, bool)
 	registerTrainer(ctx context.Context, name string) (string, error)
 
-	// update applies fn to a battle and persists the result, as one
-	// atomic step.
-	//
-	// The closure form is what makes this safe across replicas. `get`
-	// then mutate works in one process because the pointer IS the
-	// stored battle; against a database it is a read-modify-write with
-	// a gap, and two pods resolving a turn at once would both read
-	// version 5 and one would overwrite the other with no error.
-	//
-	// The Postgres store runs fn inside a SERIALIZABLE transaction and
-	// retries on a serialization failure, so fn may run more than
-	// once. It must therefore not have side effects outside the battle
-	// it is given - no logging a turn, no sending a notification. The
-	// memory store just takes its mutex.
-	//
-	// Returns errNoBattle if there is none with that id, otherwise
-	// whatever fn returned.
 	update(ctx context.Context, id string, fn func(*battle) error) error
 }
 
@@ -367,30 +223,12 @@ func newMemStore(seed int64) *memStore {
 	}
 }
 
-// newToken mints a trainer token.
-//
-// crypto/rand, not the store's math/rand. randomID draws from a
-// generator seeded with time.Now().UnixNano() at startup, so anyone who
-// knows roughly when the process started can reproduce the whole token
-// stream in order - the first token, the second, all of them. That did
-// not matter while this ran on the LAN and the worst outcome was moving
-// someone else's Pokemon. It matters on a public address, where the
-// cost of getting it right is these fifteen lines.
-//
-// Battle IDs stay on math/rand deliberately: they are shared aloud
-// between players, the alphabet skips 0/1/l to keep them readable, and
-// knowing one grants nothing - the token is what authorises a move.
 func newToken() string {
-	// Rejection sampling, not modulo. 256 is not a multiple of 33, so
-	// b[i]%33 would favour the first 25 characters of the alphabet -
-	// a small bias, and free to avoid.
 	const max = 256 - (256 % len(idAlphabet))
 	out := make([]byte, 0, 24)
 	buf := make([]byte, 32)
 	for len(out) < 24 {
 		if _, err := crand.Read(buf); err != nil {
-			// crypto/rand does not fail on any platform this runs on,
-			// and a token from a degraded source is worse than none.
 			panic("crypto/rand: " + err.Error())
 		}
 		for _, v := range buf {
@@ -444,19 +282,9 @@ func (m *memStore) get(_ context.Context, id string) (*api.Battle, bool) {
 	if !ok {
 		return nil, false
 	}
-	// Converted here, under the lock, so the caller never holds a
-	// reference into live battle state.
 	return b.toAPI(), true
 }
 
-// rawForTest returns the live *battle, for tests that need to set up a
-// state the public API cannot reach - a Pokemon at exactly 1 HP, a side
-// already fainted.
-//
-// NOT on the store interface: handing a live pointer out is the bug
-// get() was changed to stop doing, and this exists only because a test
-// is single-goroutine by construction. Production code must go through
-// get() or update().
 func (m *memStore) rawForTest(id string) (*battle, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -464,12 +292,6 @@ func (m *memStore) rawForTest(id string) (*battle, bool) {
 	return b, ok
 }
 
-// update runs fn under the store's lock.
-//
-// In memory the pointer IS the stored battle, so there is nothing to
-// write back - holding the lock for the duration is the whole job, and
-// it is what stops two requests interleaving a turn. The Postgres
-// store has real work to do here; see pgstore.update.
 func (m *memStore) update(_ context.Context, id string, fn func(*battle) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -484,16 +306,11 @@ func (m *memStore) update(_ context.Context, id string, fn func(*battle) error) 
 	return nil
 }
 
-// waiting lists open invitations, newest first, so a lobby shows the
-// freshest at the top.
 func (m *memStore) waiting(_ context.Context) []api.WaitingBattle {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sweepLocked()
 
-	// Built under the lock. Returning []*battle let the handler read
-	// each one's sides and team after the lock was released, which is
-	// the same escape get() had.
 	var out []api.WaitingBattle
 	for _, b := range m.battles {
 		if b.status == "waiting" {
@@ -506,12 +323,6 @@ func (m *memStore) waiting(_ context.Context) []api.WaitingBattle {
 	return out
 }
 
-// toWaiting is the lobby's view of a battle: who is waiting and with
-// what. Separate from toAPI because a lobby needs neither the log nor
-// the opponent's side, and building the whole battle to throw most of
-// it away made the lobby quadratic in team size for no reason.
-//
-// Callers hold the store's lock.
 func (b *battle) toWaiting() api.WaitingBattle {
 	w := api.WaitingBattle{
 		BattleId:  b.id,
@@ -524,9 +335,6 @@ func (b *battle) toWaiting() api.WaitingBattle {
 	return w
 }
 
-// sweepLocked drops battles nobody has touched within the TTL. Called on
-// write rather than from a goroutine: there is no background work to
-// supervise, and a store that is never written does not grow.
 func (m *memStore) sweepLocked() {
 	cutoff := time.Now().Add(-battleTTL)
 	for id, b := range m.battles {
@@ -538,8 +346,6 @@ func (m *memStore) sweepLocked() {
 
 const idAlphabet = "abcdefghijkmnopqrstuvwxyz23456789"
 
-// randomID avoids 0/1/l to keep an id readable aloud, which matters when
-// one player reads a battle id to another.
 func randomID(rng roller, n int) string {
 	b := make([]byte, n)
 	for i := range b {
@@ -548,10 +354,6 @@ func randomID(rng roller, n int) string {
 	return string(b)
 }
 
-// takeTurn resolves one attack and advances the battle.
-//
-// Every illegal case is an error rather than a silent no-op: a client
-// bug that sends the wrong index should be visible, not look like lag.
 func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng roller) error {
 	if b.status == "finished" {
 		return errBattleOver
@@ -562,8 +364,6 @@ func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng
 
 	me, opponent := b.sides[b.turn], b.sides[1-b.turn]
 	if me.token != token {
-		// Either it is the other player's turn, or a spectator is
-		// posting. Both are "not your turn" from the caller's side.
 		return errNotYourTurn
 	}
 	if attackerIdx < 0 || attackerIdx >= len(me.team) {
@@ -592,12 +392,7 @@ func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng
 
 	b.turnNumber++
 
-	// Confusion resolves before the move: a confused Pokemon can hit
-	// itself instead of attacking, which is the whole point of
-	// supersonic.
 	if attacker.confused {
-		// A third of the time, and it wears off on the same roll that
-		// spares it, so confusion is a real cost rather than permanent.
 		if rng.Float64() < 0.33 {
 			self := move.Power / 2
 			if self < 1 {
@@ -623,8 +418,6 @@ func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng
 		})
 	}
 
-	// A status move does something other than damage, and every one in
-	// the dataset now does what it does in the games.
 	if move.Power == 0 {
 		b.resolveStatus(attacker, target, move, rng)
 		b.finishTurn(me, opponent, target)
@@ -643,9 +436,6 @@ func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng
 	return nil
 }
 
-// finishTurn records a faint, checks the win condition and hands over.
-// Shared because a turn can end after damage, after a status move, or
-// after a confused Pokemon hits itself.
 func (b *battle) finishTurn(me, opponent *side, hurt *combatant) {
 	if hurt != nil && hurt.fainted() {
 		b.log = append(b.log, api.BattleEvent{
@@ -680,8 +470,6 @@ func (b *battle) finishTurn(me, opponent *side, hurt *combatant) {
 	b.touched = time.Now()
 }
 
-// appendEvent narrates a hit. The server writes the prose so three
-// clients tell the same story rather than each inventing wording.
 func (b *battle) appendEvent(attacker, target *combatant, move api.Move, dealt int, mult float64) {
 	text := fmt.Sprintf("%s used %s on %s", title(attacker.mon.Name), title(move.Name), title(target.mon.Name))
 	if move.Power == 0 {
@@ -716,8 +504,6 @@ func title(s string) string {
 	return strings.Join(parts, " ")
 }
 
-// toAPI converts server state into the wire type. Tokens and timestamps
-// stay on this side of the boundary.
 func (b *battle) toAPI() *api.Battle {
 	out := &api.Battle{
 		ID:      b.id,
@@ -743,9 +529,6 @@ func (b *battle) toAPI() *api.Battle {
 				Sprite:  c.mon.Sprite,
 				Moves:   c.mon.Moves,
 			}
-			// Only when something has actually changed: a client that
-			// draws every zero would put +0 badges on six Pokemon for
-			// the whole battle.
 			if c.stages != (stages{}) {
 				bp.Stages = api.NewOptStatStages(api.StatStages{
 					Attack:   api.NewOptInt(c.stages.attack),
@@ -767,10 +550,6 @@ func (b *battle) toAPI() *api.Battle {
 	return out
 }
 
-// resolveStatus applies a power-0 move.
-//
-// Every one in the dataset does what it does in the games; a move with
-// no entry says it had no effect, which is honest rather than silent.
 func (b *battle) resolveStatus(attacker, target *combatant, move api.Move, rng roller) {
 	eff, known := statusMoves[move.Name]
 	say := func(format string, a ...any) {
@@ -853,8 +632,6 @@ func (b *battle) resolveStatus(attacker, target *combatant, move api.Move, rng r
 		}
 		applied := on.stages.add(eff.stat, eff.delta)
 		if applied == 0 {
-			// Already at the cap. Saying so beats a turn that appears
-			// to do nothing.
 			say("%s used %s, but %s's %s cannot go any %s.",
 				title(attacker.mon.Name), title(move.Name), title(on.mon.Name),
 				eff.stat, map[bool]string{true: "higher", false: "lower"}[eff.delta > 0])

@@ -1,16 +1,10 @@
 package main
 
-// Seeding tests, against a real Postgres. Skipped without
-// POKEDEX_TEST_DSN, like the migration tests.
-
 import (
 	"context"
 	"testing"
 )
 
-// The whole point: what comes back out of the database is what went
-// in, including the parts that are easy to lose - move ordering, the
-// learnable set, and the optional fields.
 func TestSeedRoundTrip(t *testing.T) {
 	pool := testPool(t)
 	dropAll(t, pool)
@@ -60,9 +54,6 @@ func TestSeedRoundTrip(t *testing.T) {
 			t.Errorf("%s: legendary %v, want %v", want.Name, got.Legendary, want.Legendary)
 		}
 
-		// Move ORDER, not just membership. The battle picks by index,
-		// so a set that matches in the wrong order is a different
-		// game.
 		if len(got.Moves) != len(want.Moves) {
 			t.Errorf("%s: %d moves, want %d", want.Name, len(got.Moves), len(want.Moves))
 			continue
@@ -75,8 +66,6 @@ func TestSeedRoundTrip(t *testing.T) {
 		}
 	}
 
-	// The learnable set, which is the larger list and a different code
-	// path from the battle moves.
 	for name, want := range fromFile.learnable {
 		got := fromDB.learnable[name]
 		if len(got) != len(want) {
@@ -92,8 +81,6 @@ func TestSeedRoundTrip(t *testing.T) {
 	}
 }
 
-// Seeding runs on every start, so the second one must be a no-op
-// rather than a duplicate-key error.
 func TestSeedIsIdempotent(t *testing.T) {
 	pool := testPool(t)
 	dropAll(t, pool)

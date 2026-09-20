@@ -1,13 +1,5 @@
 package main
 
-// Battle commands. The rules live in the API and the plumbing lives in
-// battleclient; what is here is argument parsing and printing.
-//
-// A CLI exits between commands, so a battle is played as a sequence of
-// invocations against stored identity - `register` once, then `open` or
-// `join`, then `attack` per turn. `watch` blocks until it is your move,
-// which is what makes that sequence bearable.
-
 import (
 	"context"
 	"fmt"
@@ -20,17 +12,11 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
-// battleClient loads the stored trainer and points it at the same API
-// the rest of the CLI uses.
 func battleClient() (*battleclient.Client, error) {
 	id, err := battleclient.LoadIdentity()
 	if err != nil {
-		// Every battle command goes through here, so the "register
-		// first" hint is attached once rather than at seven call sites.
 		return nil, err
 	}
-	// The env var wins over whatever was stored, so a port-forward works
-	// without re-registering.
 	id.API = baseURL()
 	return battleclient.New(id)
 }
@@ -85,13 +71,6 @@ func lobbyCmd() *cobra.Command {
 	}
 }
 
-// teamSize is how many Pokemon a battle side holds. Named so the
-// argument limits and the TAB completer cannot disagree about it - they
-// were two separate literals, and a completer that offers a fourth name
-// the parser then rejects is worse than no completer.
-//
-// Aliased from battleclient rather than declared: the same reasoning
-// applies one package over, where the TUI had three more copies.
 const teamSize = battleclient.TeamSize
 
 func openCmd() *cobra.Command {
@@ -103,10 +82,6 @@ func openCmd() *cobra.Command {
 			"battle and naming one is a perfectly good way to start.",
 		Args: cobra.RangeArgs(0, teamSize),
 		RunE: func(_ *cobra.Command, args []string) error {
-			// No "0 or exactly 3" check. The API took partial teams from
-			// 0.4.0 and both other clients offer them; this rule only
-			// lived here, so the CLI rejected a request the server would
-			// have accepted.
 			c, err := battleClient()
 			if err != nil {
 				return err
@@ -124,10 +99,6 @@ func openCmd() *cobra.Command {
 			return nil
 		},
 	}
-	// TAB completes every team slot, not just the first. Typing three
-	// Pokemon from memory was the CLI's version of the bug the web had:
-	// the names exist, the completer existed, and the two were never
-	// connected on the commands that take a team.
 	cmd.ValidArgsFunction = makeTeamCompleter(pokemonNames, 0, teamSize)
 	return cmd
 }
@@ -194,9 +165,6 @@ func watchCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// No withTimeout here: waiting for a human opponent can take
-			// minutes, and a ten-second deadline would make watch
-			// useless for the one job it has.
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 			defer cancel()
 
@@ -213,8 +181,6 @@ func watchCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				// Only what is new: re-printing the whole log every poll
-				// would bury the turn that just happened.
 				for _, ev := range b.Log[min(shown, len(b.Log)):] {
 					printEvent(ev)
 				}
@@ -243,8 +209,6 @@ func attackCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// 1-based on the command line because that is how the board
-			// prints; the API is 0-based.
 			attacker, err := index1(args[1], "your pokemon")
 			if err != nil {
 				return err
@@ -261,16 +225,6 @@ func attackCmd() *cobra.Command {
 			ctx, cancel := withTimeout()
 			defer cancel()
 
-			// Check before sending. The board this CLI prints already
-			// skips fainted Pokemon and marks disabled moves, so it
-			// knows these rules - it just was not acting on them, and
-			// an illegal turn became a 409 naming nothing. CheckTurn
-			// reports the same first reason the server would, using
-			// the names the player just read.
-			//
-			// The extra Get is the cost. It buys "geodude has fainted"
-			// in place of "illegal move", and it is the same round trip
-			// the board below makes anyway.
 			turn := battleclient.Turn{Attacker: attacker, Move: move, Target: target}
 			cur, err := c.Get(ctx, args[0])
 			if err != nil {
@@ -282,8 +236,6 @@ func attackCmd() *cobra.Command {
 
 			b, err := c.Attack(ctx, args[0], attacker, move, target)
 			if err != nil {
-				// Still possible: the state moved between the check and
-				// the send. The server remains the authority.
 				return err
 			}
 			for _, ev := range lastTurn(b) {

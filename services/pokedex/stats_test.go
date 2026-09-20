@@ -1,8 +1,5 @@
 package main
 
-// Stat stages and status moves. Every power-0 move used to be a wasted
-// turn, so these pin what each one now does.
-
 import (
 	"math"
 	"strings"
@@ -11,9 +8,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// The Generation III+ table, by hand. A player who knows the games
-// should be able to predict swords-dance, so the numbers have to be the
-// real ones rather than something that merely increases.
 func TestStatMultiplierMatchesTheGames(t *testing.T) {
 	for _, tc := range []struct {
 		stage int
@@ -52,8 +46,6 @@ func TestAccuracyMultiplierUsesItsOwnTable(t *testing.T) {
 	}
 }
 
-// swords-dance doubles attack, so the same move hits meaningfully
-// harder afterwards. This is the whole point of a status move.
 func TestSwordsDanceIncreasesDamage(t *testing.T) {
 	s := testService(t)
 	mon, _ := s.dex.get("machamp")
@@ -75,8 +67,6 @@ func TestSwordsDanceIncreasesDamage(t *testing.T) {
 		return &combatant{mon: def, base: s.dex.stats[def.ID], hp: 300, maxHP: 300, disabled: -1}
 	}
 
-	// Averaged, because damage carries +/-15% variance and one roll
-	// could land either way.
 	var before, after int
 	for seed := int64(1); seed <= 40; seed++ {
 		a, _ := damage(plain, target(), attack, rngFor(seed))
@@ -124,8 +114,6 @@ func TestHardenReducesIncomingDamage(t *testing.T) {
 	}
 }
 
-// Base stats matter: a Machamp hits harder than a Gengar with the same
-// move, because 130 attack is not 65.
 func TestAttackStatChangesDamage(t *testing.T) {
 	s := testService(t)
 	strong, _ := s.dex.get("machamp")
@@ -149,9 +137,6 @@ func TestAttackStatChangesDamage(t *testing.T) {
 	}
 }
 
-// Every status move in the dataset does something. A move the engine
-// does not know is a wasted turn, which is what this whole change was
-// about.
 func TestEveryStatusMoveInTheDatasetIsImplemented(t *testing.T) {
 	s := testService(t)
 	seen := map[string]bool{}

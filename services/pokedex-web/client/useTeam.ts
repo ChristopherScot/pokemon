@@ -1,8 +1,3 @@
-// The team you are building, held in sessionStorage.
-//
-// It survives a filter change and a reload because choosing three
-// Pokemon out of a hundred means scrolling and filtering, and losing
-// the selection to a click on "fire" would be infuriating.
 import { useCallback, useEffect, useState } from 'react'
 
 import { TEAM_SIZE } from './shared.ts'
@@ -22,22 +17,6 @@ function read(): Pick[] {
 }
 
 export function useTeam() {
-  // A lazy initialiser, not an effect. `read` is PASSED, not called:
-  // React runs it once, before the first render.
-  //
-  // This was an effect, on the reasoning that sessionStorage does not
-  // exist while the server renders. It does not apply - these
-  // components are never server-rendered; the server ships an empty
-  // <div id="root"> and React only ever mounts in the browser, so
-  // there is no hydration and no mismatch to avoid. And the effect
-  // version is actively wrong: StrictMode double-invokes effects, so
-  // the write effect ran with the initial [] and erased the saved team
-  // before the read effect could restore it. A player picked three
-  // Pokemon, reloaded, and they were gone AND overwritten.
-  //
-  // For a real server-rendered app the answer is useSyncExternalStore
-  // or a post-hydration effect - not this. The rule is "client-only
-  // mount -> lazy initialiser", not "never read storage in useState".
   const [team, setTeam] = useState<Pick[]>(read)
 
   useEffect(() => {

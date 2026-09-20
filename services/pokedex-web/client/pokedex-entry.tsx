@@ -15,8 +15,6 @@ const boot = JSON.parse(
   join: string
 }
 
-// Read here rather than in a component: it is a one-time lookup of
-// where this browser was, not state anything renders from twice.
 let resume = ''
 try { resume = sessionStorage.getItem('pokedex.battle') ?? '' } catch { /* private mode */ }
 

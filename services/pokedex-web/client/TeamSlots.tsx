@@ -8,9 +8,6 @@ export function TeamSlots({ team, onRemove }: { team: Pick[]; onRemove: (i: numb
       {Array.from({ length: TEAM_SIZE }, (_, i) => {
         const pick = team[i]
         if (!pick) {
-          // A die, not a slot number: an empty slot is filled randomly
-          // by the server, and saying so is what makes "just start a
-          // battle" a visible option rather than a hidden one.
           return (
             <div className="slot" key={i} title="random">
               <span className="slot-empty">🎲</span>

@@ -1,8 +1,3 @@
-// The button that commits your team, and the name prompt it needs when
-// you have not registered yet.
-//
-// They live together because one opens the other and nothing else uses
-// either.
 import { useState } from 'react'
 
 import { TEAM_SIZE, V } from './shared.ts'
@@ -19,20 +14,11 @@ export function Ready({
   const [needsName, setNeedsName] = useState(false)
   const [error, setError] = useState('')
 
-  /**
-   * Commits the team: joins `join` if set, otherwise opens a new
-   * battle. One function for both, because picking a team is the same
-   * act either way - splitting them is what left joining without a
-   * picker at all.
-   */
   async function commit(): Promise<boolean> {
     const body = team.length ? { team: team.map((t) => t.name) } : {}
     const url = join ? `/battle/${encodeURIComponent(join)}/join` : '/battle/open'
     const res = await fetch(url, {
       method: 'POST',
-      // ...V like every other fetch in the app: without it the
-      // server's version-refusal path cannot see these requests, and
-      // three of four call sites agreed while this one did not.
       headers: { 'content-type': 'application/json', ...V },
       body: JSON.stringify(body),
     })
@@ -61,8 +47,6 @@ export function Ready({
           setError('')
           try {
             if (await commit()) return
-            // Ask for the name in place rather than redirecting to the
-            // lobby, which would throw away the team just picked.
             setNeedsName(true)
           } catch (err) {
             setError(err instanceof Error ? err.message : 'that did not work')

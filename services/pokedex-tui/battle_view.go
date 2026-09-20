@@ -19,9 +19,6 @@ var (
 	disabledStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Strikethrough(true)
 	condStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Italic(true)
 
-	// Fixed-width columns. Set on the style rather than with fmt verbs,
-	// because these strings carry ANSI escapes and only lipgloss
-	// measures their DISPLAY width.
 	nameCol = lipgloss.NewStyle().Width(24)
 	hpCol   = lipgloss.NewStyle().Width(9)
 
@@ -37,8 +34,6 @@ var (
 	weakStyle  = lipgloss.NewStyle().Faint(true)
 )
 
-// impactStyle is the colour a bar flashes when it is hit, by how much
-// the type chart mattered.
 func impactStyle(effect float64) lipgloss.Style {
 	switch {
 	case effect >= 2:
@@ -52,8 +47,6 @@ func impactStyle(effect float64) lipgloss.Style {
 	}
 }
 
-// hpStyleFor colours a bar by how much is left, so a player reads danger
-// without doing arithmetic.
 func hpStyleFor(hp, max int) lipgloss.Style {
 	if max <= 0 {
 		return dimStyle
@@ -68,8 +61,6 @@ func hpStyleFor(hp, max int) lipgloss.Style {
 	}
 }
 
-// hpBar draws the animated value, not the real one: `shown` lags `hp`
-// while a drain plays out.
 func hpBar(shown, max, width int) string {
 	if max <= 0 {
 		return strings.Repeat("░", width)
@@ -89,15 +80,10 @@ func hpBar(shown, max, width int) string {
 		dimStyle.Render(strings.Repeat("░", width-filled))
 }
 
-// monLine is one Pokemon: name, types, bar, and any damage floating off
-// it this frame.
 func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) string {
 	k := slot{si, pi}
 	shown := bs.shown[k]
 
-	// Padded by a lipgloss Width, not a %-24s: a styled name carries
-	// ANSI escapes and fmt pads to BYTE count, so a fainted or selected
-	// Pokemon pushed its whole row left.
 	name := "  " + p.Name
 	if selected {
 		name = "▸ " + p.Name
@@ -118,10 +104,6 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 
 	bar := hpBar(shown, p.MaxHp, 14)
 
-	// A hit shakes its row and flashes the bar. The shake is a leading
-	// space that comes and goes, which is the only "motion" a terminal
-	// row has - and it reads as a jolt rather than a redraw because it
-	// lasts a handful of frames.
 	lead := ""
 	if im, ok := bs.impacts[k]; ok {
 		if im.life%4 < 2 {
@@ -136,8 +118,6 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 		hpCol.Render(fmt.Sprintf("%d/%d", shown, p.MaxHp)),
 		strings.Join(badges, " "))
 
-	// Stat changes and conditions, after the types. Only when there is
-	// something to say, so an ordinary battle draws no extra clutter.
 	if st := battletext.StageLabel(p); st != "" {
 		line += "  " + stageStyle.Render(st)
 	}
@@ -145,8 +125,6 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 		line += "  " + condStyle.Render(cond)
 	}
 
-	// The damage number rides alongside the bar while it is alive,
-	// fading as it goes.
 	for _, f := range bs.floats {
 		if f.slot != k {
 			continue
@@ -156,12 +134,7 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 	return line
 }
 
-// renderFloat styles a damage number by effectiveness and fades it as it
-// expires, which is what makes a big hit feel different from a chip.
 func renderFloat(f damageFloat) string {
-	// An immune hit deals 0, so "-0" in damage red reads as a hit that
-	// landed. logView already treats 0 as its own case; this switch did
-	// not, so the same event was styled two ways on one screen.
 	text := fmt.Sprintf("-%d", f.amount)
 	switch {
 	case f.effect == 0:
@@ -181,8 +154,6 @@ func renderFloat(f damageFloat) string {
 	case f.effect < 1:
 		style = weakStyle
 	}
-	// Past the halfway point the number dims, so it reads as leaving
-	// rather than blinking out.
 	if f.life < floatLife/2 {
 		style = style.Faint(true)
 	}
@@ -203,8 +174,6 @@ func (bs *battleState) view(width, height int) string {
 
 	mine, theirs, ok := bs.client.SideFor(b)
 	if !ok {
-		// Still waiting for an opponent: show the id to share and who is
-		// already in.
 		sb.WriteString(fmt.Sprintf("  battle %s — waiting for an opponent\n\n", b.ID))
 		if len(b.Sides) > 0 {
 			for pi, p := range b.Sides[0].Team {
@@ -215,13 +184,6 @@ func (bs *battleState) view(width, height int) string {
 		return sb.String()
 	}
 
-	// SideIndex rather than recomputing: this was a verbatim copy of
-	// the code SideIndex was extracted to replace, still sitting four
-	// lines below a SideFor call. It also predated SideIndex's
-	// spectator fix - a name matching neither side fell through to
-	// mineIdx=0 - which was unreachable here only because SideFor
-	// returned above. Safe by construction now rather than by luck of
-	// ordering; the ok is discarded because SideFor already gated it.
 	mineIdx, theirsIdx, _ := bs.client.SideIndex(b)
 
 	sb.WriteString("  " + bs.banner(b) + "\n\n")
@@ -257,9 +219,6 @@ func (bs *battleState) banner(b *api.Battle) string {
 		return dimStyle.Render("a draw")
 	case api.BattleStatusActive:
 		if bs.client.MyTurn(b) {
-			// Pulsing for the first few frames after the turn arrives,
-			// so a player who looked away sees it change rather than
-			// having to notice a static line.
 			if bs.bannerPulse > 0 && bs.bannerPulse%6 < 3 {
 				return bannerYou.Reverse(true).Render(" your turn ")
 			}
@@ -271,8 +230,6 @@ func (bs *battleState) banner(b *api.Battle) string {
 	}
 }
 
-// moveRow shows the selected Pokemon's moves, with the chosen one lit
-// and its power beside it.
 func (bs *battleState) moveRow(mine api.Side) string {
 	if bs.pickAttacker >= len(mine.Team) {
 		return ""
@@ -281,19 +238,9 @@ func (bs *battleState) moveRow(mine api.Side) string {
 	moves := attacker.Moves
 	parts := make([]string, 0, len(moves))
 	for i, mv := range moves {
-		// The power is composed as PLAIN text and styled once with the
-		// label around it. It used to be pre-rendered by powerLabel and
-		// then wrapped again by the cases below, and a rendered string
-		// nested inside another Render loses the inner sequence's escape
-		// byte: the terminal showed "mega-punch [2m(80)[m", the codes
-		// printed as literal characters on whichever move was selected.
-		//
-		// One Render per label, never a Render of a Render.
 		label := fmt.Sprintf("%s %s", mv.Name, powerText(mv.Power))
 		switch {
 		case !battleclient.MoveUsable(attacker, i):
-			// Selecting a disabled move is a 409, so it must not look
-			// available - a failed turn is worse than a greyed label.
 			label = disabledStyle.Render(label + " (disabled)")
 		case bs.focus == focusMove && i == bs.pickMove:
 			label = pickStyle.Render("▸" + label)
@@ -307,11 +254,6 @@ func (bs *battleState) moveRow(mine api.Side) string {
 	return "  " + strings.Join(parts, dimStyle.Render(" · "))
 }
 
-// powerText is the power in parentheses, UNSTYLED.
-//
-// Styling happens once, at the call site, around the whole label. A
-// helper that returns pre-styled text cannot be safely composed into a
-// larger styled string, which is how escape codes ended up on screen.
 func powerText(p int) string {
 	if p == 0 {
 		return "(status)"
@@ -338,9 +280,6 @@ func (bs *battleState) logView(height int) string {
 		case e == 0:
 			text = dimStyle.Render(text)
 		}
-		// Glyph as well as colour. Colour alone cannot say "fainted" or
-		// "that was a status move", and it is the first thing lost to a
-		// screenshot, a pipe, or a colourblind reader.
 		if icon := battletext.EventIcon(ev); icon != "" {
 			sb.WriteString(" " + icon + " " + text + "\n")
 			continue

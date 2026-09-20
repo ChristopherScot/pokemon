@@ -1,13 +1,3 @@
-// The lobby's waiting list, refreshed on a timer.
-//
-// `initial` is what the server already rendered into the page, so the
-// list is correct on first paint and this only replaces it once the
-// first poll comes back. That is why it seeds state rather than being
-// read on every render: after mount, the server's copy is the stale
-// one.
-//
-// Paused while the tab is hidden. A lobby left open in a background tab
-// is the shape that produced 46,000 wasted requests from one page.
 import { useEffect, useState } from 'react'
 
 import type { components } from '@christopherscot/pokedex-client'
@@ -41,9 +31,6 @@ export function useWaiting(initial: Waiting[]): Waiting[] {
       if (live) timer = setTimeout(tick, POLL_MS)
     }
 
-    // Starts after one interval, not immediately: the server already
-    // gave us this list, so an instant refetch would ask for what we
-    // are currently displaying.
     timer = setTimeout(tick, POLL_MS)
     return () => {
       live = false

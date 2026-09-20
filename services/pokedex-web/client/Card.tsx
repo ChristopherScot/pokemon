@@ -1,8 +1,3 @@
-// One Pokemon in the grid.
-//
-// A button, not an <article> with a click handler. The card IS the team
-// picker, and as a div the whole product was mouse-only: you could
-// browse and filter and then not pick a team.
 import type { components } from '@christopherscot/pokedex-client'
 
 import { colour } from '../types.ts'
@@ -22,12 +17,7 @@ export function Card({
     <button
       type="button"
       className={'card' + (picked ? ' picked' : '')}
-      // The selected state has to reach the accessibility tree: the
-      // "on your team" pill is CSS ::after content and announces to
-      // nobody.
       aria-pressed={picked}
-      // A full team still lets you deselect, or you could trap
-      // yourself with three picks and no way back.
       disabled={full && !picked}
       onClick={() => onToggle({ name: mon.name, sprite: mon.sprite })}
     >

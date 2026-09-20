@@ -1,12 +1,5 @@
 package main
 
-// Migration tests, which need a real Postgres.
-//
-// Skipped unless POKEDEX_TEST_DSN is set, so `go test ./...` stays
-// green on a machine without one - which is every CI runner here. The
-// behaviour being tested is Postgres's own (advisory locks, transaction
-// rollback), so a fake would test the fake.
-
 import (
 	"context"
 	"os"
@@ -73,8 +66,6 @@ func TestMigrateCreatesSchema(t *testing.T) {
 	}
 }
 
-// A second run must be a no-op rather than an error, because every pod
-// restart calls this.
 func TestMigrateIsIdempotent(t *testing.T) {
 	pool := testPool(t)
 	dropAll(t, pool)
@@ -97,8 +88,6 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	}
 }
 
-// The case this exists for: a rollout starts two pods at once, and
-// without the advisory lock both run CREATE TABLE and one fails.
 func TestMigrateConcurrentReplicas(t *testing.T) {
 	pool := testPool(t)
 	dropAll(t, pool)

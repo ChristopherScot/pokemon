@@ -1,19 +1,5 @@
 package main
 
-// Turning battle state into terminal output.
-//
-// Separate from battle.go, which is cobra command wiring, because the
-// two change for different reasons: a new flag is a command change, a
-// clearer board is a printing change. The seam was already there -
-// every command above delegates to these - so this is where the file
-// was going to split anyway.
-//
-// Printing to stdout directly rather than through an io.Writer: nothing
-// tests this output today, and the idiomatic way to make it testable
-// when something does is to thread cmd.OutOrStdout() through, which
-// cobra already provides. An interface here would be machinery without
-// a caller.
-
 import (
 	"errors"
 	"fmt"
@@ -25,8 +11,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/battletext"
 )
 
-// index1 converts a 1-based argument to the 0-based index the API wants,
-// rejecting anything that is not a position.
 func index1(s, what string) (int, error) {
 	var n int
 	if _, err := fmt.Sscanf(strings.TrimSpace(s), "%d", &n); err != nil {
@@ -38,14 +22,6 @@ func index1(s, what string) (int, error) {
 	return n - 1, nil
 }
 
-// printEvent writes one log line with a glyph for what it did.
-//
-// The CLI cannot animate a hit the way the web does, so the glyph is
-// how a super-effective hit reads differently from an ordinary one at a
-// glance. It leads the line and is padded to a fixed width, because a
-// column that moves with the content is harder to scan than no column.
-//
-// Events with no glyph still get the indent, so the prose stays aligned.
 func printEvent(ev api.BattleEvent) {
 	if icon := battletext.EventIcon(ev); icon != "" {
 		fmt.Printf(" %s %s\n", icon, ev.Text)
@@ -54,8 +30,6 @@ func printEvent(ev api.BattleEvent) {
 	fmt.Println("   ", ev.Text)
 }
 
-// lastTurn is the events from the most recent turn, which is what a
-// player wants to see after attacking.
 func lastTurn(b *api.Battle) []api.BattleEvent {
 	if len(b.Log) == 0 {
 		return nil
@@ -70,17 +44,9 @@ func lastTurn(b *api.Battle) []api.BattleEvent {
 	return out
 }
 
-// printBattle draws the board: both teams with HP bars, and whose move
-// it is. 1-based positions, matching what attack expects.
 func printBattle(c *battleclient.Client, b *api.Battle) {
 	mine, theirs, ok := c.SideFor(b)
 	if !ok {
-		// Two different situations, and they used to print the same
-		// line. SideFor says "not you" for a battle still waiting AND
-		// for one you are simply not in - and until it stopped claiming
-		// spectators were participants, the second case never got here,
-		// so "waiting for an opponent" was right by accident. It is
-		// wrong the moment you watch someone else's battle.
 		if len(b.Sides) < 2 {
 			fmt.Printf("battle %s: waiting for an opponent\n", b.ID)
 			if len(b.Sides) == 1 {
@@ -108,9 +74,6 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 			fmt.Println("\nthe battle is a draw.")
 		}
 	case c.MyTurn(b):
-		// The moves, with their numbers. Picking "move 4" out of a
-		// board that never lists them means going to `show <name>` for
-		// every turn, which is not a CLI anyone wants to use.
 		fmt.Println("\nyour moves")
 		for i, p := range mine.Team {
 			if p.Fainted {
@@ -129,9 +92,6 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 				fmt.Printf("      %d %-16s %-9s %s%s\n", j+1, mv.Name, mv.Type, power, note)
 			}
 		}
-		// Ranges from the board above, not from constants: "<move 1-6>"
-		// was advertised against every team regardless of how many
-		// moves a Pokemon actually has.
 		fmt.Printf("\nyour move: pokedex-cli attack %s <your 1-%d> <move 1-%d> <their 1-%d>\n",
 			b.ID, len(mine.Team), len(mine.Team[0].Moves), len(theirs.Team))
 	default:
@@ -139,11 +99,6 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 	}
 }
 
-// printSpectated shows a battle the viewer is not in.
-//
-// Neither side is "you", so both are named. Reachable from `battle <id>`
-// and `watch <id>`, which take any id - the flow the CLI itself suggests
-// when it prints "tell your opponent: pokedex-cli join <id>".
 func printSpectated(b *api.Battle) {
 	fmt.Printf("battle %s (watching)\n", b.ID)
 	for _, s := range b.Sides {
@@ -171,10 +126,6 @@ func printSide(label string, s api.Side) {
 		fmt.Printf("  %d %-22s %s %3d/%-3d %s\n",
 			i+1, name, hpBar(p.Hp, p.MaxHp), p.Hp, p.MaxHp, strings.Join(p.Types, "/"))
 
-		// Stat changes and conditions on their own line, indented under
-		// the Pokemon they belong to. Only when there is something to
-		// say - a battle where nothing has been buffed prints nothing
-		// extra.
 		var notes []string
 		if st := battletext.StageLabel(p); st != "" {
 			notes = append(notes, st)
@@ -186,8 +137,6 @@ func printSide(label string, s api.Side) {
 	}
 }
 
-// hpBar is plain ASCII: this prints into pipes and logs as often as a
-// terminal, and a block-drawing bar there is noise.
 func hpBar(hp, max int) string {
 	const width = 12
 	if max <= 0 {
@@ -198,8 +147,6 @@ func hpBar(hp, max int) string {
 		filled = 0
 	}
 	if hp > 0 && filled == 0 {
-		// A Pokemon that is alive should never show an empty bar; that
-		// reads as fainted.
 		filled = 1
 	}
 	return "[" + strings.Repeat("#", filled) + strings.Repeat(".", width-filled) + "]"
@@ -213,14 +160,6 @@ func teamLine(s api.Side) string {
 	return strings.Join(names, ", ")
 }
 
-// identityHint turns an identity error into the command that fixes it,
-// rather than making someone read help to find out.
-//
-// A stale token also gets DELETED, not just explained. Trainers live in
-// the server's memory, so every deploy invalidates every stored token;
-// keeping one means the same failure on every command with nothing
-// saying the file is the problem. Removing it makes the next run take
-// the ordinary unregistered path.
 func identityHint(err error) error {
 	switch {
 	case errors.Is(err, battleclient.ErrNoIdentity):

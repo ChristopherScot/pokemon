@@ -1,9 +1,5 @@
 package main
 
-// A TUI looks untestable and is not: Update is a pure function from
-// (state, message) to state, so the whole interface can be driven
-// without a terminal or a running API.
-
 import (
 	"errors"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
@@ -36,16 +32,12 @@ func loaded(t *testing.T) model {
 	return m.(model)
 }
 
-// The first frame draws before the API answers. Without this the user
-// stares at a blank terminal and cannot tell it from a hang.
 func TestLoadingStateRendersBeforeTheAPIAnswers(t *testing.T) {
 	if content := testModel(t).View().Content; !strings.Contains(content, "loading") {
 		t.Errorf("no loading state on the first frame:\n%s", content)
 	}
 }
 
-// An API that is down must not blank the interface: it says what
-// happened and stays usable.
 func TestAPIErrorIsShownRatherThanFatal(t *testing.T) {
 	m, _ := testModel(t).Update(errMsg{errors.New("connection refused")})
 
@@ -58,8 +50,6 @@ func TestAPIErrorIsShownRatherThanFatal(t *testing.T) {
 	}
 }
 
-// The detail pane shows the highlighted Pokemon, with the upstream
-// Pokedex's decimetres and hectograms converted to units people use.
 func TestDetailPaneShowsTheSelection(t *testing.T) {
 	content := loaded(t).View().Content
 
@@ -70,8 +60,6 @@ func TestDetailPaneShowsTheSelection(t *testing.T) {
 	}
 }
 
-// Filtering searches types as well as names, so "fire" finds charmander
-// even though its name does not contain it.
 func TestFilterMatchesOnType(t *testing.T) {
 	m := loaded(t)
 
@@ -86,8 +74,6 @@ func TestFilterMatchesOnType(t *testing.T) {
 	}
 }
 
-// q quits - but not while the filter is open, or a name containing "q"
-// could not be typed.
 func TestQuitKey(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -122,12 +108,6 @@ func TestQuitKey(t *testing.T) {
 	}
 }
 
-// The list must render within the pane it was given, or it pushes the
-// detail pane sideways and the two overlap.
-//
-// This is what SetSize on WindowSizeMsg buys: sized correctly the list
-// truncates its own rows, and the widest line it draws is within
-// listWidth without anything clamping it afterwards.
 func TestListRendersWithinItsPane(t *testing.T) {
 	m := loaded(t)
 	u, _ := m.Update(tea.WindowSizeMsg{Width: 96, Height: 28})
@@ -140,8 +120,6 @@ func TestListRendersWithinItsPane(t *testing.T) {
 	}
 }
 
-// Both panes together fill the window exactly, so nothing wraps onto the
-// next row and shifts everything below it.
 func TestPanesFillTheWindowWidth(t *testing.T) {
 	m := loaded(t)
 	u, _ := m.Update(tea.WindowSizeMsg{Width: 96, Height: 28})
@@ -153,12 +131,6 @@ func TestPanesFillTheWindowWidth(t *testing.T) {
 	}
 }
 
-// A player who never registered is not "no longer registered".
-//
-// statusFor called battletext.IdentityAdvice purely as a boolean and
-// then hardcoded the STALE-token wording for both cases, so someone who
-// had never registered was told their account had expired. The shared
-// function distinguishes them; the call site discarded that.
 func TestStatusForTellsTheTwoIdentityFailuresApart(t *testing.T) {
 	never := statusFor(battleclient.ErrNoIdentity)
 	stale := statusFor(battleclient.ErrStaleIdentity)

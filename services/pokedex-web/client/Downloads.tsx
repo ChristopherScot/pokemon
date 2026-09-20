@@ -1,17 +1,7 @@
-// Binaries for the machine you are on.
-//
-// Hidden entirely unless there is something to offer: no platform
-// match, no releases, GitHub rate-limited or offline - all render
-// nothing rather than an error nobody can act on. A footer that says
-// "could not load downloads" is worse than no footer.
 import { useEffect, useState } from 'react'
 
 import { detectPlatform, type Platform } from './platform.ts'
 
-// Not /latest. The tools are released independently - the TUI can be on
-// v0.1.1 and the CLI on v0.1.2 - and /latest returns whichever released
-// most recently, hiding the other. Walking the list newest-first finds
-// the current release of each.
 const RELEASES =
   'https://api.github.com/repos/ChristopherScot/pokemon/releases?per_page=30'
 
@@ -22,9 +12,6 @@ const TOOLS: Tool[] = [
     prefix: 'pokedex-tui',
     name: 'Pokedex TUI',
     blurb: 'Browse and battle in a full-screen terminal app',
-    // Inline SVG rather than an icon font or an image: no extra
-    // request, no flash of a missing glyph, and it inherits the text
-    // colour. A terminal window.
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -56,7 +43,6 @@ type Release = {
 
 type Link = { tool: Tool; url: string; tag: string }
 
-/** The newest non-draft release carrying each tool's asset. */
 export function pickLinks(releases: Release[], plat: Platform): Link[] {
   const want = `_${plat.os}_${plat.arch}.tar.gz`
   const links: Link[] = []

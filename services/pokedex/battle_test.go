@@ -1,10 +1,5 @@
 package main
 
-// The engine decides every rule, so these tests are where battle
-// correctness is established. They drive the engine directly rather than
-// through HTTP: the handlers are thin, and a rule is easier to pin down
-// without a transport in the way.
-
 import (
 	"context"
 	"errors"
@@ -22,13 +17,9 @@ func testService(t *testing.T) service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Fixed seed: a damage roll that varies run to run makes a failing
-	// test impossible to reproduce.
 	return service{dex: dex, battles: newMemStore(1), rng: rngFor(1)}
 }
 
-// activeBattle sets up two trainers mid-fight, which is the starting
-// point for most of what follows.
 func activeBattle(t *testing.T, s service) (*battle, string, string) {
 	t.Helper()
 	a, err := s.battles.registerTrainer(context.Background(), "ash")
@@ -85,14 +76,6 @@ func TestTypeMultipliers(t *testing.T) {
 	}
 }
 
-// The Generation III+ HP formula, at minimum IVs and EVs:
-//
-//	HP = floor((2*Base + IV + floor(EV/4)) * Level / 100) + Level + 10
-//
-// At level 50 with IV=EV=0 this reduces to base + 60. Pinned by hand
-// because an off-by-one in the floor, or a level constant that drifts,
-// would change every battle in the game without breaking anything
-// visibly.
 func TestMaxHPFollowsTheRealFormula(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -112,9 +95,6 @@ func TestMaxHPFollowsTheRealFormula(t *testing.T) {
 	}
 }
 
-// The multiply has to happen before the divide. Dividing first loses
-// about 43% and no single-Pokemon expectation would catch it: base 45
-// gives 105 the right way round and 60 the wrong way.
 func TestMaxHPDoesNotDivideBeforeMultiplying(t *testing.T) {
 	const base, level = 45, 50
 	got := maxHP(base, 0, 0, level)
@@ -127,9 +107,6 @@ func TestMaxHPDoesNotDivideBeforeMultiplying(t *testing.T) {
 	}
 }
 
-// Base HP is data, not a function of the fields that look related.
-// Weight correlates with it at 0.33 and inverts for the cases players
-// notice, so a heuristic would make Onix bulkier than Jigglypuff.
 func TestBulkFollowsBaseStatsNotWeight(t *testing.T) {
 	s := testService(t)
 	onix, ok := s.dex.get("onix")
@@ -153,9 +130,6 @@ func TestBulkFollowsBaseStatsNotWeight(t *testing.T) {
 	}
 }
 
-// Every Pokemon the dataset ships must carry a base stat. A missing one
-// decodes to zero, which loadPokedex refuses - this makes the data side
-// of that contract explicit.
 func TestEveryPokemonHasABaseStat(t *testing.T) {
 	s := testService(t)
 	for _, mon := range s.dex.list("", 0) {
@@ -165,8 +139,6 @@ func TestEveryPokemonHasABaseStat(t *testing.T) {
 	}
 }
 
-// A move that connects always does something. Rounding to zero reads as
-// a bug to the player.
 func TestDamageNeverRoundsToZeroWhenItConnects(t *testing.T) {
 	s := testService(t)
 	weak, _ := s.dex.get("pidgey")
@@ -185,8 +157,6 @@ func TestDamageNeverRoundsToZeroWhenItConnects(t *testing.T) {
 	}
 }
 
-// An immune matchup deals nothing, and the narration says so rather than
-// reporting a hit for zero.
 func TestImmuneMatchupDealsNothing(t *testing.T) {
 	s := testService(t)
 	pikachu, _ := s.dex.get("pikachu")
@@ -227,8 +197,6 @@ func TestTurnsAlternate(t *testing.T) {
 	}
 }
 
-// Every illegal index is an error, not a silent no-op: a client bug
-// should be visible rather than looking like lag.
 func TestIllegalMovesAreRejected(t *testing.T) {
 	s := testService(t)
 	b, ash, _ := activeBattle(t, s)
@@ -250,8 +218,6 @@ func TestIllegalMovesAreRejected(t *testing.T) {
 	}
 }
 
-// A fainted Pokemon cannot attack and cannot be attacked. Both would
-// otherwise let a player waste turns or pile damage onto a corpse.
 func TestFaintedPokemonAreOutOfPlay(t *testing.T) {
 	s := testService(t)
 	b, ash, gary := activeBattle(t, s)
@@ -271,8 +237,6 @@ func TestFaintedPokemonAreOutOfPlay(t *testing.T) {
 	}
 }
 
-// Knocking out all three ends the battle, names a winner, and stops
-// accepting turns.
 func TestBattleEndsWhenATeamIsWiped(t *testing.T) {
 	s := testService(t)
 	b, ash, _ := activeBattle(t, s)
@@ -301,8 +265,6 @@ func TestBattleEndsWhenATeamIsWiped(t *testing.T) {
 	}
 }
 
-// version increases on every change, because that is what clients poll
-// on. If it stalls, a client renders stale state forever.
 func TestVersionAdvancesOnEveryChange(t *testing.T) {
 	s := testService(t)
 	b, ash, gary := activeBattle(t, s)
@@ -319,8 +281,6 @@ func TestVersionAdvancesOnEveryChange(t *testing.T) {
 	}
 }
 
-// A rejected turn must not advance anything: a client that retries after
-// a 409 would otherwise skip a turn it never took.
 func TestRejectedTurnChangesNothing(t *testing.T) {
 	s := testService(t)
 	b, _, gary := activeBattle(t, s)
@@ -334,8 +294,6 @@ func TestRejectedTurnChangesNothing(t *testing.T) {
 	}
 }
 
-// Names are first-come. Without this two players share an identity and
-// the lobby is meaningless.
 func TestTrainerNamesAreUnique(t *testing.T) {
 	s := testService(t)
 	if _, err := s.battles.registerTrainer(context.Background(), "ash"); err != nil {
@@ -346,8 +304,6 @@ func TestTrainerNamesAreUnique(t *testing.T) {
 	}
 }
 
-// The wire type must not carry tokens. Leaking one lets anyone move that
-// trainer's Pokemon.
 func TestAPIViewNeverLeaksTokens(t *testing.T) {
 	s := testService(t)
 	b, ash, gary := activeBattle(t, s)
@@ -366,11 +322,6 @@ func TestAPIViewNeverLeaksTokens(t *testing.T) {
 	}
 }
 
-// A hit that connects never rounds to zero, and an immune matchup never
-// rounds up to one. Damage is computed in float and truncated, which is
-// where off-by-one HP bugs hide: a weak move against a resistant target
-// can land under 1.0 and truncate away, and the player sees an attack
-// that did nothing with no explanation.
 func TestDamageRoundingAtTheEdges(t *testing.T) {
 	s := testService(t)
 	weakest, _ := s.dex.get("caterpie")
@@ -378,8 +329,6 @@ func TestDamageRoundingAtTheEdges(t *testing.T) {
 	att := &combatant{mon: weakest, hp: 100, maxHP: 100}
 	def := &combatant{mon: tough, hp: 200, maxHP: 200}
 
-	// Every damaging move, every seed: anything that connects does at
-	// least 1.
 	for _, mv := range weakest.Moves {
 		if mv.Power == 0 {
 			continue
@@ -396,9 +345,6 @@ func TestDamageRoundingAtTheEdges(t *testing.T) {
 	}
 }
 
-// A random team is three DISTINCT Pokemon. Three of the same would show
-// one name three times on the board, with a target index the only way to
-// tell them apart.
 func TestRandomTeamIsThreeDistinctPokemon(t *testing.T) {
 	s := testService(t)
 	for seed := int64(1); seed <= 25; seed++ {
@@ -419,8 +365,6 @@ func TestRandomTeamIsThreeDistinctPokemon(t *testing.T) {
 	}
 }
 
-// Omitting a team is how "just start a battle" works in every client, so
-// it has to produce a playable side rather than an empty one.
 func TestCreateWithNoTeamPicksOne(t *testing.T) {
 	s := testService(t)
 	tok, err := s.battles.registerTrainer(context.Background(), "ash")
@@ -447,17 +391,7 @@ func TestCreateWithNoTeamPicksOne(t *testing.T) {
 	}
 }
 
-// Trainer tokens must not be reproducible from the process start time.
-//
-// They came from the store's math/rand, seeded with
-// time.Now().UnixNano() at startup, so two stores seeded identically
-// produced the same token stream in the same order - the first token,
-// the second, all of them. On the LAN the worst case was moving
-// someone else's Pokemon. On a public address it is worth the fifteen
-// lines to do properly.
 func TestTokensDoNotFollowTheSeed(t *testing.T) {
-	// Two stores with an identical seed. Anything derived from it
-	// matches; a token must not.
 	a := newMemStore(42)
 	b := newMemStore(42)
 
@@ -490,20 +424,6 @@ func TestTokensDoNotFollowTheSeed(t *testing.T) {
 	}
 }
 
-// A team that names a Pokemon the dex does not have is the caller's
-// error, and it is reported as 400 before any transaction opens.
-//
-// This path had no test at all. It is also the reason the response
-// switch used to be order-dependent: the team failure was carried out
-// of update()'s closure in a captured variable, so `badTeam != nil` had
-// to be checked after errNoBattle and before the conflict cases. The
-// team is now built before update() is called, so the switch tests only
-// the returned error and this case cannot be reordered into the wrong
-// answer.
-
-// The 400 path itself still works: a team naming a Pokemon the dex does
-// not have is the caller's error, and it is reported before any
-// transaction opens.
 func TestJoiningWithAnUnknownPokemonIsABadRequest(t *testing.T) {
 	s := testService(t)
 	ctx := context.Background()
@@ -537,19 +457,6 @@ func TestJoiningWithAnUnknownPokemonIsABadRequest(t *testing.T) {
 	}
 }
 
-// The client's CheckTurn must refuse exactly what the server refuses,
-// and for the same reason first.
-//
-// battleclient.CheckTurn exists so a client can reject an illegal turn
-// without a round trip. That is only worth having if it agrees with the
-// authority: a client that refuses a LEGAL turn breaks the game, and
-// one that reports a different first reason teaches a rule that is not
-// the rule. This drives the real takeTurn and the real CheckTurn over
-// the same scenarios and requires they agree.
-//
-// It lives here, in the server package, because this is where the
-// authority is. If someone reorders takeTurn's checks, this fails -
-// which is the point.
 func TestClientTurnCheckAgreesWithTheServer(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -569,17 +476,12 @@ func TestClientTurnCheckAgreesWithTheServer(t *testing.T) {
 			func(b *battle) { b.sides[0].team[0].disabled = 1 }, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// A service per case: activeBattle registers fixed trainer
-			// names, so a shared one collides on the second subtest.
 			s := testService(t)
 			b, tokenA, _ := activeBattle(t, s)
 			if tc.mut != nil {
 				tc.mut(b)
 			}
 
-			// Snapshot BEFORE the server runs: a successful takeTurn
-			// flips b.turn to the opponent, so asking the client
-			// afterwards asks about a different battle.
 			before := b.toAPI()
 			c := &battleclient.Client{Name: b.sides[0].trainer}
 			clientErr := c.CheckTurn(before, tc.turn)

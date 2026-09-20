@@ -2,14 +2,6 @@ package main
 
 import "sort"
 
-// The type effectiveness chart, and the damage it implies.
-//
-// Kept here rather than in each client: the server decides damage, so a
-// client carrying its own copy can only ever agree or be wrong. /types
-// serves this to whoever wants to show a matchup hint.
-
-// effectiveness maps attacking type -> defending type -> multiplier.
-// Anything absent is 1. Values follow the modern Pokemon chart.
 var effectiveness = map[string]map[string]float64{
 	"normal":   {"rock": 0.5, "ghost": 0, "steel": 0.5},
 	"fire":     {"fire": 0.5, "water": 0.5, "grass": 2, "ice": 2, "bug": 2, "rock": 0.5, "dragon": 0.5, "steel": 2},
@@ -31,8 +23,6 @@ var effectiveness = map[string]map[string]float64{
 	"fairy":    {"fire": 0.5, "fighting": 2, "poison": 0.5, "dragon": 2, "dark": 2, "steel": 0.5},
 }
 
-// multiplier is how much damage moveType does to a Pokemon with these
-// types. Dual types multiply, so water/flying takes 4x from electric.
 func multiplier(moveType string, defenderTypes []string) float64 {
 	row, ok := effectiveness[moveType]
 	if !ok {
@@ -47,8 +37,6 @@ func multiplier(moveType string, defenderTypes []string) float64 {
 	return m
 }
 
-// describeEffect is the wording every client shows, so a battle reads
-// the same in a browser, a terminal and a TUI.
 func describeEffect(m float64) string {
 	switch {
 	case m == 0:
@@ -66,8 +54,6 @@ func describeEffect(m float64) string {
 	}
 }
 
-// matchups splits one attacking type's row into the three buckets a
-// client wants to display. Sorted so the output is stable across calls.
 func matchups(attacking string) (strong, weak, none []string) {
 	for def, m := range effectiveness[attacking] {
 		switch {

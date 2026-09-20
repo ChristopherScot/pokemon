@@ -1,20 +1,3 @@
-// The server half: routes, the HTML shell, and the CSS.
-//
-// There IS a build step. Vite bundles this to dist/server.js and the
-// browser code to dist/assets/*.js, and the image copies both. That
-// changed when the pages became React - Node strips types but does not
-// compile JSX, so `node server.ts` cannot run a .tsx file at all.
-//
-// Locally `npm start` still runs the sources through Node's type
-// stripping; `npm run start:dist` runs what actually ships.
-//
-// Stripping is not checking. `npm run typecheck` is what actually
-// verifies these types, and CI runs it before the tests.
-//
-// Few annotations below, deliberately: Fastify ships its own types and
-// infers request, reply and hook parameters from the route it is
-// attached to. Spelling them out adds nothing a reader does not get from
-// hovering, and gives the next person something to keep in sync.
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -27,15 +10,6 @@ import { collectDefaultMetrics, Counter, Histogram, register } from 'prom-client
 
 const port: number = Number(process.env.PORT || '3000')
 
-// Matches what go-service's slog emits, so one Loki query works against
-// either runtime: an ISO-8601 `time`, an uppercase `level` name rather
-// than pino's numeric default, and `msg`.
-//
-// The bindings put service, team and version on every line. Alloy adds
-// pod and namespace labels in Loki, but a line copied into a ticket, an
-// alert or a terminal arrives without them - and "shutting down" from an
-// unnamed service is not worth much. VERSION is stamped by CI; it is
-// "dev" for a local run.
 const app = Fastify({
   logger: {
     level: process.env.LOG_LEVEL || 'info',
@@ -48,9 +22,6 @@ const app = Fastify({
     formatters: {
       level: (label: string) => ({ level: label.toUpperCase() }),
     },
-    // Fastify's own listening lines are silenced by returning an empty
-    // message from listenTextResolver; drop those here so they do not
-    // appear as blank entries.
     hooks: {
       logMethod(this: unknown, args: unknown[], method: (...a: unknown[]) => void) {
         if (args[0] === '') return
@@ -58,15 +29,9 @@ const app = Fastify({
       },
     },
   },
-  // Fastify's own per-request lines duplicate the one the onResponse hook
-  // below emits, and they log the raw url. The top-level
-  // disableRequestLogging is deprecated in Fastify 5 and goes away in 6,
-  // so this goes through a LogController instance instead.
   logController: new LogController({ disableRequestLogging: true }),
 })
 
-// Default process and heap metrics, the Node equivalent of what the Go
-// client registers for free.
 collectDefaultMetrics()
 
 const requests = new Counter({
@@ -81,19 +46,9 @@ const latency = new Histogram({
   labelNames: ['route', 'method'],
 })
 
-// Log and measure every request.
-//
-// The route label is the matched ROUTE PATTERN, never the raw url: a path
-// can carry a token or an id, and this reaches both the log aggregator
-// and a metric label. A label per distinct URL would also give Prometheus
-// unbounded cardinality. Unrouted requests report "other" rather than
-// their path, for the same reason.
 app.addHook('onResponse', (request, reply, done) => {
   const route = request.routeOptions?.url ?? 'other'
 
-  // Alloy scrapes /metrics every 15s and the kubelet probes /healthz as
-  // often; logging those buries real traffic and inflates the counters
-  // with self-observation.
   if (route !== '/metrics' && route !== '/healthz') {
     const seconds = reply.elapsedTime / 1000
     requests.inc({ route, method: request.method, status: reply.statusCode })
@@ -102,25 +57,12 @@ app.addHook('onResponse', (request, reply, done) => {
       method: request.method,
       route,
       status: reply.statusCode,
-      // Not rounded: a handler that only assembles a string finishes
-      // well under 1ms, so Math.round logged 0 on every line - a field
-      // that is present and carries nothing.
       duration_ms: reply.elapsedTime,
     }, 'request')
   }
   done()
 })
 
-// The browser bundles.
-//
-// Filenames are content-hashed, so the URL changes whenever the code
-// does and a stale bundle cannot be served from cache. That is what
-// lets these be cached hard - immutable, a year - while a deploy still
-// takes effect immediately.
-//
-// Served by hand rather than with @fastify/static: it is one route
-// over one directory of generated files, and the dependency would be
-// larger than the code it replaces.
 app.get<{ Params: { '*': string } }>('/assets/*', async (request, reply) => {
   const rel = request.params['*']
   // No traversal: the only legal shape here is one generated filename.
@@ -142,24 +84,14 @@ app.get<{ Params: { '*': string } }>('/assets/*', async (request, reply) => {
 
 app.get('/healthz', async (_request, reply) => reply.type('text/plain').send('ok\n'))
 
-// The deployment annotates this pod for scraping here. Without this route
-// Alloy would scrape the 404 handler and fail to parse the body - which
-// reads as a data problem rather than a missing endpoint.
 app.get('/metrics', async (_request, reply) =>
   reply.type(register.contentType).send(await register.metrics()))
 
 // The card UI lives in pokedex.ts; this file stays the template's.
 registerPokedex(app)
 
-// Battle mode. Separate module because it is the only part of this
-// service that is interactive, and keeping it apart means the card grid
-// stays a pure server render.
 registerBattle(app)
 
-// Without this, SIGTERM kills in-flight requests on every deploy.
-// Kubernetes sends SIGTERM, waits terminationGracePeriodSeconds, then
-// SIGKILLs; draining inside that window is what makes a rollout invisible
-// to callers.
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, async () => {
     app.log.info('shutting down')
@@ -168,18 +100,10 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   })
 }
 
-// Exported so a test can use app.inject() against the real routes and
-// hooks without binding a port.
 export { app }
 
 async function start(): Promise<void> {
   try {
-    // Fastify logs a listening line itself, unconditionally and once per
-    // bound address - `0.0.0.0` expands to every interface, so that is
-    // two lines in a container and more on a laptop, each carrying a LAN
-    // or VPN address. There is no option to turn it off, so the resolver
-    // returns the empty string and the logger drops empty messages,
-    // leaving the one line below.
     await app.listen({ port, host: '0.0.0.0', listenTextResolver: () => '' })
     app.log.info({ addr: ':' + port }, 'started')
   } catch (err) {
@@ -188,15 +112,6 @@ async function start(): Promise<void> {
   }
 }
 
-// Importing this file from a test must not start a server. argv[1] is
-// the entrypoint Node was given, so this is false under the test runner.
-//
-// Both extensions, because there are two of them: `node server.ts`
-// locally and `node server.js` in the image, where Vite has bundled
-// this file. Checking only the source extension makes the bundle start
-// nothing, exit 0, and log absolutely nothing - which looks like a
-// container that ran and stopped rather than a guard that did not
-// match.
 const entry = process.argv[1] ?? ''
 if (entry.endsWith('server.ts') || entry.endsWith('server.js')) {
   await start()

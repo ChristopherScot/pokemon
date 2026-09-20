@@ -9,12 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// completionInstallCmd appends the completion hook to a shell rc file.
-// Cobra ships a `completion` command that PRINTS a script, which still
-// leaves the user to work out where it goes; this does the last step.
-//
-// Idempotent: it looks for the line before appending, so running it twice
-// does not duplicate it.
 func completionInstallCmd(binary string) *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
@@ -26,8 +20,6 @@ func completionInstallCmd(binary string) *cobra.Command {
 			return installCompletion(binary, args[0], file)
 		},
 	}
-	// Plenty of setups do not use ~/.zshrc - a sourced fragment,
-	// ~/.zprofile, or $ZDOTDIR elsewhere - so let the caller say where.
 	cmd.Flags().StringVar(&file, "file", "", "append to this file instead of the shell's default rc")
 	return cmd
 }

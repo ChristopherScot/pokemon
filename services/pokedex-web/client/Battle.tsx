@@ -1,10 +1,3 @@
-// The battle screen.
-//
-// The rules it enforces are shared, not reinvented: checkTurn in
-// shared.ts mirrors the server's takeTurn and the Go clients'
-// battleclient.CheckTurn, in the same ORDER - a client that reports a
-// different first reason than the authority teaches a rule that is not
-// the rule.
 import { useState } from 'react'
 
 import type { components } from '@christopherscot/pokedex-client'
@@ -18,8 +11,6 @@ type Side = components['schemas']['Side']
 
 function sideFor(b: Battle, me: string): { mine: Side; theirs: Side } | null {
   const i = b.sides.findIndex((s) => s.trainer === me)
-  // -1 here is the bug that left the board on "loading…" forever:
-  // 1 - (-1) is 2, so BOTH sides came back undefined and render threw.
   if (i === -1 || b.sides.length < 2) return null
   return { mine: b.sides[i], theirs: b.sides[1 - i] }
 }
@@ -27,13 +18,8 @@ function sideFor(b: Battle, me: string): { mine: Side; theirs: Side } | null {
 export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
   const [picked, setPicked] = useState({ attacker: 0, move: 0, target: 0 })
   const [sending, setSending] = useState(false)
-  // Keyed to the version it belongs to. It was a bare string cleared
-  // nowhere, so a 409 stayed under the live log for the rest of the
-  // battle - "not your turn" still showing three turns later.
   const [rejected, setRejected] = useState<{ version: number; text: string } | null>(null)
 
-  // Before the early return: hooks cannot be called conditionally, and
-  // a spectator's board animates too.
   const mineIdx = b.sides.findIndex((s) => s.trainer === me)
   const floats = useFloats(b, mineIdx)
 
@@ -55,8 +41,6 @@ export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
         body: JSON.stringify(picked),
       })
       if (!res.ok) {
-        // The state moved on between the check and the send. The server
-        // is the authority and this is what it said.
         const body = await res.json().catch(() => ({ message: 'that move was rejected' }))
         setRejected({ version: b.version, text: String(body.message ?? 'that move was rejected') })
       }
@@ -104,9 +88,6 @@ export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
                 key={m.name}
                 type="button"
                 data-move={i}
-                // The spec says selecting a disabled move is a 409, so
-                // a client should show it as unavailable rather than
-                // letting the turn fail.
                 disabled={attacker.disabledMove === i}
                 title={attacker.disabledMove === i ? 'disabled this turn' : undefined}
                 className={picked.move === i ? 'sel' : undefined}
@@ -144,9 +125,6 @@ function Banner({ battle: b, me, myTurn }: { battle: Battle; me: string; myTurn:
     text = myTurn ? 'your turn' : `waiting on ${b.turn}…`
     cls = myTurn ? 'mine' : 'theirs'
   }
-  // role=status so a screen-reader user is TOLD their turn began. The
-  // banner used to be rebuilt inside the board's innerHTML, and a live
-  // region that is destroyed and recreated never announces.
   return <div className={`banner ${cls}`} role="status" aria-live="polite" aria-atomic="true">{text}</div>
 }
 

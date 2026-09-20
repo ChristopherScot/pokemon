@@ -1,10 +1,3 @@
-// The battle lobby: who is waiting, and how to join them.
-//
-// The list polls, because a battle opened by somebody else after your
-// page loaded used to never appear - the list was rendered once and
-// frozen at load, so there was no button to join it. Paused while the
-// tab is hidden: a lobby left open in a background tab is the shape
-// that produced 46,000 wasted requests.
 import { useEffect, useRef, useState } from 'react'
 
 import type { components } from '@christopherscot/pokedex-client'
@@ -101,9 +94,6 @@ function OpenRow() {
 
   async function open() {
     setBusy(true)
-    // No team in the body: this button is explicitly "open with a
-    // random team". Choosing one happens in the pokedex, the only
-    // screen that can show you what you are choosing between.
     const res = await fetch('/battle/open', {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...V },
@@ -111,9 +101,6 @@ function OpenRow() {
     })
     const body = await res.json().catch(() => ({}))
     if (res.ok) { location.href = `/battle/${body.id}`; return }
-    // A 401 means the cookie's token is one the API no longer knows -
-    // the server has already cleared it, so a reload brings back the
-    // register form. Alerting and stopping was a dead end.
     if (res.status === 401) { location.reload(); return }
     setBusy(false)
   }

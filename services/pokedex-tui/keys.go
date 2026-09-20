@@ -1,10 +1,5 @@
 package main
 
-// Per-screen key handling. One function per screen, dispatched from
-// handleKey, so a binding that means one thing while browsing and
-// another mid-battle is written once in each place rather than guarded
-// by a chain of conditions.
-
 import (
 	"context"
 	"time"
@@ -15,8 +10,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
-// shortCtx bounds a request. Battle actions are interactive: one that
-// has not answered in a few seconds should say so rather than hang.
 func shortCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 10*time.Second)
 }
@@ -27,10 +20,6 @@ func (m model) browseKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "enter", "\r":
-		// Toggle the highlighted Pokemon on the team, here on the
-		// browse screen rather than behind a separate picker. This is
-		// the list you are already looking at, and hiding selection
-		// three screens away made enter look broken.
 		it, ok := m.list.SelectedItem().(item)
 		if !ok {
 			return m, nil
@@ -55,8 +44,6 @@ func (m model) browseKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "b":
-		// Battle mode needs a trainer; say so rather than opening a
-		// lobby that cannot do anything.
 		if m.bc == nil {
 			m.status = "no trainer registered — run `pokedex-cli register <name>` first"
 			return m, nil
@@ -66,8 +53,6 @@ func (m model) browseKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, fetchLobby(m.bc)
 
 	case "ctrl+r":
-		// Open a battle with whatever is picked. Anything left out is
-		// chosen by the server, so this works with an empty team too.
 		if m.bc == nil {
 			m.status = "no trainer registered — run `pokedex-cli register <name>` first"
 			return m, nil
@@ -77,9 +62,6 @@ func (m model) browseKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.startBattle()
 
 	case "g":
-		// Back to the battle in progress. Browsing the pokedex
-		// mid-battle is normal - checking what a move does, or what
-		// the opponent is weak to - and esc was a one-way door.
 		if m.lastBattle == "" {
 			m.status = "no battle to go back to"
 			return m, nil
@@ -103,8 +85,6 @@ func (m model) lobbyKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		return m, fetchLobby(m.bc)
 	case "g":
-		// Back into the battle you walked out of. Nothing else can get
-		// you there: the list below holds only battles still waiting.
 		if m.lastBattle == "" {
 			m.status = "no battle to go back to"
 			return m, nil
@@ -141,8 +121,6 @@ func (m model) lobbyKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// teamKey picks three Pokemon from the browse list, reusing the list the
-// player already knows rather than inventing a second picker.
 func (m model) teamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
@@ -164,12 +142,6 @@ func (m model) teamKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "tab":
-		// Start with fewer than three; the server fills the rest.
-		//
-		// Without this the picker could only start on a full team, so
-		// the empty slots' die was decoration - the API has taken a
-		// partial team since 0.4.0 and the web has offered it since,
-		// but a TUI player had to name all three or go back.
 		return m, m.startBattle()
 	}
 	// Everything else drives the list, so filtering works while picking.
@@ -188,8 +160,6 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "q":
 		return m, tea.Quit
 	case "esc":
-		// Leaving the screen does not forfeit: the battle stays open and
-		// can be rejoined from the lobby.
 		m.screen = screenLobby
 		m.battle = nil
 		return m, fetchLobby(m.bc)
@@ -234,11 +204,6 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			bs.pickMove++
 		}
 	case "enter", "\r":
-		// The cursor skips fainted Pokemon, but nothing stopped it
-		// landing on a DISABLED move: battle_view struck the label
-		// through and enter sent it anyway, so the screen said the move
-		// was unusable and then used it. CheckTurn is the same rule the
-		// label is drawn from, applied at the point of action.
 		turn := battleclient.Turn{
 			Attacker: bs.pickAttacker,
 			Move:     bs.pickMove,
@@ -253,8 +218,6 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// nextAlive and prevAlive skip fainted Pokemon, so the cursor never
-// lands somewhere that cannot act.
 func nextAlive(team []api.BattlePokemon, i int) int {
 	for step := 1; step <= len(team); step++ {
 		j := (i + step) % len(team)
