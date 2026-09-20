@@ -72,6 +72,28 @@ jobs:
       - name: Build the production bundle
         run: npm run build
 
+      # The image copies dist/server.js and NOTHING else, so the smoke
+      # test has to run it the way the image does: from a directory
+      # holding only that file. Running it in place passes even when the
+      # server reads a sibling the image will not have - which is
+      # exactly how a change that 500s on every page shipped green.
+      - name: Prove the bundle is self-contained
+        run: |
+          mkdir -p /tmp/imagelike
+          cp services/pokedex-web/dist/server.js /tmp/imagelike/
+          cd /tmp/imagelike
+          PORT=8099 POKEDEX_URL=http://127.0.0.1:1 node server.js &
+          pid=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8099/healthz >/dev/null && break
+            sleep 1
+          done
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -b 'trainer=%7B%22name%22%3A%22ash%22%2C%22token%22%3A%22t%22%7D' \
+            http://127.0.0.1:8099/battle/abc123)
+          kill $pid || true
+          test "$code" = "200" || { echo "battle page returned $code from an image-like layout"; exit 1; }
+
       - name: Smoke-test the bundle
         run: |
           PORT=8099 npm run start:dist &

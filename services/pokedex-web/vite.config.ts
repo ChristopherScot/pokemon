@@ -10,9 +10,46 @@
 //
 // The two paths are a real cost - what you run locally is not byte-wise
 // what ships - so CI runs the BUNDLE, not just builds it.
+import { readFileSync } from 'node:fs'
+
 import { defineConfig } from 'vite'
 
+// The browser bundles, read at BUILD time and frozen into the server
+// bundle as string constants.
+//
+// Not read at runtime. The image copies dist/server.js and nothing
+// else - that is the whole "one file, no node_modules" deployment - so
+// a server that read dist/client/*.js on demand started fine, passed
+// CI (which runs from the repo, where those files still exist), and
+// returned 500 for every page in the image. Inlining here is what
+// makes the single-file claim true.
+function inlineClientBundles() {
+  const names = ['battle']
+  const entries = names.map((n) => {
+    const src = readFileSync(`dist/client/${n}.js`, 'utf8')
+    return [n, src] as const
+  })
+  return {
+    name: 'inline-client-bundles',
+    enforce: 'pre' as const,
+    resolveId(id: string) {
+      return id.endsWith('clientbundle.ts') ? '\0clientbundles' : null
+    },
+    load(id: string) {
+      if (id !== '\0clientbundles') return null
+      const map = Object.fromEntries(entries)
+      return `const BUNDLES = ${JSON.stringify(map)}
+export function clientBundle(name) {
+  const src = BUNDLES[name]
+  if (src === undefined) throw new Error('no browser bundle ' + name)
+  return src
+}`
+    },
+  }
+}
+
 export default defineConfig({
+  plugins: [inlineClientBundles()],
   build: {
     ssr: true,
     // Matches the distroless runtime, so Vite does not downlevel syntax
