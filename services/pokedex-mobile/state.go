@@ -11,6 +11,7 @@ package main
 // phrasing that drifts apart.
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
@@ -120,29 +121,7 @@ func moveLabel(m api.Move) string {
 	if m.Power == 0 {
 		return title(m.Name) + "  ·  —"
 	}
-	return title(m.Name) + "  ·  " + itoa(m.Power)
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		b[i] = '-'
-	}
-	return string(b[i:])
+	return title(m.Name) + "  ·  " + strconv.Itoa(m.Power)
 }
 
 // canAttack reports whether a move button should be tappable.
@@ -171,7 +150,16 @@ func turnBanner(b *api.Battle, bc *battleclient.Client) string {
 		return ""
 	}
 	if b.Status == "finished" {
-		return "battle over"
+		// The API has carried a winner all along. Ending a battle with
+		// "battle over" and leaving the player to infer it from the HP
+		// bars was the worst miss in the first version.
+		if w := b.Winner.Value; w != "" {
+			if bc != nil && w == bc.Name {
+				return "You win!"
+			}
+			return title(w) + " wins"
+		}
+		return "Battle over"
 	}
 	if bc != nil && bc.MyTurn(b) {
 		return "your turn"
@@ -224,6 +212,21 @@ type pick struct {
 // whenever the battle state arrives from the server - the previous
 // indices may no longer point at a living Pokemon.
 func (p *pick) reset() { *p = pick{} }
+
+// back undoes the last stage. Without it a mis-tap on the attacker is
+// unrecoverable: the player has to finish a turn they did not want,
+// which on a phone is a thumb away at all times.
+func (p *pick) back() {
+	switch {
+	case p.haveMove:
+		p.haveMove = false
+	case p.haveAttacker:
+		p.haveAttacker = false
+	}
+}
+
+// canGoBack reports whether there is a stage to undo.
+func (p pick) canGoBack() bool { return p.haveAttacker || p.haveMove }
 
 // stage names what the player should tap next. The banner shows this,
 // because on a phone there is no room for three labelled columns.

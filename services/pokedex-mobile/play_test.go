@@ -3,8 +3,8 @@ package main
 // Playthroughs: the real UI, rendered headless, driven by taps.
 
 import (
-	"image/png"
-	"os"
+	"strconv"
+	"strings"
 	"testing"
 
 	"gioui.org/widget"
@@ -23,11 +23,7 @@ func TestRegisterScreenRenders(t *testing.T) {
 	if !notBlank(img) {
 		t.Fatal("the register screen rendered nothing")
 	}
-	if os.Getenv("SHOTS") != "" {
-		f, _ := os.Create("/tmp/shot-register.png")
-		png.Encode(f, img)
-		f.Close()
-	}
+	h.shot("register")
 }
 
 // A battle in progress: the screen a player spends the most time on,
@@ -44,11 +40,7 @@ func TestBattleScreenRenders(t *testing.T) {
 	if !notBlank(img) {
 		t.Fatal("the battle screen rendered nothing")
 	}
-	if os.Getenv("SHOTS") != "" {
-		f, _ := os.Create("/tmp/shot-battle.png")
-		png.Encode(f, img)
-		f.Close()
-	}
+	h.shot("battle")
 }
 
 // A turn, played by tapping: pokemon, then move, then target.
@@ -75,11 +67,17 @@ func TestPlayATurnByTapping(t *testing.T) {
 		t.Fatalf("after picking a pokemon, stage = %q", h.ui.sel.stage())
 	}
 
-	// With two living opponents the selection would wait for a
-	// target; the fixture has one, so tapping a move sends the turn
-	// and clears the selection. Either way the tap must be OBSERVED -
-	// a stage that does not advance is a player stuck on their turn.
+	// The fixture has one living opponent, so tapping a move sends
+	// the turn. Assert WHAT was sent: the previous version checked
+	// only that the selection had cleared, which a send carrying
+	// garbage indices would also satisfy.
 	h.tapOn("choose Thunderbolt  ·  90")
+	// staryu is index 0 and the only one standing; psyduck at index 1
+	// is fainted. defaultTarget must pick the living one.
+	want := pick{attacker: 0, move: 0, target: 0, haveAttacker: true, haveMove: true}
+	if h.ui.lastSent != want {
+		t.Errorf("sent turn = %+v, want %+v", h.ui.lastSent, want)
+	}
 	if h.ui.sel.haveAttacker && !h.ui.sel.haveMove {
 		t.Fatal("tapping a move neither selected it nor sent the turn")
 	}
@@ -120,7 +118,7 @@ func TestBrowseScrollsAndPicks(t *testing.T) {
 	h.ui.screen = screenBrowse
 	for i := 0; i < 40; i++ {
 		h.ui.dex = append(h.ui.dex, api.Pokemon{
-			ID: i + 1, Name: "mon" + itoa(i), Types: []string{"normal"},
+			ID: i + 1, Name: "mon" + strconv.Itoa(i), Types: []string{"normal"},
 		})
 	}
 	h.ui.dexClicks = make([]widget.Clickable, len(h.ui.dex))
@@ -145,67 +143,128 @@ func TestBrowseScrollsAndPicks(t *testing.T) {
 	if teamPosition(h.ui.team, picked) != 1 {
 		t.Errorf("after scrolling, %q is no longer the lead pick", picked)
 	}
-	if os.Getenv("SHOTS") != "" {
-		f, _ := os.Create("/tmp/shot-browse.png")
-		png.Encode(f, h.img)
-		f.Close()
-	}
+	h.shot("browse")
 }
 
-// The lobby and team screens, which are how a battle starts. A screen
-// that renders nothing is a dead end a player cannot get out of.
+// Every screen state, asserted on the controls it must offer.
+//
+// The previous version only checked "not all one colour", which the
+// always-drawn app bar satisfies - so a screen whose body rendered
+// nothing would have passed. Asserting the semantics catches a dead
+// screen and survives a padding change.
 func TestEveryScreenRenders(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		setup func(*harness)
+		setup func(*testing.T, *harness)
+		want  []string
 	}{
-		{"register", func(h *harness) { h.ui.screen = screenRegister }},
-		{"browse", func(h *harness) {
+		{"register", func(t *testing.T, h *harness) {
+			h.ui.screen = screenRegister
+		}, []string{"Register"}},
+
+		{"browse", func(t *testing.T, h *harness) {
 			h.ui.screen = screenBrowse
 			h.ui.dex = []api.Pokemon{{ID: 1, Name: "pikachu", Types: []string{"electric"}}}
 			h.ui.dexClicks = make([]widget.Clickable, 1)
-		}},
-		{"team-empty", func(h *harness) { h.ui.screen = screenTeam }},
-		{"team-ready", func(h *harness) {
+		}, []string{"Pikachu", "Pokedex", "Lobby"}},
+
+		{"team-empty", func(t *testing.T, h *harness) {
+			h.ui.screen = screenTeam
+		}, []string{"Start battle", "Back to Pokedex"}},
+
+		{"team-ready", func(t *testing.T, h *harness) {
 			h.ui.screen = screenTeam
 			h.ui.team = []string{"pikachu", "geodude", "staryu"}
-		}},
-		{"lobby-empty", func(h *harness) { h.ui.screen = screenLobby }},
-		{"lobby-full", func(h *harness) {
+		}, []string{"Start battle"}},
+
+		{"lobby-empty", func(t *testing.T, h *harness) {
+			h.ui.screen = screenLobby
+		}, []string{"Open a new battle", "Refresh"}},
+
+		{"lobby-full", func(t *testing.T, h *harness) {
 			h.ui.screen = screenLobby
 			h.ui.lobby = &api.WaitingList{Count: 1, Waiting: []api.WaitingBattle{
 				{BattleId: "b1", Trainer: "misty", Team: []string{"staryu"}},
 			}}
 			h.ui.lobbyBtns = make([]widget.Clickable, 1)
-		}},
-		{"battle-waiting", func(h *harness) {
+		}, []string{"Misty", "Open a new battle"}},
+
+		// Not our turn: no move buttons, and a way out.
+		{"battle-waiting", func(t *testing.T, h *harness) {
 			h.ui.bc = testClient(t)
 			h.ui.screen = screenBattle
 			b := testBattle("ash", "misty")
-			b.Turn = api.NewOptString("misty") // not our turn
+			b.Turn = api.NewOptString("misty")
 			h.ui.battle = b
-		}},
-		{"battle-finished", func(h *harness) {
+		}, []string{"Leave"}},
+
+		// Finished: only the way out.
+		{"battle-finished", func(t *testing.T, h *harness) {
 			h.ui.bc = testClient(t)
 			h.ui.screen = screenBattle
 			b := testBattle("ash", "misty")
 			b.Status = "finished"
+			b.Winner = api.NewOptString("ash")
 			h.ui.battle = b
-		}},
+		}, []string{"Back to lobby"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t)
 			h.ui.id.Name = "ash"
-			tc.setup(h)
+			tc.setup(t, h)
 			img := h.frame()
 			if !notBlank(img) {
-				t.Fatalf("%s rendered nothing", tc.name)
+				t.Fatalf("%s rendered nothing at all", tc.name)
 			}
-			if os.Getenv("SHOTS") != "" {
-				f, _ := os.Create("/tmp/shot-" + tc.name + ".png")
-				png.Encode(f, img)
-				f.Close()
+			for _, w := range tc.want {
+				if _, ok := h.find(w); !ok {
+					t.Errorf("%s: no %q on screen; visible: %v", tc.name, w, h.visible())
+				}
 			}
+			h.shot(tc.name)
 		})
+	}
+}
+
+// A player on the other trainer's turn must not be offered moves -
+// the server answers one with a 409, so a live button is a tap that
+// can only fail.
+func TestWaitingOffersNoMoves(t *testing.T) {
+	h := newHarness(t)
+	h.ui.id.Name = "ash"
+	h.ui.bc = testClient(t)
+	h.ui.screen = screenBattle
+	b := testBattle("ash", "misty")
+	b.Turn = api.NewOptString("misty")
+	h.ui.battle = b
+	h.frame()
+
+	for _, v := range h.visible() {
+		if strings.HasPrefix(v, "choose ") {
+			t.Errorf("offered %q while waiting on the opponent", v)
+		}
+	}
+}
+
+// A mis-tap must be recoverable. Without Back, a wrong attacker means
+// finishing a turn you did not want.
+func TestBackUndoesAStage(t *testing.T) {
+	h := newHarness(t)
+	h.ui.id.Name = "ash"
+	h.ui.bc = testClient(t)
+	h.ui.screen = screenBattle
+	h.ui.battle = testBattle("ash", "misty")
+	h.frame()
+
+	h.tapOn("choose Pikachu")
+	if !h.ui.sel.haveAttacker {
+		t.Fatal("tapping an attacker did not select it")
+	}
+	h.tapOn("Back")
+	if h.ui.sel.haveAttacker {
+		t.Error("Back did not undo the attacker choice")
+	}
+	if _, ok := h.find("choose Pikachu"); !ok {
+		t.Error("after Back, the attacker options are not offered again")
 	}
 }

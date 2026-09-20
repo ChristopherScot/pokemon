@@ -51,21 +51,24 @@ func rgb(v uint32) color.NRGBA {
 // is a desaturated tint of its role, and every on- colour clears the
 // contrast floor against its pair.
 var m3 = scheme{
-	primary:              rgb(0xB3261E),
-	onPrimary:            rgb(0xFFFFFF),
-	primaryContainer:     rgb(0xF9DEDC),
-	onPrimaryContainer:   rgb(0x410E0B),
-	secondary:            rgb(0x625B71),
+	primary:            rgb(0xB3261E),
+	onPrimary:          rgb(0xFFFFFF),
+	primaryContainer:   rgb(0xF9DEDC),
+	onPrimaryContainer: rgb(0x410E0B),
+	// Derived from the same red hue as primary. M3 derives every role
+	// from one source colour; a red primary beside the stock purple
+	// secondary is two palettes in one app.
+	secondary:            rgb(0x775652),
 	onSecondary:          rgb(0xFFFFFF),
-	secondaryContainer:   rgb(0xE8DEF8),
-	onSecondaryContainer: rgb(0x1D192B),
-	surface:              rgb(0xFFFBFE),
-	onSurface:            rgb(0x1C1B1F),
-	surfaceVariant:       rgb(0xE7E0EC),
-	onSurfaceVariant:     rgb(0x49454F),
-	surfaceContainer:     rgb(0xF3EDF7),
-	outline:              rgb(0x79747E),
-	outlineVariant:       rgb(0xCAC4D0),
+	secondaryContainer:   rgb(0xFFDAD6),
+	onSecondaryContainer: rgb(0x2C1512),
+	surface:              rgb(0xFFF8F7),
+	onSurface:            rgb(0x231918),
+	surfaceVariant:       rgb(0xF5DDDA),
+	onSurfaceVariant:     rgb(0x534341),
+	surfaceContainer:     rgb(0xFBEEEC),
+	outline:              rgb(0x857370),
+	outlineVariant:       rgb(0xD8C2BF),
 	errorColor:           rgb(0xB3261E),
 	onError:              rgb(0xFFFFFF),
 	success:              rgb(0x386A20),

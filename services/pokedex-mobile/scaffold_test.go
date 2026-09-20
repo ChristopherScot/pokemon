@@ -6,6 +6,7 @@ package main
 // in state.go, which is why the decisions live there.
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -158,8 +159,16 @@ func TestTurnBannerAlwaysSaysSomething(t *testing.T) {
 		t.Errorf("banner = %q, want the opponent named", got)
 	}
 	b.Status = "finished"
-	if got := turnBanner(b, nil); got != "battle over" {
+	if got := turnBanner(b, nil); got != "Battle over" {
 		t.Errorf("finished banner = %q", got)
+	}
+
+	// The API carries a winner; ending with "Battle over" and leaving
+	// the player to infer it from the HP bars was the worst miss in
+	// the first version.
+	b.Winner = api.NewOptString("misty")
+	if got := turnBanner(b, nil); got != "Misty wins" {
+		t.Errorf("banner with a winner = %q, want the winner named", got)
 	}
 }
 
@@ -168,7 +177,7 @@ func TestTurnBannerAlwaysSaysSomething(t *testing.T) {
 func TestRecentLogTrimsToTheNewest(t *testing.T) {
 	b := &api.Battle{}
 	for i := 0; i < 10; i++ {
-		b.Log = append(b.Log, api.BattleEvent{TurnNumber: i, Text: "e" + itoa(i)})
+		b.Log = append(b.Log, api.BattleEvent{TurnNumber: i, Text: "e" + strconv.Itoa(i)})
 	}
 	got := recentLog(b, 3)
 	if len(got) != 3 || got[2].Text != "e9" {

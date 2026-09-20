@@ -55,6 +55,7 @@ func main() {
 func loop(w *app.Window) error {
 	th := material.NewTheme()
 	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
+	applyScheme(th)
 
 	a := newUI(w)
 	a.start()
@@ -63,6 +64,7 @@ func loop(w *app.Window) error {
 	for {
 		switch e := w.Event().(type) {
 		case app.DestroyEvent:
+			close(a.done)
 			return e.Err
 		case app.FrameEvent:
 			a.drain()
@@ -73,7 +75,7 @@ func loop(w *app.Window) error {
 	}
 }
 
-// app is every piece of state the UI draws from.
+// ui is every piece of state the UI draws from.
 //
 // Gio is immediate mode: layout runs each frame and draws whatever
 // this holds, so there is no widget tree to keep in sync. Change a
@@ -81,6 +83,12 @@ func loop(w *app.Window) error {
 type ui struct {
 	w       *app.Window
 	results chan result
+
+	// done is closed when the window dies, so a background goroutine
+	// blocked on delivery exits instead of leaking. Its lifetime is
+	// then obvious: it lives until the UI takes its result, or until
+	// there is no UI left to take it.
+	done chan struct{}
 
 	api *api.Client
 	bc  *battleclient.Client
@@ -114,12 +122,16 @@ type ui struct {
 	refreshBtn widget.Clickable
 
 	// battle
-	battle   *api.Battle
-	sel      pick
+	battle *api.Battle
+	sel    pick
+	// lastSent is the turn most recently dispatched, so a test can
+	// assert which turn went out rather than only that one did.
+	lastSent pick
 	monBtns  []widget.Clickable
 	moveBtns []widget.Clickable
 	tgtBtns  []widget.Clickable
 	leaveBtn widget.Clickable
+	backBtn  widget.Clickable
 	logList  widget.List
 	watching bool
 	lastSeen int
@@ -129,7 +141,7 @@ type ui struct {
 }
 
 func newUI(w *app.Window) *ui {
-	a := &ui{w: w, results: make(chan result, 8)}
+	a := &ui{w: w, results: make(chan result, 8), done: make(chan struct{})}
 	a.dexList.Axis = layout.Vertical
 	a.lobbyList.Axis = layout.Vertical
 	a.logList.Axis = layout.Vertical
@@ -147,6 +159,7 @@ func newUI(w *app.Window) *ui {
 // terminal share a trainer when they share a home directory - which on
 // Android they do not, hence the register screen.
 func (a *ui) start() {
+	// No saved identity is the normal first run, not a failure.
 	id, err := battleclient.LoadIdentity()
 	if err == nil {
 		a.useIdentity(id)
@@ -154,18 +167,26 @@ func (a *ui) start() {
 	} else {
 		a.screen = screenRegister
 	}
-	c, cerr := api.NewClient(defaultAPI)
-	if cerr == nil {
-		a.api = c
-		a.loadDex()
+	c, err := api.NewClient(defaultAPI)
+	if err != nil {
+		a.status = statusFor(err)
+		return
 	}
+	a.api = c
+	a.loadDex()
 }
 
 func (a *ui) useIdentity(id battleclient.Identity) {
 	a.id = id
-	if bc, err := battleclient.New(id); err == nil {
-		a.bc = bc
+	bc, err := battleclient.New(id)
+	if err != nil {
+		// Silently leaving bc nil produced "register a trainer
+		// first" from the lobby - actively misleading to someone who
+		// had just registered successfully.
+		a.status = statusFor(err)
+		return
 	}
+	a.bc = bc
 }
 
 // invalidate asks for a redraw. Tolerates a nil window so a headless
@@ -215,6 +236,9 @@ func (a *ui) apply(r result) {
 		if r.lobby != nil {
 			a.lobbyBtns = make([]widget.Clickable, len(r.lobby.Waiting))
 		}
+	case resWatchIdle:
+		// Nothing happened; let keepWatching poll again.
+		a.watching = false
 	case resBattle:
 		a.battle = r.battle
 		a.watching = false
