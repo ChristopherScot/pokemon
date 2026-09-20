@@ -27,6 +27,26 @@ jobs:
     defaults:
       run:
         working-directory: services/pokedex
+
+    # Postgres is what production runs, and the difference is not
+    # cosmetic: battle state round-trips through it as JSON. A whole
+    # class of bug - a field the encoder cannot see - exists ONLY on
+    # this path, and shipped once because every battle test used the
+    # in-memory store. Without this service the postgres tests skip.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: pokedex
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +63,28 @@ jobs:
           cache-dependency-path: services/pokedex/go.sum
 
       - name: Test
+        env:
+          POKEDEX_TEST_DSN: postgres://postgres:test@127.0.0.1:5432/pokedex?sslmode=disable
         run: go test -race ./...
+
+      # A skipped test reports success, so the one that plays a whole
+      # game would go quiet the day the service block above breaks and
+      # nobody would notice.
+      - name: The postgres tests really ran
+        env:
+          POKEDEX_TEST_DSN: postgres://postgres:test@127.0.0.1:5432/pokedex?sslmode=disable
+        run: |
+          out=$(go test -run TestAWholeGameOverPostgres -v . 2>&1)
+          echo "$out"
+          case "$out" in
+            *SKIP*|*"no test files"*)
+              echo "::error::the whole-game test skipped; postgres was not reachable"
+              exit 1 ;;
+          esac
+          case "$out" in
+            *ok*|*PASS*) ;;
+            *) echo "::error::the whole-game test did not pass"; exit 1 ;;
+          esac
 
       # CGO_ENABLED=0: a cgo binary links against glibc and will not run on
       # alpine, and that only shows up at container start.
