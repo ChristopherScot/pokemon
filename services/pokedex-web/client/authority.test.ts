@@ -1,7 +1,12 @@
 import { expect, test } from 'vitest'
 
+import type { components } from '@christopherscot/pokedex-client'
+
 import { checkTurn } from './shared.ts'
-import type { Battle } from './shared.ts'
+
+// The same alias shared.ts uses: the generated client is the source of
+// this shape, so a test that declared its own could drift from it.
+type Battle = components['schemas']['Battle']
 
 // The server owns the turn rules; a client reads its verdict.
 //
