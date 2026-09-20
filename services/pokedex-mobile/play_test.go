@@ -153,3 +153,61 @@ func TestBrowseScrollsAndPicks(t *testing.T) {
 		f.Close()
 	}
 }
+
+// The lobby and team screens, which are how a battle starts. A screen
+// that renders nothing is a dead end a player cannot get out of.
+func TestEveryScreenRenders(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(*harness)
+	}{
+		{"register", func(h *harness) { h.ui.screen = screenRegister }},
+		{"browse", func(h *harness) {
+			h.ui.screen = screenBrowse
+			h.ui.dex = []api.Pokemon{{ID: 1, Name: "pikachu", Types: []string{"electric"}}}
+			h.ui.dexClicks = make([]widget.Clickable, 1)
+		}},
+		{"team-empty", func(h *harness) { h.ui.screen = screenTeam }},
+		{"team-ready", func(h *harness) {
+			h.ui.screen = screenTeam
+			h.ui.team = []string{"pikachu", "geodude", "staryu"}
+		}},
+		{"lobby-empty", func(h *harness) { h.ui.screen = screenLobby }},
+		{"lobby-full", func(h *harness) {
+			h.ui.screen = screenLobby
+			h.ui.lobby = &api.WaitingList{Count: 1, Waiting: []api.WaitingBattle{
+				{BattleId: "b1", Trainer: "misty", Team: []string{"staryu"}},
+			}}
+			h.ui.lobbyBtns = make([]widget.Clickable, 1)
+		}},
+		{"battle-waiting", func(h *harness) {
+			h.ui.bc = testClient(t)
+			h.ui.screen = screenBattle
+			b := testBattle("ash", "misty")
+			b.Turn = api.NewOptString("misty") // not our turn
+			h.ui.battle = b
+		}},
+		{"battle-finished", func(h *harness) {
+			h.ui.bc = testClient(t)
+			h.ui.screen = screenBattle
+			b := testBattle("ash", "misty")
+			b.Status = "finished"
+			h.ui.battle = b
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			h.ui.id.Name = "ash"
+			tc.setup(h)
+			img := h.frame()
+			if !notBlank(img) {
+				t.Fatalf("%s rendered nothing", tc.name)
+			}
+			if os.Getenv("SHOTS") != "" {
+				f, _ := os.Create("/tmp/shot-" + tc.name + ".png")
+				png.Encode(f, img)
+				f.Close()
+			}
+		})
+	}
+}
