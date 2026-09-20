@@ -12,8 +12,8 @@ export type Trainer = { name: string; token: string }
 // carries a stable id so morph leaves an unchanged row alone and its
 // fadeIn does not re-run on every poll - pokedex-web got that from
 // React's keying.
-export function waitingList(waiting: WaitingBattle[]): string {
-  const rows = waiting.length === 0
+export function waitingRows(waiting: WaitingBattle[]): string {
+  return waiting.length === 0
     ? `<p class="sub">nobody is waiting. open one below and share the link.</p>`
     : waiting.map((w) =>
         `<div class="row" id="w-${esc(w.battleId)}">` +
@@ -21,9 +21,14 @@ export function waitingList(waiting: WaitingBattle[]): string {
         `<div class="sub" style="margin:0">${esc(w.team.join(', '))}</div></div>` +
         `<a class="btn" href="/?join=${encodeURIComponent(w.battleId)}">join</a>` +
         `</div>`).join('')
+}
 
+// The rows and their container are separate so the poll route can send
+// the rows alone without stripping this wrapper back off with a regex.
+export function waitingList(waiting: WaitingBattle[]): string {
   return `<div id="waiting" hx-get="/battle/waiting" hx-trigger="every 3s [!document.hidden]"` +
-    ` hx-sync="this:replace" hx-target="this" hx-swap="morph:innerHTML">${rows}</div>`
+    ` hx-sync="this:replace" hx-target="this" hx-swap="morph:innerHTML">` +
+    waitingRows(waiting) + `</div>`
 }
 
 function register(): string {

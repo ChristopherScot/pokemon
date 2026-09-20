@@ -41,7 +41,10 @@ export function pickLinks(releases: Release[], os: string, arch: string): Link[]
     for (const release of releases) {
       if (release.draft || release.prerelease) continue
       const asset = (release.assets ?? []).find((a) => a.name === tool.prefix + want)
-      if (asset) {
+      // The URL is third-party and goes straight into an href, so the
+      // scheme is checked rather than trusted. esc() stops it breaking
+      // out of the attribute; it does not stop `javascript:`.
+      if (asset && asset.browser_download_url.startsWith('https://')) {
         links.push({ tool, url: asset.browser_download_url, tag: release.tag_name })
         break
       }
@@ -68,6 +71,11 @@ export async function downloadsFooter(
   try {
     const res = await fetchImpl(RELEASES, {
       headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'pokedex-htmx' },
+      // Every page load fires this once. Without a deadline a blackholed
+      // connection to GitHub parks the handler until the OS gives up -
+      // minutes - and they accumulate. An abort throws, which the catch
+      // below already turns into "no footer", the intended degradation.
+      signal: AbortSignal.timeout(3000),
     })
     if (!res.ok) return ''
     releases = await res.json()

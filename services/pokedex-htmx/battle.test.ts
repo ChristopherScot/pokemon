@@ -90,3 +90,30 @@ test('sideFor finds both sides, and nothing for an onlooker', () => {
   assert.equal(sideFor(b, 'ash')?.theirs.trainer, 'misty')
   assert.equal(sideFor(b, 'brock'), null)
 })
+
+// A turn appends two or three log entries, so a fixed-count history was
+// about six turns - and dropping an entry still inside a float's life
+// pushes its birth time FORWARD, leaving it on screen after its CSS
+// animation has already finished.
+test('a float still expires when the log is busy', () => {
+  const b = battle({ log: [damage('staryu', 4)] })
+  observe(b, 1000)
+  // Twenty more entries arrive quickly, as two fast players would.
+  for (let i = 1; i <= 20; i++) {
+    b.log.push(damage('staryu', 1))
+    observe(b, 1000 + i * 80)
+  }
+  // The first entry was born at t=1000, so it must be gone by 3400.
+  const alive = floatsFor(b, 0, 1000 + LIFE_MS + 10).some((f) => f.id === 'f-0-them-0')
+  assert.equal(alive, false, 'the first float outlived its animation')
+})
+
+// Battles live in the API's memory, so a restart - or a reused id -
+// gives this service a shorter log under a id it has already seen.
+test('a battle that starts over still shows floats', () => {
+  const b = battle({ log: [damage('staryu', 4), damage('staryu', 4), damage('staryu', 4)] })
+  observe(b, 1000)
+  const fresh = battle({ log: [damage('staryu', 7)] })
+  observe(fresh, 9000)
+  assert.equal(floatsFor(fresh, 0, 9000).length, 1, 'the new battle renders no float')
+})

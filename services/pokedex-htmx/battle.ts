@@ -44,11 +44,24 @@ type Seen = { at: number; logLength: number }
 const seen = new Map<string, Seen[]>()
 
 export function observe(b: Battle, now = Date.now()): void {
-  const history = seen.get(b.id) ?? []
+  let history = seen.get(b.id) ?? []
+
+  // A log that SHRANK is not this battle's log any more: the API keeps
+  // battles in memory, so a restart - or a reused id - starts a new one.
+  // Without this the old timestamps are kept, every entry reads as older
+  // than a float lifetime, and the new battle renders no floats at all.
+  if (history.length && history[history.length - 1].logLength > b.log.length) {
+    history = []
+  }
+
   if (!history.some((h) => h.logLength >= b.log.length)) {
     history.push({ at: now, logLength: b.log.length })
-    // One battle cannot need more history than a float lifetime covers.
-    while (history.length > 16) history.shift()
+    // Bounded by TIME, not by count. A turn appends two or three entries,
+    // so a fixed 16 was about six turns - easily inside 2.4s with two
+    // quick players, and dropping an entry that is still needed pushes a
+    // float's birth time FORWARD, leaving it on screen after its
+    // animation has finished.
+    while (history.length > 1 && now - history[0].at > LIFE_MS) history.shift()
     seen.set(b.id, history)
   }
   if (seen.size > 500) {
@@ -132,6 +145,10 @@ export function mon(
   // turn. `checked` is rendered by the SERVER, which already owns turn
   // state - idiomorph forces a live checked property to match the
   // markup, so a client-only selection would be clobbered each poll.
+  //
+  // form="turn" names a form that is NOT an ancestor: it lives in
+  // battlePage(), outside the polled region, so the poll cannot rebuild
+  // it mid-choice. HTML allows the association by id.
   const field = side === 'me' ? 'attacker' : 'target'
   return `<label class="${cls}" id="mon-${slot}" data-slot="${slot}"` +
     `${selected ? ' style="outline:2px solid #6d5ae0"' : ''}>` +
@@ -160,7 +177,7 @@ function banner(b: Battle, me: string, myTurn: boolean): string {
 }
 
 function log(b: Battle, rejected: string): string {
-  const lines = b.log.slice(-8).map((e, i) => {
+  const lines = b.log.slice(-8).map((e) => {
     const band = effectBand(e.effectiveness)
     return `<div${band === 'normal' ? '' : ` class="${band}"`}>${esc(e.text)}</div>`
   }).join('')
@@ -196,6 +213,7 @@ function pick(b: Battle, mine: Side, theirs: Side, sel: Turn): string {
     if (attacker.disabledMove === i) {
       return `<span class="move-off">${esc(m.name)} <small>disabled this turn</small></span>`
     }
+    // form="turn" - the form is in battlePage(), see mon() above.
     return `<label class="movebtn${sel.move === i ? ' sel' : ''}" id="move-${i}">` +
       `<input type="radio" name="move" value="${i}" form="turn" class="sr-only"` +
       `${sel.move === i ? ' checked' : ''}>` +

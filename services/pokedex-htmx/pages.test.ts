@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { board, battlePage } from './battle.ts'
 import { downloadsFooter, pickLinks } from './downloads.ts'
 import { lobbyPage, waitingList } from './lobby.ts'
-import { card, grid, page, teamSlots, url, type Ctx } from './pokedex.ts'
+import { card, filters, grid, page, teamSlots, url, type Ctx } from './pokedex.ts'
 
 const move = (name: string, type: string, power: number) => ({
   name, type, power, description: '', effect: '', pp: 15, damageClass: 'special',
@@ -19,7 +19,7 @@ const mon = (name: string, id = 1) => ({
 const ctx = (over: Partial<Ctx> = {}): Ctx => ({
   pokemon: [mon('pikachu', 25), mon('onix', 95), mon('gengar', 94), mon('mew', 151)],
   types: [{ name: 'electric', count: 9 }],
-  active: '', join: '', team: [], resume: '',
+  active: '', join: '', team: [], sprites: {}, resume: '',
   ...over,
 })
 
@@ -181,12 +181,12 @@ test('the lobby always offers a way to re-register', () => {
 
 test('downloads pick the newest release carrying an asset for this platform', () => {
   const releases = [
-    { tag_name: 'v9', draft: true, assets: [{ name: 'pokedex-tui_darwin_arm64.tar.gz', browser_download_url: 'draft' }] },
-    { tag_name: 'v2', assets: [{ name: 'pokedex-tui_darwin_arm64.tar.gz', browser_download_url: 'u2' }] },
-    { tag_name: 'v1', assets: [{ name: 'pokedex-cli_darwin_arm64.tar.gz', browser_download_url: 'u1' }] },
+    { tag_name: 'v9', draft: true, assets: [{ name: 'pokedex-tui_darwin_arm64.tar.gz', browser_download_url: 'https://gh/draft' }] },
+    { tag_name: 'v2', assets: [{ name: 'pokedex-tui_darwin_arm64.tar.gz', browser_download_url: 'https://gh/u2' }] },
+    { tag_name: 'v1', assets: [{ name: 'pokedex-cli_darwin_arm64.tar.gz', browser_download_url: 'https://gh/u1' }] },
   ]
   const links = pickLinks(releases, 'darwin', 'arm64')
-  assert.deepEqual(links.map((l) => l.url), ['u2', 'u1'])
+  assert.deepEqual(links.map((l) => l.url), ['https://gh/u2', 'https://gh/u1'])
   // Each tool carries its own tag, because they are not released together.
   assert.deepEqual(links.map((l) => l.tag), ['v2', 'v1'])
 })
@@ -209,4 +209,55 @@ test('the release list is fetched by the server, and HTML comes back', async () 
   assert.match(html, /id="downloads"/)
   assert.match(html, /https:\/\/example\/t/)
   assert.match(html, /Linux · Intel \/ AMD/)
+})
+
+test('a download url that is not https never reaches an href', () => {
+  const bad = [{ tag_name: 'v1', assets: [
+    { name: 'pokedex-tui_darwin_arm64.tar.gz', browser_download_url: 'javascript:alert(1)' },
+  ] }]
+  assert.deepEqual(pickLinks(bad, 'darwin', 'arm64'), [])
+  const good = [{ tag_name: 'v1', assets: [
+    { name: 'pokedex-tui_darwin_arm64.tar.gz', browser_download_url: 'https://example/t' },
+  ] }]
+  assert.equal(pickLinks(good, 'darwin', 'arm64').length, 1)
+})
+
+// Every page load fires this once, so a GitHub blackhole must not park
+// the handler until the OS gives up.
+test('a github fetch that never answers gives up rather than hanging', async () => {
+  const started = Date.now()
+  const slow = ((_u: string, opts: { signal?: AbortSignal }) =>
+    new Promise<Response>((_resolve, reject) => {
+      opts?.signal?.addEventListener('abort', () =>
+        reject(new Error('aborted')), { once: true })
+    })) as unknown as typeof fetch
+  assert.equal(await downloadsFooter('darwin', 'arm64', slow), '')
+  assert.ok(Date.now() - started < 10_000, 'gave up inside its deadline')
+})
+
+// Pick pikachu, then filter to water: the grid no longer contains
+// pikachu, so the slot has a name and nowhere to read a sprite from.
+// pokedex-web kept the sprite beside the name in sessionStorage.
+test('a picked pokemon keeps its sprite after filtering it out of the grid', () => {
+  const filtered = ctx({
+    pokemon: [mon('squirtle', 7)],
+    active: 'water',
+    team: ['pikachu'],
+    sprites: { pikachu: '/pikachu.png' },
+  })
+  assert.match(teamSlots(filtered), /src="\/pikachu\.png"/)
+  assert.doesNotMatch(teamSlots(filtered), /src=""/)
+})
+
+// A pick swaps the slots and the grid; the filter nav has to come with
+// them, because every filter link carries the team and a stale one
+// silently drops the picks on the next click.
+test('the filter links are re-rendered with the team after a pick', () => {
+  const picked = ctx({ team: ['pikachu'], types: [{ name: 'water', count: 18 }] })
+  const nav = filters(picked, true)
+  assert.match(nav, /hx-swap-oob="true"/)
+  assert.match(nav, /href="\/\?type=water&team=pikachu"/)
+  // and the grid names itself for the same swap
+  assert.match(grid(picked, true), /id="grid" hx-swap-oob="true"/)
+  assert.doesNotMatch(grid(picked), /hx-swap-oob/)
 })

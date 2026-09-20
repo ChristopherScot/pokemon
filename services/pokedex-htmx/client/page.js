@@ -35,8 +35,15 @@
 
   if (search) {
     search.addEventListener('input', filter)
-    // A swap replaces the grid; re-apply the filter to the new cards.
-    document.body.addEventListener('htmx:afterSwap', filter)
+    // LOAD-BEARING. Picking a pokemon swaps a whole new grid in out of
+    // band (see POST /team in routes.ts), and those cards arrive without
+    // the .hidden class this filter applies - so a search typed before
+    // the pick would silently come undone. Re-applying here is what
+    // keeps the two in step; deleting this breaks search on every pick.
+    // afterSETTLE, not afterSwap: a pick swaps three fragments, and the
+    // swap events interleave, so filtering on afterSwap ran before the
+    // last grid was in place and the filter came undone.
+    document.body.addEventListener('htmx:afterSettle', filter)
   }
 
   // 2. Publish the topbar's real height as --topbar-h.
