@@ -168,9 +168,15 @@ jobs:
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           echo "build-tools: $BT"
 
-          # -p aligns uncompressed .so files to the page boundary;
-          # 16 is the page size Android 15 requires.
-          "$BT/zipalign" -f -p 16 pokedex-mobile.raw.apk pokedex-mobile.aligned.apk
+          # Rewrite the .so entries as STORED and page-aligned.
+          #
+          # `zipalign -p 16` alone does NOT do this: it aligns entries
+          # that are already uncompressed and silently leaves
+          # compressed ones exactly as they were. The first attempt at
+          # this fix ran zipalign, reported success, and produced an
+          # APK with all four libs still Defl:N - caught by the check
+          # below rather than by a phone.
+          python3 ../../scripts/repack_apk.py pokedex-mobile.raw.apk pokedex-mobile.aligned.apk
 
           # gogio already generated a debug keystore; reuse it so the
           # signing identity does not change within a build.
