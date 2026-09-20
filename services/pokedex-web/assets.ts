@@ -80,8 +80,22 @@ function lookup(entry: Entry) {
  */
 export function preloadURLs(entry: Entry): string[] {
   const m = load()
-  return (lookup(entry).imports ?? []).flatMap((key) => {
+  const out: string[] = []
+  const seen = new Set<string>()
+
+  // Transitively, not just the direct imports. Rollup splits shared
+  // code as it sees fit - today React is one chunk and the type palette
+  // another - and a chunk that imports a chunk is entirely normal. A
+  // preload list that stopped at depth one would silently miss those
+  // the day the graph got deeper.
+  const walk = (key: string) => {
+    if (seen.has(key)) return
+    seen.add(key)
     const chunk = m[key]
-    return chunk ? [`/assets/${chunk.file}`] : []
-  })
+    if (!chunk) return
+    out.push(`/assets/${chunk.file}`)
+    for (const next of chunk.imports ?? []) walk(next)
+  }
+  for (const key of lookup(entry).imports ?? []) walk(key)
+  return out
 }

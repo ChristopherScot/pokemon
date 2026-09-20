@@ -16,6 +16,10 @@ import { UI_VERSION } from '../version.ts'
 type Battle = components['schemas']['Battle']
 export type Turn = { attacker: number; move: number; target: number }
 
+// How many Pokemon a side holds. A rule of the game, not a client's
+// taste: the server enforces it and every client has to agree.
+export const TEAM_SIZE = 3
+
 export { UI_VERSION }
 
 // Sent on every request this page makes, so the server knows which
