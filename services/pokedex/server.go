@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,8 +22,11 @@ import (
 var (
 	requests = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "http_requests_total",
-		Help: "Requests by operation, method and status.",
-	}, []string{"operation", "method", "status"})
+		// route rather than operation: the status is only known at
+		// the http layer, below ogen, where the operation id is not.
+		// Latency keeps the operation label, which it can see.
+		Help: "Requests by route, method and status.",
+	}, []string{"route", "method", "status"})
 
 	latency = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "http_request_duration_seconds",
@@ -37,8 +41,36 @@ type service struct {
 	battles store
 
 	rng *lockedRand
+
+	// ready backs the readiness probe. Nil without a database.
+	ready func(context.Context) error
 }
 
+// GetReadyz is readiness, and unlike /healthz it does touch the
+// database.
+//
+// Both probes pointed at a static OK, so a pod that had lost its
+// database still reported itself Ready and kept taking traffic -
+// every battle request 500ing while Kubernetes saw nothing wrong.
+func (s service) GetReadyz(ctx context.Context) (api.GetReadyzRes, error) {
+	if s.ready == nil {
+		// No database: the in-memory store is always ready.
+		return &api.Health{Status: api.HealthStatusOk}, nil
+	}
+	// Shorter than the probe's own 3s timeout, so a hung check fails
+	// as unready rather than as a probe timeout.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := s.ready(ctx); err != nil {
+		slog.Warn("readiness check failed", "err", err)
+		return &api.Error{Message: "database unreachable"}, nil
+	}
+	return &api.Health{Status: api.HealthStatusOk}, nil
+}
+
+// GetHealthz is liveness, and is static on purpose: a liveness probe
+// that fails on a database blip kills a pod that would have
+// recovered, turning a brief outage into a crash loop.
 func (service) GetHealthz(context.Context) (*api.Health, error) {
 	return &api.Health{Status: api.HealthStatusOk}, nil
 }
@@ -91,13 +123,86 @@ func (s service) ListTypes(context.Context) (*api.TypeList, error) {
 	return &api.TypeList{Types: s.dex.types()}, nil
 }
 
+// NewError is the last resort: anything a handler returns as a real
+// error, rather than as a typed response, arrives here.
+//
+// The message is deliberately generic. Errors are wrapped with
+// operation context on the way up - "inserting battle %s", "writing
+// battle %s" - and a wrapped *pgconn.PgError stringifies with
+// SQLSTATE, the constraint name and often the table and column. That
+// was going straight into the 500 body of an internet-reachable
+// service, which is free schema reconnaissance.
+//
+// The id is what keeps this debuggable: it appears in the response
+// and in the log line, so a player can quote it and the real error is
+// one Loki query away.
 func (service) NewError(_ context.Context, err error) *api.ErrorStatusCode {
-	slog.Error("handler failed", "err", err)
+	id := newToken()[:8]
+	slog.Error("handler failed", "err", err, "error_id", id)
 
 	return &api.ErrorStatusCode{
 		StatusCode: http.StatusInternalServerError,
-		Response:   api.Error{Message: err.Error()},
+		Response:   api.Error{Message: "internal error (" + id + ")"},
 	}
+}
+
+// statusWriter remembers the code the handler wrote.
+type statusWriter struct {
+	http.ResponseWriter
+	code int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.code = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// countStatus records the status a request ACTUALLY returned.
+//
+// This has to live at the http layer rather than in ogen middleware.
+// ogen hands middleware a typed response, and a handler returning a
+// 401 returns it as a value with a nil error - so the previous
+// version, which inferred `200, or 500 if err != nil`, labelled every
+// 401, 404 and 409 as a 200. The metric could not show an auth bug, a
+// flood of conflicts, or the mobile client's limit=200 requests that
+// 400'd on every launch for days, and an alert on 5xx was silent
+// through all of it.
+//
+// Deriving it from the response type's name would work but is a
+// second copy of the generator's own switch, and it would drift. The
+// ResponseWriter knows the real answer.
+func countStatus(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 200 by default: a handler that writes a body without
+		// calling WriteHeader has implicitly sent one.
+		sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
+		next.ServeHTTP(sw, r)
+		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+			// Probes run every few seconds and would swamp the
+			// counters without saying anything about the service.
+			return
+		}
+		requests.WithLabelValues(routeOf(r), r.Method, strconv.Itoa(sw.code)).Inc()
+	})
+}
+
+// routeOf is a low-cardinality label for the path.
+//
+// Raw paths carry battle ids, which would give the metric one series
+// per battle - a textbook cardinality explosion.
+func routeOf(r *http.Request) string {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	for i, p := range parts {
+		// Ids are the only variable segments here, and they are the
+		// only lowercase-alphanumeric runs that are not a known noun.
+		switch p {
+		case "api", "battles", "trainers", "pokemon", "moves", "types",
+			"waiting", "join", "turn", "healthz", "readyz", "":
+		default:
+			parts[i] = "{id}"
+		}
+	}
+	return "/" + strings.Join(parts, "/")
 }
 
 func observe(req middleware.Request, next middleware.Next) (middleware.Response, error) {
@@ -108,19 +213,12 @@ func observe(req middleware.Request, next middleware.Next) (middleware.Response,
 	start := time.Now()
 	resp, err := next(req)
 
-	status := strconv.Itoa(http.StatusOK)
-	if err != nil {
-		status = strconv.Itoa(http.StatusInternalServerError)
-	}
 	elapsed := time.Since(start)
-
-	requests.WithLabelValues(req.OperationID, req.Raw.Method, status).Inc()
 	latency.WithLabelValues(req.OperationID, req.Raw.Method).Observe(elapsed.Seconds())
 
 	slog.Info("request",
 		"method", req.Raw.Method,
 		"operation", req.OperationID,
-		"status", status,
 		"duration_ms", float64(elapsed.Nanoseconds())/1e6)
 	return resp, err
 }
@@ -131,7 +229,9 @@ func handler() (http.Handler, error) {
 	var (
 		dex   *pokedex
 		store store
-		err   error
+		// readyFn backs the readiness probe; nil without a database.
+		readyFn func(context.Context) error
+		err     error
 	)
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		var pool *pgxpool.Pool
@@ -151,6 +251,7 @@ func handler() (http.Handler, error) {
 			return nil, fmt.Errorf("loading the pokedex: %w", err)
 		}
 		store = newPGStore(pool, rngSeed)
+		readyFn = pool.Ping
 		slog.Info("state is in postgres")
 	} else {
 		if dex, err = loadPokedex(); err != nil {
@@ -164,6 +265,7 @@ func handler() (http.Handler, error) {
 		dex:     dex,
 		battles: store,
 		rng:     rngFor(rngSeed),
+		ready:   readyFn,
 	}
 
 	srv, err := api.NewServer(svc, api.WithMiddleware(observe))
@@ -172,6 +274,6 @@ func handler() (http.Handler, error) {
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
-	mux.Handle("/", srv)
+	mux.Handle("/", countStatus(srv))
 	return mux, nil
 }

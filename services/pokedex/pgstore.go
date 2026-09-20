@@ -25,6 +25,10 @@ const maxRetries = 10
 
 const retryBackoff = 2 * time.Millisecond
 
+// maxRetryBackoff caps the doubling. Ten attempts at 50ms is a
+// defensible worst case for a turn; ten doublings from 2ms is not.
+const maxRetryBackoff = 50 * time.Millisecond
+
 type pgStore struct {
 	pool *pgxpool.Pool
 	rng  *rand.Rand
@@ -165,18 +169,24 @@ func (p *pgStore) create(ctx context.Context, b *battle) error {
 	return nil
 }
 
-func (p *pgStore) get(ctx context.Context, id string) (*api.Battle, bool) {
+func (p *pgStore) get(ctx context.Context, id string) (*api.Battle, error) {
 	row, err := dbgen.New(p.pool).GetBattle(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errNoBattle
+	}
 	if err != nil {
-		return nil, false
+		return nil, fmt.Errorf("reading battle %s: %w", id, err)
 	}
 	b, err := fromRow(row.ID, row.Status, int(row.Version), int(row.Turn),
 		int(row.TurnNumber), row.Winner,
 		row.CreatedAt.Time, row.TouchedAt.Time, row.State)
 	if err != nil {
-		return nil, false
+		// A row that will not decode is a broken battle, not an
+		// absent one, and saying "no such battle" would send someone
+		// looking in the wrong place.
+		return nil, fmt.Errorf("decoding battle %s: %w", id, err)
 	}
-	return b.toAPI(), true
+	return b.toAPI(), nil
 }
 
 func (p *pgStore) update(ctx context.Context, id string, fn func(*battle) error) error {
@@ -192,7 +202,15 @@ func (p *pgStore) update(ctx context.Context, id string, fn func(*battle) error)
 		}
 		lastErr = err
 
+		// Capped. Unbounded doubling reaches ~1s on the last attempt
+		// alone and ~2s across ten, which is an eternity for a game
+		// turn - and the caller is a phone waiting on a tap. A
+		// serialization conflict resolves in microseconds; the
+		// backoff only needs to break the tie.
 		wait := retryBackoff << attempt
+		if wait > maxRetryBackoff {
+			wait = maxRetryBackoff
+		}
 		jitter := time.Duration(randv2.Int64N(int64(wait) + 1))
 		select {
 		case <-time.After(wait + jitter):
@@ -260,7 +278,7 @@ func (p *pgStore) attemptUpdate(ctx context.Context, id string, fn func(*battle)
 	return tx.Commit(ctx)
 }
 
-func (p *pgStore) waiting(ctx context.Context) []api.WaitingBattle {
+func (p *pgStore) waiting(ctx context.Context) ([]api.WaitingBattle, error) {
 	q := dbgen.New(p.pool)
 	if err := q.SweepBattles(ctx, pgTime(time.Now().Add(-battleTTL))); err != nil {
 		slog.Warn("sweeping expired battles", "error", err)
@@ -268,8 +286,10 @@ func (p *pgStore) waiting(ctx context.Context) []api.WaitingBattle {
 
 	rows, err := q.ListWaitingBattles(ctx)
 	if err != nil {
-		slog.Error("listing waiting battles", "error", err)
-		return nil
+		// Returned rather than logged-and-swallowed: an empty lobby
+		// and a broken database look identical to a player, and only
+		// one of them is worth retrying.
+		return nil, fmt.Errorf("listing waiting battles: %w", err)
 	}
 	out := make([]api.WaitingBattle, 0, len(rows))
 	for _, row := range rows {
@@ -282,15 +302,21 @@ func (p *pgStore) waiting(ctx context.Context) []api.WaitingBattle {
 		}
 		out = append(out, b.toWaiting())
 	}
-	return out
+	return out, nil
 }
 
-func (p *pgStore) trainerByToken(ctx context.Context, token string) (string, bool) {
+func (p *pgStore) trainerByToken(ctx context.Context, token string) (string, error) {
 	t, err := dbgen.New(p.pool).TrainerByToken(ctx, token)
-	if err != nil {
-		return "", false
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", errNoTrainer
 	}
-	return t.Name, true
+	if err != nil {
+		// Not errNoTrainer: a store failure here used to become a
+		// 401, and an auth error is the last place anyone looks for
+		// a database outage.
+		return "", fmt.Errorf("looking up trainer: %w", err)
+	}
+	return t.Name, nil
 }
 
 func (p *pgStore) registerTrainer(ctx context.Context, name string) (string, error) {

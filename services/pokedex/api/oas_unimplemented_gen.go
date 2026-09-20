@@ -60,6 +60,15 @@ func (UnimplementedHandler) GetPokemon(ctx context.Context, params GetPokemonPar
 	return r, ht.ErrNotImplemented
 }
 
+// GetReadyz implements getReadyz operation.
+//
+// Readiness probe. Checks the database.
+//
+// GET /readyz
+func (UnimplementedHandler) GetReadyz(ctx context.Context) (r GetReadyzRes, _ error) {
+	return r, ht.ErrNotImplemented
+}
+
 // GetRoot implements getRoot operation.
 //
 // Identify the service and the running build.

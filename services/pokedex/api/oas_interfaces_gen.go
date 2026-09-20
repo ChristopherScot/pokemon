@@ -17,6 +17,10 @@ type GetPokemonRes interface {
 	getPokemonRes()
 }
 
+type GetReadyzRes interface {
+	getReadyzRes()
+}
+
 type JoinBattleRes interface {
 	joinBattleRes()
 }

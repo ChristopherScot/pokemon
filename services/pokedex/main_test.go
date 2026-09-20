@@ -59,8 +59,12 @@ func TestMetricsAreExposed(t *testing.T) {
 		t.Fatalf("metrics status = %d, want %d", w.Code, http.StatusOK)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, `http_requests_total{method="GET",operation="getRoot"`) {
-		t.Errorf("no request counter for getRoot:\n%s", body)
+	// Labelled by route and by the REAL status. It used to be keyed
+	// on the operation id with a status inferred from whether the
+	// handler returned a Go error, which made every typed 401 and
+	// 409 look like a 200.
+	if !strings.Contains(body, `http_requests_total{method="GET",route="/",status="200"`) {
+		t.Errorf("no request counter for the root route:\n%s", body)
 	}
 	if !strings.Contains(body, "go_goroutines") {
 		t.Error("no runtime metrics in /metrics")

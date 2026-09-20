@@ -53,6 +53,12 @@ type Invoker interface {
 	//
 	// GET /pokemon/{name}
 	GetPokemon(ctx context.Context, params GetPokemonParams) (GetPokemonRes, error)
+	// GetReadyz invokes getReadyz operation.
+	//
+	// Readiness probe. Checks the database.
+	//
+	// GET /readyz
+	GetReadyz(ctx context.Context) (GetReadyzRes, error)
 	// GetRoot invokes getRoot operation.
 	//
 	// Identify the service and the running build.
@@ -435,6 +441,49 @@ func (c *Client) sendGetPokemon(ctx context.Context, params GetPokemonParams) (r
 	}()
 
 	result, err := decodeGetPokemonResponse(resp)
+	if err != nil {
+		return res, errors.Wrap(err, "decode response")
+	}
+
+	return result, nil
+}
+
+// GetReadyz invokes getReadyz operation.
+//
+// Readiness probe. Checks the database.
+//
+// GET /readyz
+func (c *Client) GetReadyz(ctx context.Context) (GetReadyzRes, error) {
+	res, err := c.sendGetReadyz(ctx)
+	return res, err
+}
+
+func (c *Client) sendGetReadyz(ctx context.Context) (res GetReadyzRes, err error) {
+
+	u := uri.Clone(c.requestURL(ctx))
+	var pathParts [1]string
+	pathParts[0] = "/readyz"
+	uri.AddPathParts(u, pathParts[:]...)
+
+	r, err := ht.NewRequest(ctx, "GET", u)
+	if err != nil {
+		return res, errors.Wrap(err, "create request")
+	}
+
+	resp, err := c.cfg.Client.Do(r)
+	if err != nil {
+		return res, errors.Wrap(err, "do request")
+	}
+	body := resp.Body
+	defer func() {
+		// Drain the body to EOF before closing, so the underlying
+		// connection can be reused by the Transport regardless of the
+		// response status code. See https://github.com/ogen-go/ogen/issues/1670.
+		_, _ = io.Copy(io.Discard, body)
+		_ = body.Close()
+	}()
+
+	result, err := decodeGetReadyzResponse(resp)
 	if err != nil {
 		return res, errors.Wrap(err, "decode response")
 	}

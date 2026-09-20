@@ -40,6 +40,12 @@ type Handler interface {
 	//
 	// GET /pokemon/{name}
 	GetPokemon(ctx context.Context, params GetPokemonParams) (GetPokemonRes, error)
+	// GetReadyz implements getReadyz operation.
+	//
+	// Readiness probe. Checks the database.
+	//
+	// GET /readyz
+	GetReadyz(ctx context.Context) (GetReadyzRes, error)
 	// GetRoot implements getRoot operation.
 	//
 	// Identify the service and the running build.
