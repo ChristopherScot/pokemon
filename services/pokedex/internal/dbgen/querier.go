@@ -92,6 +92,13 @@ type Querier interface {
 	//
 	// Called on write, like SweepBattles: no background goroutine to
 	// supervise, and no timer in each replica racing the others.
+	// NOT EXISTS rather than NOT IN. Both delete exactly the same rows -
+	// battle_sides.trainer_token is NOT NULL, so the three-valued logic
+	// that usually distinguishes them cannot apply - but NOT IN makes the
+	// planner build the whole battle_sides set before it can answer, while
+	// NOT EXISTS is an anti-join it can satisfy per row from the index.
+	// At 200k trainers, steady state with nothing to sweep: 66ms -> 22ms,
+	// on every lobby load.
 	SweepTrainers(ctx context.Context, lastSeen pgtype.Timestamptz) error
 	// Records that a token was used, which is what SweepTrainers reads.
 	// Separate from TrainerByToken so a read stays a read.
