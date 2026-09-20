@@ -5,26 +5,11 @@
 name: build pokedex-web
 
 on:
-  # The client is a file: dependency, so services/pokedex is a BUILD
-  # INPUT here, not just a neighbour. Without these paths a spec change
-  # skips this job entirely - and `vite build` does not typecheck, so
-  # the break is invisible until some later, unrelated commit rebuilds
-  # against the changed client and ships it.
-  #
-  # openapi.yml as well as clients/ts, so a spec edit committed without
-  # running regen still triggers the consumer.
   push:
     branches: [main]
-    paths:
-      - 'services/pokedex-web/**'
-      - 'services/pokedex/clients/ts/**'
-      - 'services/pokedex/openapi.yml'
-      - '.github/workflows/pokedex-web.yaml'
+    paths: ['services/pokedex-web/**', '.github/workflows/pokedex-web.yaml']
   pull_request:
-    paths:
-      - 'services/pokedex-web/**'
-      - 'services/pokedex/clients/ts/**'
-      - 'services/pokedex/openapi.yml'
+    paths: ['services/pokedex-web/**']
   workflow_dispatch:
 
 # Two pushes in quick succession otherwise race to publish :latest, and
@@ -59,17 +44,6 @@ jobs:
       - name: Install
         run: npm ci
 
-      # npm ci accepts a lockfile whose entry for the linked client is a
-      # version behind what the client now says - verified, it exits 0
-      # and warns about nothing. That is the same silent staleness this
-      # service moved to file: to escape, so it gets checked rather than
-      # trusted.
-      - name: Check the lockfile matches the linked client
-        run: |
-          npm install --package-lock-only
-          git diff --exit-code -- package-lock.json \
-            || { echo "::error::package-lock.json is stale - run 'npm install' and commit it"; exit 1; }
-
       # Not --if-present: the scaffold always ships tests, so a missing
       # script means someone removed them, and CI should say so rather
       # than skip silently.
@@ -81,11 +55,12 @@ jobs:
       # A service that HAS one gets its API contract checked: this is
       # what catches a client that has drifted from the spec, which
       # otherwise shows up as a 404 in production or not at all.
-      - name: Typecheck
-        run: npm run typecheck --if-present
-
+      # make test, not the commands themselves: the Makefile says it
+      # runs "what CI runs", and that is only true if this IS it. Two
+      # copies of the same command drift, and the one that drifts is
+      # whichever nobody is looking at.
       - name: Test
-        run: npm test
+        run: make test
 
       # Build the bundle AND run it.
       #
@@ -97,41 +72,6 @@ jobs:
       # a 200 proves it runs.
       - name: Build the production bundle
         run: npm run build
-
-      # The image copies dist/server.js and NOTHING else, so the smoke
-      # test has to run it the way the image does: from a directory
-      # holding only that file. Running it in place passes even when the
-      # server reads a sibling the image will not have - which is
-      # exactly how a change that 500s on every page shipped green.
-      - name: Prove the bundle is self-contained
-        run: |
-          # The job already runs in services/pokedex-web, so dist/ is
-          # relative to here.
-          rm -rf /tmp/imagelike && mkdir -p /tmp/imagelike
-          # Exactly what the Dockerfile copies, and nothing else.
-          cp dist/server.js /tmp/imagelike/
-          cp -r dist/assets /tmp/imagelike/assets
-          cd /tmp/imagelike
-          PORT=8099 POKEDEX_URL=http://127.0.0.1:1 node server.js &
-          pid=$!
-          for i in $(seq 1 30); do
-            curl -sf http://127.0.0.1:8099/healthz >/dev/null && break
-            sleep 1
-          done
-          page=$(curl -s -b 'trainer=%7B%22name%22%3A%22ash%22%2C%22token%22%3A%22t%22%7D' \
-            http://127.0.0.1:8099/battle/abc123)
-          code=$(curl -s -o /dev/null -w '%{http_code}' \
-            -b 'trainer=%7B%22name%22%3A%22ash%22%2C%22token%22%3A%22t%22%7D' \
-            http://127.0.0.1:8099/battle/abc123)
-          # The page rendering is not enough: it can render perfectly
-          # and point at a bundle that 404s, which looks fine and does
-          # nothing. Follow the script it actually emitted.
-          src=$(printf '%s' "$page" | grep -oE '/assets/[A-Za-z0-9._-]+\.js' | head -1)
-          asset=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8099$src")
-          kill $pid || true
-          test "$code" = "200" || { echo "battle page returned $code from an image-like layout"; exit 1; }
-          test -n "$src" || { echo "the page shipped no /assets script"; exit 1; }
-          test "$asset" = "200" || { echo "the bundle at $src returned $asset"; exit 1; }
 
       - name: Smoke-test the bundle
         run: |

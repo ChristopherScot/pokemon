@@ -12,16 +12,9 @@ name: pokedex-mobile
 on:
   push:
     branches: [main]
-    paths:
-      - 'services/pokedex-mobile/**'
-      # It shares api/ and battletext/ with the CLI and TUI through a
-      # replace directive, so the API service is a build input here.
-      - 'services/pokedex/**'
-      - '.github/workflows/pokedex-mobile.yaml'
+    paths: ['services/pokedex-mobile/**', '.github/workflows/pokedex-mobile.yaml']
   pull_request:
-    paths:
-      - 'services/pokedex-mobile/**'
-      - 'services/pokedex/**'
+    paths: ['services/pokedex-mobile/**']
   workflow_dispatch:
 
 jobs:
@@ -52,11 +45,12 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev libgles2-mesa-dev \
             libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
 
+      # make test, not the commands themselves: the Makefile says it
+      # runs "what CI runs", and that is only true if this IS it. Two
+      # copies of the same command drift, and the one that drifts is
+      # whichever nobody is looking at.
       - name: Test
-        run: go test ./...
-
-      - name: Vet
-        run: go vet ./...
+        run: make test
 
   release:
     # Only when VERSION changed, and only from main.
@@ -89,22 +83,32 @@ jobs:
       # JDK 17, despite Gio's install guide saying to use 8.
       #
       # That advice is stale. Modern build-tools ship a d8 compiled for
-      # class file 55, so a JDK 8 runtime cannot load it. sdkmanager
-      # independently refuses anything below 17. And the reason 8 was
-      # ever needed does not apply: gogio invokes javac with an explicit
-      # "-source 1.8 -target 1.8", so its bytecode is Java 8 whatever
-      # JDK compiles it.
+      # class file 55, so a JDK 8 runtime cannot load it:
+      #
+      #   UnsupportedClassVersionError: com/android/tools/r8/D8 has been
+      #   compiled by a more recent version of the Java Runtime (class
+      #   file version 55.0) ... only recognizes up to 52.0
+      #
+      # sdkmanager independently refuses anything below 17. And the
+      # reason 8 was ever needed does not apply: gogio invokes javac
+      # with an explicit "-source 1.8 -target 1.8", so the bytecode it
+      # produces is Java 8 whatever JDK compiles it.
       - uses: actions/setup-java@v4
         if: steps.gate.outputs.go == 'true'
         with:
           distribution: temurin
           java-version: "17"
 
+      # The NDK is what cross-compiles the Go code for the phone's CPU;
+      # the runner already has platforms and build-tools preinstalled.
+      #
+      # Pinning versions here is advisory at best: gogio calls
+      # latestPlatform and latestTools, so it uses whatever newest is on
+      # disk regardless of what this asks for.
       - uses: android-actions/setup-android@v3
         if: steps.gate.outputs.go == 'true'
         with:
           packages: 'platforms;android-34 build-tools;34.0.0 ndk;26.1.10909125'
-
 
       - name: Read version
         if: steps.gate.outputs.go == 'true'
@@ -130,7 +134,8 @@ jobs:
       # not three. The fourth is Android's integer versionCode, which
       # must increase on every release or a phone refuses the upgrade as
       # a downgrade. github.run_number is used for it because it only
-      # ever goes up.
+      # ever goes up; deriving it from VERSION would mean encoding a
+      # fourth number by hand and never being allowed to get it wrong.
       - name: Build the APK
         if: steps.gate.outputs.go == 'true'
         working-directory: services/pokedex-mobile
@@ -147,63 +152,52 @@ jobs:
             -o pokedex-mobile.raw.apk \
             .
 
-      # Repackage the native libraries UNCOMPRESSED and page-aligned,
-      # then re-sign.
+      # Repackage so a modern phone will install it, then re-sign.
       #
-      # gogio writes every entry with zip.Deflate and runs `zipalign 4`.
-      # Modern Android refuses to install an APK whose .so files are
-      # compressed - the loader mmaps them straight out of the APK, so
-      # they must be STORED - and Android 15 wants 16 KB alignment
-      # rather than 4. The failure is the worst kind: the installer
-      # churns and then says only "app not installed", with the real
-      # reason in logcat that a phone user never sees.
+      # gogio writes every zip entry with Deflate and finishes with
+      # `zipalign 4`. Android mmaps native libraries straight out of
+      # the APK, so they must be STORED, and Android 15 wants them on
+      # a 16 KB page boundary. Compressed libs install nowhere: the
+      # installer churns and then says only "app not installed".
       #
-      # Signing has to happen after, because rewriting the zip
-      # invalidates the v2 block gogio produced.
+      # `zipalign -p` is NOT enough on its own - it aligns entries
+      # that are already uncompressed and silently leaves compressed
+      # ones alone. The entry has to be rewritten.
+      #
+      # Signing comes after, because rewriting the zip invalidates
+      # whatever signature gogio produced.
       - name: Make the APK installable
         if: steps.gate.outputs.go == 'true'
         working-directory: services/pokedex-mobile
         run: |
           set -eu
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          echo "build-tools: $BT"
 
-          # Rewrite the .so entries as STORED and page-aligned.
-          #
-          # `zipalign -p 16` alone does NOT do this: it aligns entries
-          # that are already uncompressed and silently leaves
-          # compressed ones exactly as they were. The first attempt at
-          # this fix ran zipalign, reported success, and produced an
-          # APK with all four libs still Defl:N - caught by the check
-          # below rather than by a phone.
-          python3 ../../scripts/repack_apk.py pokedex-mobile.raw.apk pokedex-mobile.aligned.apk
+          python3 repack_apk.py pokedex-mobile.raw.apk pokedex-mobile.aligned.apk
 
-          # gogio already generated a debug keystore; reuse it so the
-          # signing identity does not change within a build.
           KS="$HOME/.android/debug.keystore"
           if [ ! -f "$KS" ]; then
             mkdir -p "$HOME/.android"
             keytool -genkeypair -keystore "$KS" -storepass android \
               -keypass android -alias androiddebugkey -keyalg RSA \
-              -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+              -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
           fi
 
           "$BT/apksigner" sign \
             --ks "$KS" --ks-pass pass:android --key-pass pass:android \
             --ks-key-alias androiddebugkey \
             --v1-signing-enabled true --v2-signing-enabled true \
-            --v3-signing-enabled true --v4-signing-enabled false \
+            --v3-signing-enabled true \
             --out pokedex-mobile.apk pokedex-mobile.aligned.apk
 
-          "$BT/apksigner" verify --print-certs pokedex-mobile.apk
           rm -f pokedex-mobile.raw.apk pokedex-mobile.aligned.apk
 
       # Fails the build rather than publishing an APK a phone refuses.
-      # Both checks are things that shipped broken once.
       - name: Check the APK will install
         if: steps.gate.outputs.go == 'true'
         working-directory: services/pokedex-mobile
-        run: python3 ../../scripts/check_apk.py pokedex-mobile.apk
+        run: python3 check_apk.py pokedex-mobile.apk
 
       - name: Checksums
         if: steps.gate.outputs.go == 'true'

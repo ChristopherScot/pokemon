@@ -24,9 +24,13 @@ ifneq (,$(wildcard Makefile.local))
 	@$(MAKE) --no-print-directory help-local 2>/dev/null || true
 endif
 
+# -o, and the package rather than ./... - `go build ./...` compiles
+# every package and THROWS THE BINARY AWAY, so `make build` looked like
+# it worked and left nothing to run. It writes ./pokedex-mobile,
+# which is what `make clean` removes and what you type to run it.
 .PHONY: build
 build:
-	go build ./...
+	go build -o pokedex-mobile .
 
 # -race because CI runs it that way, and a data race that only appears
 # under load is the kind of thing you want to find here instead.
