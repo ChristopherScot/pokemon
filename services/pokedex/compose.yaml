@@ -1,0 +1,32 @@
+# The database the tests want, and the one CI runs.
+#
+# Same image and same settings as the `services: postgres` block in
+# .github/workflows/pokedex.yaml, so a test that passes here passes
+# there. Postgres is not an optional extra for this service: battle
+# state round-trips through it as JSON, and a whole class of bug - a
+# field the encoder cannot see - exists ONLY on that path. One shipped.
+#
+#   docker compose up -d
+#   POKEDEX_TEST_DSN=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable \
+#     go test ./...
+#
+# Without POKEDEX_TEST_DSN those tests SKIP, and a skip reads as a pass.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: pokedex
+    # 15432, not 5432: a dev box usually has a postgres already, and the
+    # tests drop every table they touch.
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    # Nothing here needs to outlive the container: every test migrates
+    # and seeds what it needs.
+    tmpfs:
+      - /var/lib/postgresql/data

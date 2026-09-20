@@ -48,12 +48,51 @@ without the defaults would be worse than useless.
 ## Working on it
 
 ```sh
+docker compose up -d             # the database the tests want
 go test ./...                    # server, client and paging
 go run .                         # PORT=3000 by default
 homelabctl regen                 # after editing openapi.yml
 homelabctl check deploy          # deploy manifests and spec problems
 homelabctl diff                  # what would change in the GitOps repo
 ```
+
+### Run the tests against a real database
+
+Battle state round-trips through postgres as JSON, so a field the
+encoder cannot see is lost there and nowhere else. That is not
+hypothetical: `baseStats` had unexported fields, every reloaded
+combatant fought with zero attack and defense, and every move in the
+game dealt exactly 1 damage. The in-memory store never serialises
+anything, so nothing caught it.
+
+The tests that need a database skip without a DSN, **and a skip reads as
+a pass**:
+
+```sh
+docker compose up -d
+POKEDEX_TEST_DSN=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable \
+  go test ./...
+```
+
+That includes `TestAWholeGameOverPostgres`, which plays a battle from
+registration to a winner. CI runs the same image with the same settings
+and fails if that test skips.
+
+The same container also closes the gap between a local run and a
+deployed one. `DATABASE_URL` switches BOTH halves together — the pokedex
+is loaded from the database instead of the embedded JSON, and battles go
+to the postgres store instead of memory — so this is what production
+does, not an approximation of it:
+
+```sh
+docker compose up -d
+DATABASE_URL=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable go run . seed
+DATABASE_URL=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disable go run .
+```
+
+Without `DATABASE_URL` the server still starts — embedded pokedex, state
+in memory — which is fine for a quick look at an endpoint, and the log
+line says which one you got. It is not where you confirm a battle works.
 
 Bump `info.version` in `openapi.yml` when the API changes, then
 `homelabctl regen` — it syncs the version the clients report. CI tags the
