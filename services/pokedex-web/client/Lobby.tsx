@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { components } from '@christopherscot/pokedex-client'
 
 import { V } from './shared.ts'
+import { useWaiting } from './useWaiting.ts'
 
 type Waiting = components['schemas']['WaitingBattle']
 export type Trainer = { name: string; token: string }
@@ -17,36 +18,9 @@ export type Trainer = { name: string; token: string }
 const POLL = 3000
 
 export function Lobby({ me, initial }: { me: Trainer | null; initial: Waiting[] }) {
-  const [waiting, setWaiting] = useState(initial)
+  const waiting = useWaiting(initial)
   const [renaming, setRenaming] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    let live = true
-    let timer: ReturnType<typeof setTimeout> | undefined
-
-    async function tick() {
-      if (!live) return
-      if (!document.hidden) {
-        try {
-          const res = await fetch('/battle/waiting', { headers: V })
-          if (res.ok && live) {
-            const body = (await res.json()) as { waiting?: Waiting[] }
-            setWaiting(body.waiting ?? [])
-          }
-        } catch {
-          // A dropped poll is not worth showing; the next one retries.
-        }
-      }
-      if (live) timer = setTimeout(tick, POLL)
-    }
-
-    timer = setTimeout(tick, POLL)
-    return () => {
-      live = false
-      if (timer !== undefined) clearTimeout(timer)
-    }
-  }, [])
 
   return (
     <>

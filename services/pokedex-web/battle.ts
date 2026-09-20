@@ -1,12 +1,13 @@
-// Battle mode for the web UI.
+// Battle mode: the routes and the HTML shells for the battle page and
+// the lobby.
 //
-// The page is server-rendered like the rest of this service, but a
-// battle changes while you are looking at it - so this one page carries
-// a small inline script that polls and re-renders. No framework and no
-// build step: the container stays `node server.js`.
+// The shells are server-rendered and hand React a mount point plus a
+// JSON "boot island" with what the server already knew. The interactive
+// half lives in client/ - BattlePage and Lobby - because a battle
+// changes while you are looking at it and the board has to poll.
 //
-// The API decides everything. This file renders state and posts intents,
-// exactly as the CLI and TUI do.
+// The API decides everything. This file renders state and posts
+// intents, exactly as the CLI and TUI do.
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import createClient, { exponentialRetry, noRetry } from '@christopherscot/pokedex-client'
@@ -54,18 +55,14 @@ import { island } from './types.ts'
 import { UI_VERSION } from './version.ts'
 export { UI_VERSION }
 
-// Shared by BOTH inline scripts.
+// UI_VERSION is re-exported because the server reads it (to refuse a
+// client that is too old) and the browser code imports it from
+// version.ts to send it. One value, two readers.
 //
-// battlePage and lobbyPage each emit their own <script type="module">,
-// which are separate module scopes in separate documents. A helper
-// defined in one is simply absent in the other - and because these are
-// strings, TypeScript cannot see the difference. Client-Version headers
-// were added to the lobby's fetches while `V` was only ever declared in
-// the battle page's script, so every lobby button threw
-// "ReferenceError: V is not defined" and did nothing, silently, inside
-// an async handler.
-//
-// Anything both pages need goes here, once.
+// It used to be pasted into two inline <script> strings, which is how
+// `V is not defined` shipped: the two scripts were separate module
+// scopes and TypeScript could not see inside either. That failure mode
+// is gone - an import now either resolves or fails the build.
 
 // The battle page. Everything below the initial render is done by the
 // inline script, which polls /battle/:id/state and swaps the board.

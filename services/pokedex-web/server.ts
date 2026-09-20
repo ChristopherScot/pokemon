@@ -1,6 +1,12 @@
-// TypeScript, run directly: Node strips the types at load time, so
-// there is no build step, no bundler and no dist/ - the container still
-// runs `node server.ts` and the distroless image needs nothing extra.
+// The server half: routes, the HTML shell, and the CSS.
+//
+// There IS a build step. Vite bundles this to dist/server.js and the
+// browser code to dist/assets/*.js, and the image copies both. That
+// changed when the pages became React - Node strips types but does not
+// compile JSX, so `node server.ts` cannot run a .tsx file at all.
+//
+// Locally `npm start` still runs the sources through Node's type
+// stripping; `npm run start:dist` runs what actually ships.
 //
 // Stripping is not checking. `npm run typecheck` is what actually
 // verifies these types, and CI runs it before the tests.

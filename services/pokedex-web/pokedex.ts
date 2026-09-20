@@ -8,7 +8,6 @@
 //
 // Rendered server-side as plain HTML. A card grid over 100 rows does not
 // need a framework, a build step or a client bundle, and not having one
-// means the container is `node server.js` with no compile stage.
 
 import type { FastifyInstance } from 'fastify'
 import { colour, island } from './types.ts'
