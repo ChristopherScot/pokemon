@@ -86,14 +86,21 @@ jobs:
           cache: true
           cache-dependency-path: services/pokedex-mobile/go.sum
 
-      # JDK 8 specifically. Gio's own install guide says "more recent
-      # versions of Java will break the build" - this is not caution,
-      # the Android build tooling gogio drives fails on newer JDKs.
+      # TWO JDKs, in this order, because the two tools disagree.
+      #
+      # sdkmanager refuses to run on anything below 17 ("This tool
+      # requires JDK 17 or later"), and gogio's d8 step is stuck on 8 -
+      # Gio's install guide says plainly that "more recent versions of
+      # Java will break the build". Installing 8 first and then the SDK
+      # fails, because the SDK install is what runs sdkmanager.
+      #
+      # So: 17 to fetch the SDK, then 8 for the build itself. The second
+      # setup-java overwrites JAVA_HOME, which is what gogio reads.
       - uses: actions/setup-java@v4
         if: steps.gate.outputs.go == 'true'
         with:
           distribution: temurin
-          java-version: "8"
+          java-version: "17"
 
       # SDK >= 31, which is Gio's stated minimum. The NDK is what
       # cross-compiles the Go code for the phone's CPU.
@@ -101,6 +108,14 @@ jobs:
         if: steps.gate.outputs.go == 'true'
         with:
           packages: 'platforms;android-34 build-tools;34.0.0 ndk;26.1.10909125'
+
+      # Now down to 8 for gogio. The SDK is already on disk, so nothing
+      # after this point runs sdkmanager.
+      - uses: actions/setup-java@v4
+        if: steps.gate.outputs.go == 'true'
+        with:
+          distribution: temurin
+          java-version: "8"
 
       - name: Read version
         if: steps.gate.outputs.go == 'true'
