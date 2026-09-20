@@ -1,13 +1,11 @@
 package battletext
 
 import (
-	"errors"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
-	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 func TestEventIconsAreOneCodePointWide(t *testing.T) {
@@ -47,14 +45,40 @@ func TestEventIconIsEmptyForNarration(t *testing.T) {
 	}
 }
 
-func TestIdentityAdviceOnlyAnswersIdentityErrors(t *testing.T) {
-	if IdentityAdvice(battleclient.ErrStaleIdentity) == "" {
-		t.Error("no advice for a stale identity")
+// Classify is the shared part; the glyph is the client's. A client
+// that wants a drawable or a CSS class maps the kind itself, which
+// is what the phone does - it used to render these emoji because
+// EventIcon was the only thing on offer.
+func TestClassifyNamesWhatHappenedWithoutChoosingAGlyph(t *testing.T) {
+	for name, tc := range map[string]struct {
+		ev   api.BattleEvent
+		want EventKind
+	}{
+		"fainted":         {api.BattleEvent{Fainted: api.NewOptBool(true)}, EventFainted},
+		"immune":          {api.BattleEvent{Effectiveness: api.NewOptFloat64(0)}, EventNoEffect},
+		"super effective": {api.BattleEvent{Effectiveness: api.NewOptFloat64(2)}, EventSuperEffective},
+		"resisted":        {api.BattleEvent{Effectiveness: api.NewOptFloat64(0.5)}, EventResisted},
+		"plain hit":       {api.BattleEvent{Damage: api.NewOptInt(10)}, EventHit},
+		"status move":     {api.BattleEvent{Move: api.NewOptString("growl")}, EventStatus},
+		"nothing":         {api.BattleEvent{Text: "a new battle"}, EventPlain},
+	} {
+		if got := Classify(tc.ev); got != tc.want {
+			t.Errorf("Classify(%s) = %v, want %v", name, got, tc.want)
+		}
 	}
-	if IdentityAdvice(battleclient.ErrNoIdentity) == "" {
-		t.Error("no advice for a missing identity")
+}
+
+// EventIcon must keep agreeing with Classify, or the terminals and
+// the phone would narrate the same event differently.
+func TestEventIconFollowsClassify(t *testing.T) {
+	fainted := api.BattleEvent{Fainted: api.NewOptBool(true)}
+	if Classify(fainted) != EventFainted {
+		t.Fatal("fixture no longer classifies as fainted")
 	}
-	if got := IdentityAdvice(errors.New("connection refused")); got != "" {
-		t.Errorf("advice for an unrelated error: %q", got)
+	if EventIcon(fainted) == "" {
+		t.Error("a classified event rendered no icon")
+	}
+	if EventIcon(api.BattleEvent{Text: "plain"}) != "" {
+		t.Error("an unclassified event rendered an icon")
 	}
 }

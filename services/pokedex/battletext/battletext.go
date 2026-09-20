@@ -1,13 +1,20 @@
-// Package battletext is the wording Go terminal clients show for battle
+// Package battletext is the wording Go clients show for a battle, so
+// that a terminal, a phone and a web page narrate it the same way.
+//
+// The doc used to say "terminal clients", which stopped being true
+// when the Android app imported it - and the phone then rendered
+// terminal emoji, because emoji was what the package offered.
+//
+// The split this package now keeps: CLASSIFYING an event is general
+// and lives here; choosing a glyph for it is presentation and lives
+// in the client. EventKind is the seam.
 package battletext
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
-	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
 func StageLabel(p api.BattlePokemon) string {
@@ -43,35 +50,69 @@ func Conditions(p api.BattlePokemon) []string {
 	return out
 }
 
-func EventIcon(ev api.BattleEvent) string {
+// EventKind is what happened, without saying how to show it.
+//
+// A terminal wants an emoji, an Android app wants a drawable and a
+// web page wants a CSS class. The classification is the same for all
+// three; only the rendering differs, so only the rendering belongs
+// in a client.
+type EventKind int
+
+const (
+	// EventPlain is an event with nothing to mark - a log line.
+	EventPlain EventKind = iota
+	EventFainted
+	EventNoEffect
+	EventSuperEffective
+	EventResisted
+	EventHit
+	EventStatus
+)
+
+// Classify reports what kind of event this is.
+func Classify(ev api.BattleEvent) EventKind {
 	if f, ok := ev.Fainted.Get(); ok && f {
-		return "💀"
+		return EventFainted
 	}
 	if e, ok := ev.Effectiveness.Get(); ok {
 		switch {
 		case e == 0:
-			return "🚫" // immune
+			return EventNoEffect
 		case e >= 2:
-			return "💥"
+			return EventSuperEffective
 		case e > 0 && e < 1:
-			return "🪨"
+			return EventResisted
 		}
 	}
 	if d, ok := ev.Damage.Get(); ok && d > 0 {
-		return "👊"
+		return EventHit
 	}
 	if _, ok := ev.Move.Get(); ok {
-		return "✨"
+		return EventStatus
 	}
-	return ""
+	return EventPlain
 }
 
-func IdentityAdvice(err error) string {
-	switch {
-	case errors.Is(err, battleclient.ErrNoIdentity):
-		return "no trainer registered yet — register to start battling"
-	case errors.Is(err, battleclient.ErrStaleIdentity):
-		return "the server no longer knows this trainer (it restarted) — register again"
+// EventIcon is the terminal rendering of an event kind.
+//
+// Kept here because the CLI and the TUI both want exactly this table
+// and neither is a better home than the other. A client that wants
+// something else - a drawable, a CSS class - calls Classify and maps
+// the kind itself, which is what the phone now does.
+func EventIcon(ev api.BattleEvent) string {
+	switch Classify(ev) {
+	case EventFainted:
+		return "💀"
+	case EventNoEffect:
+		return "🚫"
+	case EventSuperEffective:
+		return "💥"
+	case EventResisted:
+		return "🪨"
+	case EventHit:
+		return "👊"
+	case EventStatus:
+		return "✨"
 	}
 	return ""
 }

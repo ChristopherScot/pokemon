@@ -363,3 +363,13 @@ func (c *Client) CheckTurn(b *api.Battle, t Turn) error {
 	}
 	return nil
 }
+
+func IdentityAdvice(err error) string {
+	switch {
+	case errors.Is(err, ErrNoIdentity):
+		return "no trainer registered yet — register to start battling"
+	case errors.Is(err, ErrStaleIdentity):
+		return "the server no longer knows this trainer (it restarted) — register again"
+	}
+	return ""
+}

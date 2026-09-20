@@ -185,13 +185,41 @@ func recentLog(b *api.Battle, n int) []api.BattleEvent {
 	return b.Log[len(b.Log)-n:]
 }
 
-// eventLine is one rendered log entry, icon included, matching the
-// other clients.
+// eventLine is one rendered log entry.
+//
+// The KIND comes from battletext, shared with the terminal clients so
+// all of them agree on what happened. The glyph is chosen here,
+// because that is a presentation decision and a phone is not a
+// terminal - it used to call EventIcon and render the terminal's
+// emoji, which is what made a package documented for "terminal
+// clients" the phone's renderer too.
 func eventLine(ev api.BattleEvent) string {
-	if icon := battletext.EventIcon(ev); icon != "" {
-		return icon + " " + ev.Text
+	if icon := eventGlyph(battletext.Classify(ev)); icon != "" {
+		return icon + "  " + ev.Text
 	}
 	return ev.Text
+}
+
+// eventGlyph is this app's rendering of an event kind.
+//
+// Still emoji today, and deliberately its own table: swapping in a
+// drawable is a change to this function and nothing else.
+func eventGlyph(k battletext.EventKind) string {
+	switch k {
+	case battletext.EventFainted:
+		return "\u2620\ufe0f" // skull and crossbones
+	case battletext.EventNoEffect:
+		return "\u26d4" // no entry
+	case battletext.EventSuperEffective:
+		return "\u2757" // exclamation
+	case battletext.EventResisted:
+		return "\U0001f6e1\ufe0f" // shield
+	case battletext.EventHit:
+		return "\U0001f44a" // fist
+	case battletext.EventStatus:
+		return "\u2728" // sparkles
+	}
+	return ""
 }
 
 // --- turn selection -------------------------------------------------

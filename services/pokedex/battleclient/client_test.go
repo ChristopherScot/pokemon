@@ -291,3 +291,17 @@ func TestCheckTurnReportsTheSameFirstReasonAsTheServer(t *testing.T) {
 		t.Errorf("fainted attacker with a bad move = %v, want ErrFainted first", err)
 	}
 }
+
+// Moved here with IdentityAdvice: it tests the mapping of THESE
+// errors, so it belongs beside them.
+func TestIdentityAdviceOnlyAnswersIdentityErrors(t *testing.T) {
+	if IdentityAdvice(ErrStaleIdentity) == "" {
+		t.Error("no advice for a stale identity")
+	}
+	if IdentityAdvice(ErrNoIdentity) == "" {
+		t.Error("no advice for a missing identity")
+	}
+	if got := IdentityAdvice(errors.New("connection refused")); got != "" {
+		t.Errorf("advice for an unrelated error: %q", got)
+	}
+}
