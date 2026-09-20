@@ -45,7 +45,15 @@ export function pickLinks(releases: Release[], os: string, arch: string): Link[]
       // scheme is checked rather than trusted. esc() stops it breaking
       // out of the attribute; it does not stop `javascript:`.
       if (asset && asset.browser_download_url.startsWith('https://')) {
-        links.push({ tool, url: asset.browser_download_url, tag: release.tag_name })
+        // The tag is shown to a person, so strip the namespace a
+        // monorepo release carries: "pokedex-cli/v0.1.3" is a tag, but
+        // "v0.1.3" is the version they are downloading. Selection above
+        // matches on the ASSET name, so prefixes never affected which
+        // release is picked - only how it reads.
+        const tag = release.tag_name.includes('/')
+          ? release.tag_name.slice(release.tag_name.lastIndexOf('/') + 1)
+          : release.tag_name
+        links.push({ tool, url: asset.browser_download_url, tag })
         break
       }
     }

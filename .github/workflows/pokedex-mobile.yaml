@@ -158,7 +158,14 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: steps.gate.outputs.go == 'true'
         with:
-          tag_name: ${{ steps.v.outputs.version }}
+          # Prefixed, because releases are per REPOSITORY and this
+          # monorepo's services each cut their own. Sharing one
+          # namespace made `latest` mean "whichever service released
+          # last" - so `update` offered a sibling's artifact - and two
+          # services reaching the same number attached their assets to
+          # ONE release, where the second checksums.txt overwrote the
+          # first. v0.1.0 already lost the TUI's that way.
+          tag_name: pokedex-mobile/${{ steps.v.outputs.version }}
           files: |
             services/pokedex-mobile/pokedex-mobile.apk
             services/pokedex-mobile/checksums.txt
