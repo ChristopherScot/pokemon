@@ -211,3 +211,22 @@ func TestPickStageNamesTheNextTap(t *testing.T) {
 		t.Error("reset left state behind")
 	}
 }
+
+// The server accepts almost any name and there is no way to rename a
+// trainer afterwards, so a stray thumb sticks permanently.
+func TestBadTrainerNamesAreRefusedBeforeTheyStick(t *testing.T) {
+	for name, wantBad := range map[string]bool{
+		"":              true,
+		"a":             true,
+		"test2637_74(4": true, // a real one, typed on a phone
+		"has space":     true,
+		"ash":           false,
+		"Misty_99":      false,
+		"brock-1":       false,
+	} {
+		got := badTrainerName(name) != ""
+		if got != wantBad {
+			t.Errorf("badTrainerName(%q) rejected=%v, want %v", name, got, wantBad)
+		}
+	}
+}

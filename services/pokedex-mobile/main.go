@@ -19,6 +19,8 @@ import (
 	"image/color"
 	"log"
 	"os"
+	"strings"
+	"unicode/utf8"
 
 	"gioui.org/app"
 	"gioui.org/font/gofont"
@@ -259,14 +261,40 @@ func (a *ui) apply(r result) {
 }
 
 // statusFor turns an error into the one line the UI has room for.
+//
+// Raw client errors are unreadable on a phone. The worst is ogen's
+// own request validation, which answers with {"error_message": ...}
+// where the spec declares {"message": ...} - so the generated client
+// cannot decode it and surfaces "decode response: default (code 400):
+// decode application/json: invalid: message (field required)". That
+// string tells a player nothing and looks like a crash.
 func statusFor(err error) string {
 	if err == nil {
 		return ""
 	}
 	msg := err.Error()
-	// Keep it to something that fits a phone.
-	if len(msg) > 120 {
-		msg = msg[:117] + "..."
+
+	switch {
+	case strings.Contains(msg, "decode response"), strings.Contains(msg, "field required"):
+		return "The server rejected that. Try a different name."
+	case strings.Contains(msg, "context deadline exceeded"),
+		strings.Contains(msg, "Client.Timeout"):
+		return "No answer from the server. Check your connection."
+	case strings.Contains(msg, "no such host"), strings.Contains(msg, "dial tcp"):
+		return "Cannot reach the server."
+	case strings.Contains(msg, "401"), strings.Contains(msg, "403"):
+		return "That trainer is not recognised. Register again."
+	}
+
+	// Anything else: show it, but trimmed on a RUNE boundary so a
+	// multi-byte character is never cut in half into U+FFFD.
+	const limit = 100
+	if len(msg) > limit {
+		cut := msg[:limit]
+		for len(cut) > 0 && !utf8.ValidString(cut) {
+			cut = cut[:len(cut)-1]
+		}
+		msg = cut + "\u2026"
 	}
 	return msg
 }

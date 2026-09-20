@@ -1,5 +1,6 @@
-v0.3.3
+v0.3.4
 
+v0.3.4 the Pokedex loads: limit=200 was a 400 every time, and errors are readable now
 v0.3.3 the repack actually decompresses: zipalign -p alone left them Defl
 v0.3.2 the APK actually installs: native libs stored and page-aligned
 v0.3.1 the palette comes from the Pokemon brand colours, and surfaces are neutral again

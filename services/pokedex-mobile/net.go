@@ -33,6 +33,10 @@ const requestTimeout = 15 * time.Second
 // deliberately waits for the opponent.
 const watchTimeout = 2 * time.Minute
 
+// dexPageSize is the spec's maximum for ListPokemon. Asking for more
+// is a 400, not a clamp.
+const dexPageSize = 100
+
 // result is what a background call hands back to the UI loop.
 type result struct {
 	kind   resultKind
@@ -94,8 +98,11 @@ func (u *ui) loadDex() {
 	}
 	u.busy = true
 	u.go1(requestTimeout, func(ctx context.Context) result {
+		// 100 is the spec's maximum. Asking for 200 made every
+		// request a 400, so the Pokedex was empty on a real phone
+		// while the tests - which never call the API - passed.
 		res, err := client.ListPokemon(ctx, api.ListPokemonParams{
-			Limit: api.NewOptInt(200),
+			Limit: api.NewOptInt(dexPageSize),
 		})
 		if err != nil {
 			return result{kind: resDex, err: err}

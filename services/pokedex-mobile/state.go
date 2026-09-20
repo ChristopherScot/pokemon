@@ -291,3 +291,29 @@ func (a *ui) filteredDex() []api.Pokemon {
 	}
 	return out
 }
+
+// badTrainerName explains why a name will not do, or returns "".
+//
+// The server accepts almost anything - it does not even require the
+// name to be unique - so a stray thumb produces a trainer called
+// "test2637_74(4" and there is no way to rename one. Checked here
+// because this is the only place it can be checked before it sticks.
+func badTrainerName(s string) string {
+	switch {
+	case s == "":
+		return "Enter a name."
+	case len([]rune(s)) < 2:
+		return "That is a bit short."
+	case len([]rune(s)) > 20:
+		return "Keep it under 20 characters."
+	}
+	for _, r := range s {
+		ok := r == '-' || r == '_' ||
+			(r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9')
+		if !ok {
+			return "Letters, numbers, - and _ only."
+		}
+	}
+	return ""
+}
