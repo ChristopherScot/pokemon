@@ -64,6 +64,68 @@ go get github.com/christopherscot/pokedex@v0.2.0
 npm install git+https://github.com/christopherscot/pokedex#v0.2.0
 ```
 
+## Changing the API and its consumers in one commit
+
+Every consumer in this repo builds against the client in this directory,
+not against a published one. So an API change is testable across all four
+services before it is committed, and lands as a single commit rather than
+a spec PR, a publish, and a follow-up PR per consumer.
+
+Two mechanisms, one per language:
+
+| consumer | wiring | where |
+|---|---|---|
+| pokedex-cli, pokedex-tui | `replace ... => ../pokedex` | their `go.mod` |
+| pokedex-web | `"@christopherscot/pokedex-client": "file:../pokedex/clients/ts"` | its `package.json` |
+
+The loop:
+
+```sh
+cd services/pokedex
+$EDITOR openapi.yml              # change the contract
+homelabctl regen                 # rewrites api/ AND clients/ts/
+go test ./...                    # server matches the new spec
+
+cd ../pokedex-cli && go test ./...     # sees it immediately
+cd ../pokedex-tui && go test ./...
+cd ../pokedex-web && npm test          # also immediately
+```
+
+Nothing is published in that loop. `npm publish` happens in CI, only when
+`info.version` names a version not already on npm — a deploy that does not
+touch the spec publishes nothing.
+
+### Two things that make the web side work
+
+`file:` symlinks the client into `node_modules`, and that has two
+consequences worth knowing before you touch either file:
+
+- **`openapi-fetch` is declared in pokedex-web too.** npm does not install
+  a symlinked package's own dependencies, so the client's import of it
+  resolves against pokedex-web's `node_modules`. Removing it there breaks
+  the build with "Cannot find package 'openapi-fetch'", pointing at a file
+  in a directory that looks unrelated.
+- **`resolve.preserveSymlinks: true` in both vite configs.** Without it
+  the bundler resolves the client's imports from the symlink's REAL path,
+  walks up from `services/pokedex/clients/ts/` looking for
+  `node_modules`, finds none, and fails. Node's runtime resolver follows
+  the link back; the bundler does not unless told to.
+
+### Versions, and what does not bump
+
+Three separate things, and only the middle one is tied to the spec:
+
+| | when it changes |
+|---|---|
+| deployed image | every merge to main - image-updater watches the `:latest` digest |
+| client version | only when `info.version` changes in `openapi.yml` |
+| npm publish | only when that version is not already on npm |
+
+A deploy does not bump a client version. `file:` keeps the consumer on
+whatever the spec currently says, so the dependency range never needs
+editing - which is what previously let pokedex-web sit on `^0.6.0` while
+the spec had moved to 0.7.0.
+
 ## Calling this service
 
 ```go

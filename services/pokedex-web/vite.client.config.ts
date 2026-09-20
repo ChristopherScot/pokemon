@@ -2,6 +2,12 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  // Same reason as vite.config.ts: the client package is a symlinked
+  // file: dependency, and the bundler must resolve through the link to
+  // find the hoisted node_modules.
+  resolve: {
+    preserveSymlinks: true,
+  },
   plugins: [react()],
   build: {
     outDir: 'dist/assets',

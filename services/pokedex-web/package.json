@@ -30,7 +30,8 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
-    "@christopherscot/pokedex-client": "^0.6.0",
+    "@christopherscot/pokedex-client": "file:../pokedex/clients/ts",
+    "openapi-fetch": "^0.17.0",
     "fastify": "^5.12.5",
     "prom-client": "^15.1.3",
     "react": "^19.3.0",
