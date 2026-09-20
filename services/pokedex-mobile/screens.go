@@ -23,6 +23,20 @@ func tapBtn(gtx layout.Context, th *material.Theme, c *widget.Clickable, label s
 	return material.Button(th, c, label).Layout(gtx)
 }
 
+// rigid wraps a flex child so it sizes to its CONTENT.
+//
+// A vertical Flex hands each child the full remaining height as a
+// minimum, and anything built from another Flex honours that minimum -
+// so the first thing in the column claims the whole screen and
+// everything after it draws off the bottom. Clearing Min.Y is what
+// makes "as tall as it needs to be" mean that.
+func rigid(w layout.Widget) layout.FlexChild {
+	return layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Min.Y = 0
+		return w(gtx)
+	})
+}
+
 func spacer(h int) layout.FlexChild {
 	return layout.Rigid(layout.Spacer{Height: unit.Dp(h)}.Layout)
 }
@@ -53,14 +67,14 @@ func (a *ui) registerScreen(gtx layout.Context, th *material.Theme) layout.Dimen
 	}
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(material.Body1(th, "Pick a trainer name to battle with.").Layout),
+		rigid(material.Body1(th, "Pick a trainer name to battle with.").Layout),
 		spacer(16),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.Y = gtx.Dp(tapTarget)
 			return material.Editor(th, &a.nameInput, "trainer name").Layout(gtx)
 		}),
 		spacer(16),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return tapBtn(gtx, th, &a.regBtn, "Register")
 		}),
 	)
@@ -81,12 +95,12 @@ func (a *ui) browseScreen(gtx layout.Context, th *material.Theme) layout.Dimensi
 	}
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			gtx.Constraints.Min.Y = gtx.Dp(tapTarget)
 			return material.Editor(th, &a.filter, "search").Layout(gtx)
 		}),
 		spacer(8),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			n := len(a.team)
 			t := "Team: none picked"
 			if n > 0 {
@@ -150,18 +164,18 @@ func (a *ui) teamScreen(gtx layout.Context, th *material.Theme) layout.Dimension
 	}
 
 	children := []layout.FlexChild{
-		layout.Rigid(material.H6(th, title).Layout),
+		rigid(material.H6(th, title).Layout),
 		spacer(12),
 	}
 	for i, n := range a.team {
 		n := n
 		i := i
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
 			return material.Body1(th, itoa(i+1)+".  "+n).Layout(gtx)
 		}), spacer(4))
 	}
 	if !teamReady(a.team) {
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Body2(th, "Pick "+itoa(teamSize-len(a.team))+" more on the Pokedex tab.")
 			l.Color = dim
 			return l.Layout(gtx)
@@ -169,7 +183,7 @@ func (a *ui) teamScreen(gtx layout.Context, th *material.Theme) layout.Dimension
 	}
 	children = append(children,
 		spacer(16),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			if !teamReady(a.team) {
 				gtx = gtx.Disabled()
 			}
@@ -180,7 +194,7 @@ func (a *ui) teamScreen(gtx layout.Context, th *material.Theme) layout.Dimension
 			return tapBtn(gtx, th, &a.startBtn, lbl)
 		}),
 		spacer(8),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return tapBtn(gtx, th, &a.teamBack, "Back to Pokedex")
 		}),
 	)
@@ -211,15 +225,15 @@ func (a *ui) lobbyScreen(gtx layout.Context, th *material.Theme) layout.Dimensio
 	}
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return tapBtn(gtx, th, &a.newBattle, "Open a new battle")
 		}),
 		spacer(8),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return tapBtn(gtx, th, &a.refreshBtn, "Refresh")
 		}),
 		spacer(12),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			t := "Waiting for an opponent"
 			if len(waiting) == 0 {
 				t = "Nobody is waiting. Open one and someone can join."

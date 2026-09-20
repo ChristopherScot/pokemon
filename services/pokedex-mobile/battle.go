@@ -46,24 +46,31 @@ func (a *ui) battleScreen(gtx layout.Context, th *material.Theme) layout.Dimensi
 	a.handleBattleTaps(gtx, b, mine, theirs)
 	a.keepWatching(b)
 
+	// Controls are laid out BEFORE the log in flex order, so they get
+	// their space first. The log then flexes into whatever is left.
+	//
+	// The first version made the log Flexed(1) and the controls Rigid
+	// after it, which rendered the buttons at zero height: the log had
+	// already taken the screen. A battle with no move buttons is not a
+	// game, and it looked fine in a screenshot until you tried to tap.
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.banner(gtx, th, b)
 		}),
-		spacer(8),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		spacer(6),
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.sideRow(gtx, th, theirs, "Opponent", false)
 		}),
-		spacer(8),
+		spacer(6),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 			return a.logPane(gtx, th, b)
 		}),
-		spacer(8),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		spacer(6),
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.sideRow(gtx, th, mine, "You", true)
 		}),
-		spacer(8),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		spacer(6),
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.controls(gtx, th, b, mine, theirs)
 		}),
 	)
@@ -85,7 +92,7 @@ func (a *ui) banner(gtx layout.Context, th *material.Theme, b *api.Battle) layou
 
 func (a *ui) sideRow(gtx layout.Context, th *material.Theme, s api.Side, label string, ours bool) layout.Dimensions {
 	children := []layout.FlexChild{
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			l := material.Caption(th, label+" — "+s.Trainer)
 			l.Color = dim
 			return l.Layout(gtx)
@@ -93,7 +100,7 @@ func (a *ui) sideRow(gtx layout.Context, th *material.Theme, s api.Side, label s
 	}
 	for i := range s.Team {
 		i := i
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.monLine(gtx, th, s.Team[i], ours && i == a.sel.attacker && a.sel.haveAttacker)
 		}))
 	}
@@ -104,7 +111,7 @@ func (a *ui) sideRow(gtx layout.Context, th *material.Theme, s api.Side, label s
 func (a *ui) monLine(gtx layout.Context, th *material.Theme, p api.BattlePokemon, selected bool) layout.Dimensions {
 	return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			rigid(func(gtx layout.Context) layout.Dimensions {
 				txt := summarise(p) + "   " + itoa(p.Hp) + "/" + itoa(p.MaxHp)
 				if selected {
 					txt = "▶ " + txt
@@ -115,7 +122,7 @@ func (a *ui) monLine(gtx layout.Context, th *material.Theme, p api.BattlePokemon
 				}
 				return l.Layout(gtx)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			rigid(func(gtx layout.Context) layout.Dimensions {
 				return hpBar(gtx, hpFraction(p))
 			}),
 		)
@@ -149,7 +156,13 @@ func hpBar(gtx layout.Context, frac float32) layout.Dimensions {
 func (a *ui) logPane(gtx layout.Context, th *material.Theme, b *api.Battle) layout.Dimensions {
 	evs := recentLog(b, 30)
 	return material.List(th, &a.logList).Layout(gtx, len(evs), func(gtx layout.Context, i int) layout.Dimensions {
-		return material.Body2(th, eventLine(evs[i])).Layout(gtx)
+		// Min.X as well as Max.X: without a minimum the list packs
+		// rows side by side and the whole log reads as one run-on
+		// line, which is exactly what it did the first time.
+		gtx.Constraints.Min.X = gtx.Constraints.Max.X
+		return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return material.Body2(th, eventLine(evs[i])).Layout(gtx)
+		})
 	})
 }
 
@@ -165,9 +178,9 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 		l := material.Body2(th, "Waiting for the other trainer…")
 		l.Color = dim
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(l.Layout),
+			rigid(l.Layout),
 			spacer(8),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			rigid(func(gtx layout.Context) layout.Dimensions {
 				return tapBtn(gtx, th, &a.leaveBtn, "Leave")
 			}),
 		)
@@ -198,7 +211,7 @@ func (a *ui) pickRow(gtx layout.Context, th *material.Theme, n int, btns []widge
 	for i := 0; i < n && i < len(btns); i++ {
 		i := i
 		label, enabled := at(i)
-		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		children = append(children, rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				if !enabled {
 					gtx = gtx.Disabled()

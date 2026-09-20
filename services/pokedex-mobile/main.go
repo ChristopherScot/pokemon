@@ -167,7 +167,13 @@ func (a *ui) useIdentity(id battleclient.Identity) {
 	}
 }
 
-func (a *ui) invalidate() { a.w.Invalidate() }
+// invalidate asks for a redraw. Tolerates a nil window so a headless
+// test can drive the same code the app runs.
+func (a *ui) invalidate() {
+	if a.w != nil {
+		a.w.Invalidate()
+	}
+}
 
 // drain applies everything the background goroutines finished.
 //
@@ -249,7 +255,7 @@ func (a *ui) layout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	a.handleNav(gtx)
 
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.header(gtx, th)
 		}),
 		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -268,10 +274,10 @@ func (a *ui) layout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 				}
 			})
 		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.statusBar(gtx, th)
 		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		rigid(func(gtx layout.Context) layout.Dimensions {
 			if a.screen == screenRegister {
 				return layout.Dimensions{}
 			}

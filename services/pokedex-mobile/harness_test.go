@@ -54,9 +54,13 @@ func newHarness(t *testing.T) *harness {
 	th := material.NewTheme()
 	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
 
+	// newUI, not &ui{}: the constructor allocates the widget slices,
+	// and a harness that skips it renders a battle with no buttons -
+	// which is exactly the bug this harness existed to catch, found
+	// in the harness itself.
 	return &harness{
 		t: t, th: th, win: w,
-		ui:  &ui{results: make(chan result, 8)},
+		ui:  newUI(nil),
 		img: image.NewRGBA(image.Rect(0, 0, phoneW, phoneH)),
 	}
 }

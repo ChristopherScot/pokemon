@@ -25,3 +25,24 @@ func TestRegisterScreenRenders(t *testing.T) {
 		f.Close()
 	}
 }
+
+// A battle in progress: the screen a player spends the most time on,
+// and the one where a layout mistake costs a turn.
+func TestBattleScreenRenders(t *testing.T) {
+	h := newHarness(t)
+	h.ui.id.Name = "ash"
+	bc := testClient(t)
+	h.ui.bc = bc
+	h.ui.screen = screenBattle
+	h.ui.battle = testBattle("ash", "misty")
+
+	img := h.frame()
+	if !notBlank(img) {
+		t.Fatal("the battle screen rendered nothing")
+	}
+	if os.Getenv("SHOTS") != "" {
+		f, _ := os.Create("/tmp/shot-battle.png")
+		png.Encode(f, img)
+		f.Close()
+	}
+}
