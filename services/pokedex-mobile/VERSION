@@ -1,5 +1,6 @@
-v0.0.4
+v0.0.5
 
+v0.0.5 JDK 17: modern d8 cannot be loaded by a JDK 8 runtime
 v0.0.4 four-part version, so gogio accepts it
 v0.0.3 two JDKs: 17 to fetch the Android SDK, 8 for gogio
 v0.0.2 first APK: proves gogio builds an installable Android app in CI
