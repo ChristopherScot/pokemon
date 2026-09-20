@@ -222,12 +222,16 @@ function pick(b: Battle, mine: Side, theirs: Side, sel: Turn): string {
 
   const target = theirs.team[sel.target]
 
+  // Every wrapper in here carries an id for the same reason the mon
+  // rows do: without one, morph has nothing to match and rebuilds the
+  // subtree, which DETACHES the attack button. A player who clicked as
+  // a poll landed lost the click and their turn.
   return `<div class="pick" id="pick">` +
-    `<strong>${esc(attacker.name)}</strong> uses…` +
-    `<div class="moves">${moves}</div>` +
+    `<strong id="pick-who">${esc(attacker.name)}</strong> uses…` +
+    `<div class="moves" id="moves">${moves}</div>` +
     // Its own row, red and right-aligned: this ENDS the turn, and it
     // used to look like a fifth move.
-    `<div class="commit"><button id="go" type="submit" form="turn">` +
+    `<div class="commit" id="commit"><button id="go" type="submit" form="turn">` +
     `attack ${esc(target?.name ?? '')}</button></div>` +
     `</div>`
 }

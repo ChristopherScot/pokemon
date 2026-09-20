@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { board, battlePage } from './battle.ts'
 import { downloadsFooter, pickLinks } from './downloads.ts'
 import { lobbyPage, waitingList } from './lobby.ts'
-import { card, filters, grid, page, teamSlots, url, type Ctx } from './pokedex.ts'
+import { card, filters, grid, page, readyAction, teamSlots, url, type Ctx } from './pokedex.ts'
 
 const move = (name: string, type: string, power: number) => ({
   name, type, power, description: '', effect: '', pp: 15, damageClass: 'special',
@@ -58,8 +58,8 @@ test('a filter link carries the join id and the team', () => {
 })
 
 test('the page posts to join when joining, and to open otherwise', () => {
-  assert.match(page(ctx({ join: 'abc' })), /formaction="\/battle\/abc\/join"/)
-  assert.match(page(ctx()), /formaction="\/battle\/open"/)
+  assert.match(page(ctx({ join: 'abc' })), /hx-post="\/battle\/abc\/join"/)
+  assert.match(page(ctx()), /hx-post="\/battle\/open"/)
   assert.match(page(ctx({ join: 'abc' })), /Join battle/)
   assert.match(page(ctx()), /Ready to battle/)
 })
@@ -260,4 +260,33 @@ test('the filter links are re-rendered with the team after a pick', () => {
   // and the grid names itself for the same swap
   assert.match(grid(picked, true), /id="grid" hx-swap-oob="true"/)
   assert.doesNotMatch(grid(picked), /hx-swap-oob/)
+})
+
+// Ready was a native form submit (formaction), so the browser navigated
+// to /battle/open and rendered the name dialog AS THE WHOLE DOCUMENT -
+// HX-Redirect means nothing to a native submit, so registering dumped
+// you on the lobby with no team and no trainer. It has to be an htmx
+// request.
+test('committing a team is an htmx request, not a native submit', () => {
+  const html = page(ctx({ team: ['pikachu'] }))
+  assert.match(html, /<form id="team-form" hx-post="\/battle\/open"/)
+  assert.match(html, /hx-target="#dialog"/)
+  // and a slot for the dialog to land in
+  assert.match(html, /id="dialog"/)
+  // no formaction anywhere: that is what made it navigate
+  assert.doesNotMatch(html, /formaction=/)
+  assert.equal(readyAction(ctx({ join: 'abc' })), '/battle/abc/join')
+  assert.equal(readyAction(ctx()), '/battle/open')
+})
+
+// The poll morphs the board every second. Without an id on each wrapper
+// morph has nothing to match, rebuilds the subtree and DETACHES the
+// attack button - a player who clicked as a poll landed lost the click
+// and their turn. Playwright reported "element was detached from the
+// DOM".
+test('the move picker keeps ids so a poll cannot detach the attack button', () => {
+  const html = board({ b: battle(), me: 'ash', sel: ZERO, rejected: '' })
+  for (const id of ['id="pick"', 'id="moves"', 'id="commit"', 'id="go"', 'id="pick-who"']) {
+    assert.ok(html.includes(id), `missing ${id}`)
+  }
 })

@@ -66,11 +66,11 @@ export function teamSlots(ctx: Ctx): string {
   return `<div class="team-slots" id="team">${slots}</div>`
 }
 
+export const readyAction = (ctx: Ctx): string =>
+  ctx.join ? `/battle/${encodeURIComponent(ctx.join)}/join` : '/battle/open'
+
 export function readyButton(ctx: Ctx): string {
-  const action = ctx.join
-    ? `/battle/${encodeURIComponent(ctx.join)}/join`
-    : '/battle/open'
-  return `<button id="ready" type="submit" form="team-form" formaction="${action}" data-join="${esc(ctx.join)}">` +
+  return `<button id="ready" type="submit" form="team-form" data-join="${esc(ctx.join)}">` +
     `${ctx.join ? 'Join battle' : 'Ready to battle'}</button>`
 }
 
@@ -158,7 +158,12 @@ function topbar(ctx: Ctx): string {
     // it are the team, and submitting it posts them.
     // The filter and the join id travel WITH the team, so a failed
     // Ready lands back on the page the trainer was actually looking at.
-    `<form id="team-form" method="post">` +
+    // hx-post, not a native submit: the server answers either with
+    // HX-Redirect to the new battle or with the name dialog, and a
+    // native submit would navigate to the endpoint and render the
+    // fragment as the whole document.
+    `<form id="team-form" hx-post="${esc(readyAction(ctx))}"` +
+    ` hx-target="#dialog" hx-swap="innerHTML">` +
     `<input type="hidden" name="active" value="${esc(ctx.active)}">` +
     `<input type="hidden" name="join" value="${esc(ctx.join)}">` +
     teamSlots(ctx) + readyButton(ctx) +
@@ -179,6 +184,7 @@ ${filters(ctx)}
 <p class="sr-only" role="status" id="count"></p>
 ${error ? `<p class="sub" role="alert">${esc(error)}</p>` : ''}
 ${grid(ctx)}
+<div id="dialog"></div>
 <!-- "probed" is fired, and platform() defined, by client/page.js once
      the hardware probe has an answer to send. -->
 <footer id="downloads" hx-get="/downloads" hx-trigger="probed" hx-swap="outerHTML"
