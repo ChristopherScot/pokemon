@@ -111,6 +111,24 @@ consequences worth knowing before you touch either file:
   `node_modules`, finds none, and fails. Node's runtime resolver follows
   the link back; the bundler does not unless told to.
 
+### If the client gains a dependency
+
+The client declares `openapi-fetch` today, and pokedex-web declares it
+too so the symlink can resolve it. Add a SECOND dependency to the client
+and that one needs the same treatment - declare it in every consumer as
+well.
+
+The failure is loud and names the package, so this cannot ship broken:
+
+```
+[vite]: Rollup failed to resolve import "ulid" from
+  ".../node_modules/@christopherscot/pokedex-client/index.js"
+```
+
+Fix by adding it to the consumer's `package.json`. This is rare - the
+generated client has had one dependency for its whole life - so the cost
+is a build failure with an obvious fix rather than anything structural.
+
 ### Versions, and what does not bump
 
 Three separate things, and only the middle one is tied to the spec:
