@@ -69,7 +69,15 @@ test('a disabled move is a disabled button', () => {
   expect(screen.getByRole('button', { name: /tackle/ })).toBeEnabled()
 })
 
-test('choosable pokemon are buttons, and fainted ones are not', () => {
+// Every mon is a button; a fainted one is DISABLED rather than a
+// different element.
+//
+// React reconciles by element type, so swapping button for div tore the
+// subtree down and gave the HP bar a brand new node with no previous
+// width - which is why the drain transition never ran. Measured in
+// Chromium: it jumped straight to the final width with
+// getAnimations().length === 0.
+test('a fainted pokemon cannot be chosen, and is still a button', () => {
   const b = battle({
     sides: [
       { trainer: 'ash', team: [mon('pikachu'), mon('geodude', { fainted: true, hp: 0 })] },
@@ -77,8 +85,15 @@ test('choosable pokemon are buttons, and fainted ones are not', () => {
     ],
   })
   render(<BattleBoard battle={b} me="ash" />)
-  expect(screen.getByRole('button', { name: /pikachu/ })).toBeTruthy()
-  expect(screen.queryByRole('button', { name: /geodude/ })).toBeNull()
+
+  const alive = screen.getByRole('button', { name: /pikachu/ })
+  expect(alive).toBeTruthy()
+  expect(alive).not.toBeDisabled()
+
+  // queryByRole skips disabled buttons only for some roles, so ask for
+  // it including hidden, then assert what actually matters.
+  const fainted = screen.getByRole('button', { name: /geodude/, hidden: true })
+  expect(fainted).toBeDisabled()
 })
 
 test('a spectator gets a board, not a crash', () => {

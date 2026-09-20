@@ -104,6 +104,11 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
            border-radius:8px; padding:5px 10px; cursor:pointer; transition:all .15s; }
   button:hover:not(:disabled) { background:#2f3547; border-color:#4a5268; }
   button:disabled { opacity:.35; cursor:not-allowed; }
+  /* A mon is a button even when you cannot pick it, so that React
+     reuses the node and the HP bar has a width to animate FROM. It
+     should not look disabled for that - only fainted dims a mon. */
+  .mon:disabled { opacity:1; cursor:default; }
+  .mon.fainted:disabled { opacity:.35; }
   button.sel { background:#3b3170; border-color:#6d5ae0; }
   .btn { font:inherit; border-radius:8px; padding:5px 10px; text-decoration:none;
          font-weight:600; color:#12141c; background:#a78bfa; border:1px solid #a78bfa;
