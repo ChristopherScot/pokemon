@@ -31,11 +31,25 @@ export const checkTurn = (b: Battle, me: string, t: Turn): string => {
   if (!mine.team[t.attacker]) return 'you have no pokemon ' + (t.attacker + 1)
   if (!theirs.team[t.target]) return 'they have no pokemon ' + (t.target + 1)
 
+  // canAct / canBeTargeted / usableMoves are the SERVER's verdict.
+  // fainted and disabledMove are the inputs it used, and deciding from
+  // those here is a second copy of the rule that can disagree with the
+  // one that matters - the server rejects the turn either way, so a
+  // copy that drifts only changes whether the UI says so first.
+  //
+  // Each falls back to the old input when the field is absent, for a
+  // battle served by a version that predates them.
   const attacker = mine.team[t.attacker]
-  if (attacker.fainted) return attacker.name + ' has fainted'
+  const target = theirs.team[t.target]
+
+  if (!(attacker.canAct ?? !attacker.fainted)) return attacker.name + ' has fainted'
   if (!attacker.moves[t.move]) return attacker.name + ' has no move ' + (t.move + 1)
-  if (theirs.team[t.target].fainted) return theirs.team[t.target].name + ' has already fainted'
-  if (attacker.disabledMove === t.move) return attacker.moves[t.move].name + ' is disabled this turn'
+  if (!(target.canBeTargeted ?? !target.fainted)) return target.name + ' has already fainted'
+
+  const usable = attacker.usableMoves
+    ? attacker.usableMoves[t.move]
+    : attacker.disabledMove !== t.move
+  if (!usable) return attacker.moves[t.move].name + ' is disabled this turn'
   return ''
 }
 
