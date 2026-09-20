@@ -1,4 +1,5 @@
-v0.0.2
+v0.0.3
 
+v0.0.3 two JDKs: 17 to fetch the Android SDK, 8 for gogio
 v0.0.2 first APK: proves gogio builds an installable Android app in CI
 v0.0.1 Initial release
