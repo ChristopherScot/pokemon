@@ -177,7 +177,7 @@ func (a *ui) start() {
 	} else {
 		a.screen = screenRegister
 	}
-	c, err := api.NewClient(defaultAPI)
+	c, err := api.NewClient(apiBase())
 	if err != nil {
 		a.status = statusFor(err)
 		return

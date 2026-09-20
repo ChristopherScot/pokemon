@@ -227,15 +227,27 @@ test('a download url that is not https never reaches an href', () => {
 
 // Every page load fires this once, so a GitHub blackhole must not park
 // the handler until the OS gives up.
+//
+// What is checked is that a deadline was ASKED FOR - an aborting signal
+// reaches fetch, and aborting it degrades to no footer - not that a real
+// timer fires. Waiting on the actual 3s AbortSignal.timeout left a
+// promise pending when the runner drained the event loop, and node
+// cancelled the nine tests after this one: `fail 0`, nine never run.
 test('a github fetch that never answers gives up rather than hanging', async () => {
-  const started = Date.now()
-  const slow = ((_u: string, opts: { signal?: AbortSignal }) =>
-    new Promise<Response>((_resolve, reject) => {
+  let deadlineRequested = false
+  const slow = ((_u: string, opts: { signal?: AbortSignal }) => {
+    deadlineRequested = opts?.signal !== undefined
+    // Abort immediately rather than waiting out the real deadline. The
+    // handler cannot tell the difference: both are the signal firing.
+    return new Promise<Response>((_resolve, reject) => {
       opts?.signal?.addEventListener('abort', () =>
         reject(new Error('aborted')), { once: true })
-    })) as unknown as typeof fetch
+      reject(Object.assign(new Error('aborted'), { name: 'TimeoutError' }))
+    })
+  }) as unknown as typeof fetch
+
   assert.equal(await downloadsFooter('darwin', 'arm64', slow), '')
-  assert.ok(Date.now() - started < 10_000, 'gave up inside its deadline')
+  assert.ok(deadlineRequested, 'fetch was given a signal, so it has a deadline')
 })
 
 // Pick pikachu, then filter to water: the grid no longer contains

@@ -22,6 +22,21 @@ SERVICES := $(notdir $(wildcard services/*))
 GO_SERVICES := $(foreach s,$(SERVICES),$(if $(wildcard services/$(s)/go.mod),$(s)))
 NODE_SERVICES := $(foreach s,$(SERVICES),$(if $(wildcard services/$(s)/package.json),$(s)))
 
+# The services homelabctl manages, which is not the same as the Go ones:
+# it scaffolds both node front ends, and the CLI, TUI and mobile client
+# were written by hand and have no config.yaml. Keyed on that file
+# rather than a list, so this does not need editing when one gains or
+# loses it.
+MANAGED_SERVICES := $(foreach s,$(SERVICES),$(if $(wildcard services/$(s)/config.yaml),$(s)))
+
+# The Go services homelabctl does NOT manage: the CLI, TUI and mobile
+# client were written by hand and have no config.yaml, so regen skips
+# them. They are still modules, and nothing else runs tidy for them -
+# an untidied go.mod is how a dependency someone deleted stays in
+# go.sum. Defined here rather than beside the rules that use it,
+# because a rule's prerequisites expand when the Makefile is read.
+UNMANAGED_GO := $(filter-out $(MANAGED_SERVICES),$(GO_SERVICES))
+
 # Where postgres is. Overridable, because CI's is on 5432 and yours is
 # on 15432 so it cannot collide with a postgres you already run.
 PGPORT ?= 15432
@@ -58,6 +73,8 @@ help:
 	@echo "  make run          API + both front ends together"
 	@echo "  make db           just start postgres"
 	@echo "  make seed         load the 100 pokemon"
+	@echo "  make regen        regenerate everything derived from openapi.yml and SQL"
+	@echo "  make tidy         go mod tidy every Go service"
 	@echo "  make clean        stop postgres, remove build output"
 	@echo
 	@echo "  per service:  make test-pokedex   make build-htmx   make run-web"
@@ -100,6 +117,55 @@ db:
 seed: db
 	@echo "==> seeding"
 	@cd services/pokedex && go run . seed
+
+# --- generated code ---------------------------------------------------
+
+# Where homelabctl is. Defined before the rules that use it, because a
+# pattern rule's prerequisites are expanded when the Makefile is read.
+#
+# An absolute path: each recipe cds into the service directory first, so
+# a relative one would resolve against services/<name>/ and miss.
+# Override to test a local build:
+#   make regen HOMELABCTL=$(CURDIR)/../homelabctl/homelabctl
+HOMELABCTL ?= $(or $(shell command -v homelabctl 2>/dev/null),$(CURDIR)/.bin/homelabctl)
+
+# Fetched on demand rather than assumed installed, the same binary CI
+# downloads. Only fetched when HOMELABCTL points into .bin - an installed
+# or overridden one is not a file make knows how to build.
+$(CURDIR)/.bin/homelabctl:
+	@mkdir -p $(CURDIR)/.bin
+	@echo "==> fetching homelabctl"
+	@curl -fsSL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_$(shell uname -s | tr A-Z a-z)_$(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz \
+		| tar -xz -C $(CURDIR)/.bin homelabctl
+
+# Run this after editing openapi.yml, migrations/ or queries/.
+#
+# CI runs `homelabctl regen` and fails if the result differs from what is
+# committed. Without this target that command lived only in the workflow,
+# so the first thing to notice stale generated code was a red build on a
+# branch - and the fix was a command you had to read the workflow to find.
+#
+# regen covers both generators and the module: it runs `go generate
+# ./...`, which is where the ogen and sqlc directives are, then
+# `go mod tidy`. One target rather than three, and it cannot drift from
+# what CI does because it is the same command.
+.PHONY: regen
+regen: $(addprefix regen-,$(MANAGED_SERVICES)) $(addprefix tidy-,$(UNMANAGED_GO))
+	@echo "regenerated: $(MANAGED_SERVICES)$(if $(UNMANAGED_GO), (tidied:$(UNMANAGED_GO)))"
+
+# A service with no openapi.yml is not an error: regen says so and exits
+# 0, because CI runs it across every service.
+regen-%: $(HOMELABCTL)
+	@echo "==> regen $*"
+	@cd services/$* && $(HOMELABCTL) regen
+
+.PHONY: tidy
+tidy: $(addprefix tidy-,$(GO_SERVICES))
+	@echo "tidied: $(GO_SERVICES)"
+
+tidy-%:
+	@echo "==> tidy $*"
+	@cd services/$* && go mod tidy
 
 # --- build ------------------------------------------------------------
 
@@ -171,3 +237,4 @@ clean:
 	@docker compose -f services/pokedex/compose.yaml down -v 2>/dev/null || true
 	@rm -rf $(foreach s,$(NODE_SERVICES),services/$(s)/dist)
 	@echo "stopped postgres, removed dist/"
+

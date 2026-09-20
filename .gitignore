@@ -1,1 +1,4 @@
 node_modules/
+
+# Tools make fetches on demand (homelabctl).
+.bin/

@@ -150,6 +150,53 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=long
 
+      # Built and loaded locally first, so Trivy can scan the exact image
+      # that will be pushed. Scanning after the push would mean a
+      # vulnerable image is already public by the time the gate fires,
+      # and a registry this service pulls from anonymously gives no way
+      # to unpublish a digest someone already has.
+      #
+      # load: needs a single platform, which is what this builds anyway.
+      # The layers come from the same gha cache as the push below, so
+      # building twice costs one build.
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: services/pokedex
+          load: true
+          tags: ${{ steps.image.outputs.ref }}:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # This service is reachable from the internet, so a known-exploitable
+      # CVE in a base layer is not a backlog item.
+      #
+      # Fails on CRITICAL and HIGH only, and only when a fix exists:
+      # ignore-unfixed keeps the build from going permanently red on a
+      # CVE nobody can act on, which is how a scanner stops being read.
+      # Tighten by removing it once the base image is one we control.
+      - name: Scan image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.ref }}:scan
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          # Vulnerabilities only. Secret and misconfig scanning on a
+          # built image reports the same findings every run, from files
+          # the Dockerfile copies in, and drowns the CVEs.
+          scanners: vuln
+        env:
+          # The vulnerability database is pulled from ghcr.io, which
+          # rate-limits anonymous pulls hard enough that the scan fails
+          # intermittently on a shared runner IP. Authenticated, it does
+          # not.
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+
+      # Only now, and only what the scan passed. Same context and cache,
+      # so this re-tags the layers just built rather than rebuilding.
       - uses: docker/build-push-action@v6
         with:
           context: services/pokedex
