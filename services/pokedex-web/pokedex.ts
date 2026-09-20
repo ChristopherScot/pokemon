@@ -70,8 +70,19 @@ function card(p: Pokemon) {
     .map((m) => `<li><span>${escape(m.name)}</span><span class="move-type" style="color:${colour(m.type)}">${escape(m.type)}</span><b>${m.power || '—'}</b></li>`)
     .join('')
 
+  // A button, not an <article> with a click handler. The card IS the
+  // team picker, and as a div it was unreachable by keyboard entirely -
+  // you could browse and filter, then not pick a team, which is the
+  // whole product. A real button brings focus, Enter and Space, and the
+  // accessibility tree with it rather than needing tabindex plus a
+  // keydown shim.
+  //
+  // aria-pressed carries the selected state: .picked::after is CSS
+  // content, which is not reliably announced, so "on your team" was
+  // invisible to a screen reader even once the card was reachable.
   return `
-    <article class="card" data-name="${escape(p.name)}" data-sprite="${escape(p.sprite)}">
+    <button type="button" class="card" aria-pressed="false"
+            data-name="${escape(p.name)}" data-sprite="${escape(p.sprite)}">
       <header>
         <span class="num">#${String(p.id).padStart(3, '0')}</span>
         <h2>${escape(p.name)}</h2>
@@ -83,7 +94,7 @@ function card(p: Pokemon) {
         <dt>weight</dt><dd>${(p.weight / 10).toFixed(1)} kg</dd>
       </dl>
       <ul class="moves">${moves}</ul>
-    </article>`
+    </button>`
 }
 
 // Exported like battlePage/lobbyPage so a test can assert on the real
@@ -184,7 +195,9 @@ export function page(
   .slot-empty { color:#4b5163; font-weight:700; }
   /* The x is on the slot, so removing one is one click from where you
      can see it rather than scrolling back to the card. */
-  .slot .remove { position:absolute; top:-6px; right:-6px; width:18px; height:18px;
+  /* 24px, not 18: WCAG 2.5.8 sets 24 as the floor and this is the
+     control that undoes a pick. */
+  .slot .remove { position:absolute; top:-8px; right:-8px; width:24px; height:24px;
                   border-radius:50%; background:#f87171; color:#12141c; border:none;
                   font-size:12px; line-height:1; cursor:pointer; display:none; padding:0; }
   .slot.filled .remove { display:block; }
@@ -195,7 +208,18 @@ export function page(
   #ready:not(:disabled):hover { transform:translateY(-1px); }
 
   /* A card on the team is visibly on it, from the grid. */
-  .card { cursor:pointer; transition:outline-color .15s, transform .1s; outline:2px solid transparent; }
+  /* The card is a <button>, so these undo the button defaults it would
+     otherwise inherit: centred text, the UA font, a border and padding
+     that the grid layout does not want. */
+  .card { cursor:pointer; transition:outline-color .15s, transform .1s; outline:2px solid transparent;
+          font:inherit; color:inherit; text-align:left; border:0; width:100%; display:block; }
+  /* Visible focus. Both text inputs set outline:none and replaced it
+     with a border colour at 3.27:1, under the 4.5 it needs - and the
+     cards had no focus style at all because they could not be focused. */
+  .card:focus-visible, #search:focus-visible, dialog input:focus-visible,
+  .filters a:focus-visible, button:focus-visible {
+    outline:2px solid #a78bfa; outline-offset:2px;
+  }
   .card:hover { transform:translateY(-2px); }
   .card.picked { outline-color:#6d5ae0; }
   .card.picked::after { content:'on your team'; position:absolute; top:8px; right:8px;
@@ -218,7 +242,9 @@ export function page(
              display:flex; flex-wrap:wrap; gap:8px;
              padding:10px 0 12px; margin-bottom:12px;
              border-bottom:1px solid #262a38; }
-  .filters a { padding:5px 11px; border:1px solid #333a4d; border-radius:999px;
+  /* The filters are the primary navigation on a phone; 5px of padding
+     put them around 26px tall, under the 44 a finger wants. */
+  .filters a { padding:11px 14px; min-height:44px; display:inline-flex; align-items:center; border:1px solid #333a4d; border-radius:999px;
                color:var(--fg); text-decoration:none; font-size:13px; }
   .filters a.on { background:#2a2f40; border-color:#5b6c8f; }
   .filters small { color:var(--dim); }
@@ -274,7 +300,7 @@ export function page(
     <!-- Filters narrow by type; this narrows by name, which is faster
          when you already know who you want out of a hundred. Client
          side, because every card is already on the page. -->
-    <input id="search" type="search" placeholder="Search pokemon..." autocomplete="off">
+    <input id="search" type="search" aria-label="Search pokemon by name" placeholder="Search pokemon..." autocomplete="off">
 
     <div class="team-slots" id="team">
       <div class="slot" data-slot="0" title="random"><span class="slot-empty">&#127922;</span></div>
@@ -293,7 +319,7 @@ export function page(
     <form method="dialog" id="name-form">
       <h2>Pick a trainer name</h2>
       <p>Other trainers see this in the lobby.</p>
-      <input id="trainer-name" name="name" maxlength="32" placeholder="e.g. Ash" autocomplete="off" required>
+      <input id="trainer-name" name="name" aria-label="Trainer name" maxlength="32" placeholder="e.g. Ash" autocomplete="off" required>
       <p class="modal-error" id="name-error" hidden></p>
       <div class="modal-actions">
         <button type="button" id="name-cancel" class="ghost">Cancel</button>
@@ -374,7 +400,11 @@ function render() {
 
   const names = new Set(team.map((t) => t.name))
   for (const card of document.querySelectorAll('.card')) {
-    card.classList.toggle('picked', names.has(card.dataset.name))
+    const on = names.has(card.dataset.name)
+    card.classList.toggle('picked', on)
+    // The pill is CSS content and announces to nobody; this is what a
+    // screen reader actually reads.
+    card.setAttribute('aria-pressed', on ? 'true' : 'false')
   }
 
   // Never disabled: an empty team is a valid choice, and the server

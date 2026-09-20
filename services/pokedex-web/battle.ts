@@ -272,6 +272,13 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
   <h1>Battle</h1>
   <p class="sub">you are <strong>${esc(trainer)}</strong> · battle <code>${esc(id)}</code> ·
      <a href="/">back to the pokedex</a></p>
+  <!-- Outside #board on purpose. render() replaces the board's
+       innerHTML every poll, and a live region that is destroyed and
+       recreated does not announce - so a screen-reader user was never
+       told their turn had begun, which is the one thing the game needs
+       to tell them. A persistent node whose textContent changes does
+       announce. -->
+  <div id="banner" class="banner" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="board" class="board">loading…</div>
 
 <script type="module">
@@ -327,10 +334,15 @@ function monEl(p, side, i, selectable, selected) {
 // worse than no button.
 function renderSpectator(b) {
   const joinable = b.status === 'waiting' && b.sides.length < 2
-  let html = '<div class="banner theirs">' +
-    (joinable ? 'this battle is waiting for an opponent'
-              : 'watching ' + esc(b.sides.map((s) => s.trainer).join(' vs '))) +
-    '</div>'
+  // Same persistent live region as render(), for the same reason.
+  const bannerEl = document.getElementById('banner')
+  if (bannerEl) {
+    bannerEl.textContent = joinable
+      ? 'this battle is waiting for an opponent'
+      : 'watching ' + b.sides.map((s) => s.trainer).join(' vs ')
+    bannerEl.className = 'banner theirs'
+  }
+  let html = ''
 
   for (const side of b.sides) {
     html += '<div class="side"><h2>' + esc(side.trainer) + '</h2>' +
@@ -417,7 +429,14 @@ function render(b) {
     cls = myTurn ? 'mine' : 'theirs'
   }
 
-  let html = '<div class="banner ' + cls + '">' + banner + '</div>'
+  // Written to the persistent node rather than concatenated into html,
+  // so the live region survives the innerHTML swap below.
+  const bannerEl = document.getElementById('banner')
+  if (bannerEl) {
+    bannerEl.textContent = banner
+    bannerEl.className = 'banner ' + cls
+  }
+  let html = ''
 
   if (theirs) {
     html += '<div class="side"><h2>' + esc(theirs.trainer) + '</h2>' +

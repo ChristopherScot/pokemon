@@ -904,3 +904,53 @@ test('the web reports the same first reason the server would', async () => {
   const downed = wBattle(wMon('pikachu', true), wMon('staryu'))
   assert.match(checkTurn(downed, 'ash', { attacker: 0, move: 9, target: 0 }), /fainted/, 'fainted outranks move range')
 })
+
+// The card grid IS the team picker, and as an <article> with a
+// document click handler it was unreachable by keyboard: you could
+// browse and filter, then not pick a team, which is the product.
+test('pokemon cards are real buttons, not click-handling divs', async () => {
+  const { page } = await import('./pokedex.ts')
+  const html = page({
+    pokemon: [{
+      id: 25, name: 'pikachu', sprite: 's.png', types: ['electric'],
+      height: 4, weight: 60, moves: [],
+    }] as never,
+    types: [], active: '',
+  })
+  assert.match(html, /<button type="button" class="card"/, 'a card must be focusable and pressable')
+  assert.doesNotMatch(html, /<article class="card"/, 'the old div-with-a-click-handler is gone')
+  // Selection state must reach the accessibility tree: .picked::after is
+  // CSS content and announces to nobody.
+  assert.match(html, /aria-pressed="false"/)
+})
+
+// Placeholder text is not a label: it disappears the moment you type.
+test('inputs are labelled', async () => {
+  const { page } = await import('./pokedex.ts')
+  const html = page({ pokemon: [], types: [], active: '' })
+  assert.match(html, /id="search"[^>]*aria-label=/, 'the search box needs a label')
+  assert.match(html, /id="trainer-name"[^>]*aria-label=/, 'the name field needs a label')
+})
+
+// Focus has to be visible for a keyboard user to know where they are.
+// Both text inputs set outline:none and replaced it with a 3.27:1
+// border; the cards had no focus style because they could not be
+// focused at all.
+test('focused elements show a visible focus ring', async () => {
+  const { page } = await import('./pokedex.ts')
+  const html = page({ pokemon: [], types: [], active: '' })
+  assert.match(html, /:focus-visible[^{]*\{[^}]*outline:\s*2px solid/, 'a real focus indicator')
+})
+
+// A live region inside #board is destroyed by every innerHTML swap, so
+// it never announces. "your turn" is the one thing the game must tell a
+// screen-reader user.
+test('the battle banner is a persistent live region', async () => {
+  const { battlePage } = await import('./battle.ts')
+  const html = battlePage({ id: 'abc123', trainer: 'ash' })
+  assert.match(html, /id="banner"[^>]*aria-live="polite"/, 'the banner must announce')
+  const bannerAt = html.indexOf('id="banner"')
+  const boardAt = html.indexOf('id="board"')
+  assert.ok(bannerAt >= 0 && boardAt >= 0 && bannerAt < boardAt,
+    'the banner must sit OUTSIDE #board, or render() destroys it every poll')
+})
