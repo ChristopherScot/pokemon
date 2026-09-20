@@ -80,3 +80,58 @@ test('a spectator gets a board, not a crash', () => {
   render(<BattleBoard battle={battle()} me="brock" />)
   expect(screen.getByRole('status')).toHaveTextContent('watching ash vs misty')
 })
+
+// The damage float, restored after the React port dropped it.
+//
+// The bug it exists to prevent: the old loop was guarded by
+// `!e.damage`, and an immune hit deals exactly 0, so the branch that
+// says "no effect" was unreachable - the classifier was right and the
+// screen showed nothing.
+const withLog = (log: unknown[]) => battle({ log }) as never
+
+test('a hit floats its damage over the target', () => {
+  const { rerender } = render(<BattleBoard battle={battle()} me="ash" />)
+  rerender(
+    <BattleBoard
+      battle={withLog([{ turnNumber: 1, text: 'hit', target: 'staryu', damage: 7, effectiveness: 1 }])}
+      me="ash"
+    />,
+  )
+  expect(screen.getByText('-7')).toBeTruthy()
+})
+
+test('an immune hit says "no effect" rather than "-0"', () => {
+  const { rerender } = render(<BattleBoard battle={battle()} me="ash" />)
+  rerender(
+    <BattleBoard
+      battle={withLog([{ turnNumber: 1, text: 'immune', target: 'staryu', damage: 0, effectiveness: 0 }])}
+      me="ash"
+    />,
+  )
+  expect(screen.getByText('no effect')).toBeTruthy()
+  expect(screen.queryByText('-0')).toBeNull()
+})
+
+test('a super-effective hit is marked', () => {
+  const { rerender } = render(<BattleBoard battle={battle()} me="ash" />)
+  rerender(
+    <BattleBoard
+      battle={withLog([{ turnNumber: 1, text: 'hit', target: 'staryu', damage: 30, effectiveness: 2 }])}
+      me="ash"
+    />,
+  )
+  expect(screen.getByText('-30 !!')).toBeTruthy()
+})
+
+// A status move carries no damage field at all and has nothing to show.
+test('a status move floats nothing', () => {
+  const { rerender } = render(<BattleBoard battle={battle()} me="ash" />)
+  rerender(
+    <BattleBoard
+      battle={withLog([{ turnNumber: 1, text: 'pikachu used growl', target: 'staryu' }])}
+      me="ash"
+    />,
+  )
+  expect(screen.queryByText(/^-/)).toBeNull()
+  expect(screen.queryByText('no effect')).toBeNull()
+})

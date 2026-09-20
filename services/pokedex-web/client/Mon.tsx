@@ -16,7 +16,7 @@ function hpColour(hp: number, max: number): string {
 }
 
 export function MonView({
-  mon, side, index, selectable, selected, onPick,
+  mon, side, index, selectable, selected, onPick, floats = [],
 }: {
   mon: Mon
   side: 'me' | 'them'
@@ -24,11 +24,21 @@ export function MonView({
   selectable: boolean
   selected: boolean
   onPick: (i: number) => void
+  /** Damage numbers currently rising off this Pokemon. */
+  floats?: Array<{ id: number; text: string; band: string }>
 }) {
   const pct = mon.maxHp > 0 ? Math.max(0, (mon.hp / mon.maxHp) * 100) : 0
 
+  // A hit shakes, and a super-effective one shakes harder. Animating
+  // only 2x meant most turns had no feedback beyond a bar moving.
+  const hit = floats.some((f) => f.band !== 'immune')
+  const hard = floats.some((f) => f.band === 'super')
+
   const inner = (
     <>
+      {floats.map((f) => (
+        <div key={f.id} className={`float ${f.band}`}>{f.text}</div>
+      ))}
       <img src={mon.sprite} alt="" loading="lazy" />
       <div>
         <div className="name">{mon.name}</div>
@@ -50,7 +60,9 @@ export function MonView({
     </>
   )
 
-  const className = 'mon' + (mon.fainted ? ' fainted' : '')
+  const className = 'mon'
+    + (mon.fainted ? ' fainted' : '')
+    + (hard ? ' hit-hard' : hit ? ' hit' : '')
   const slot = `${side}-${index}`
 
   if (!selectable) {

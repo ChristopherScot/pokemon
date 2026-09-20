@@ -11,6 +11,7 @@ import type { components } from '@christopherscot/pokedex-client'
 
 import { MonView } from './Mon.tsx'
 import { V, checkTurn, effectBand } from './shared.ts'
+import { useFloats } from './useFloats.ts'
 
 type Battle = components['schemas']['Battle']
 type Side = components['schemas']['Side']
@@ -28,8 +29,13 @@ export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
   const [sending, setSending] = useState(false)
   const [rejected, setRejected] = useState('')
 
+  // Before the early return: hooks cannot be called conditionally, and
+  // a spectator's board animates too.
+  const mineIdx = b.sides.findIndex((s) => s.trainer === me)
+  const floats = useFloats(b, mineIdx)
+
   const sides = sideFor(b, me)
-  if (!sides) return <Spectating battle={b} />
+  if (!sides) return <Spectating battle={b} floats={floats} />
   const { mine, theirs } = sides
 
   const myTurn = b.status === 'active' && b.turn === me
@@ -68,6 +74,7 @@ export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
             selectable={myTurn && !p.fainted}
             selected={myTurn && picked.target === i}
             onPick={(t) => setPicked((s) => ({ ...s, target: t }))}
+            floats={floats.filter((f) => f.slot === `them-${i}`)}
           />
         ))}
       </div>
@@ -80,6 +87,7 @@ export function BattleBoard({ battle: b, me }: { battle: Battle; me: string }) {
             selectable={myTurn && !p.fainted}
             selected={myTurn && picked.attacker === i}
             onPick={(a) => setPicked((s) => ({ ...s, attacker: a, move: 0 }))}
+            floats={floats.filter((f) => f.slot === `me-${i}`)}
           />
         ))}
       </div>
@@ -151,7 +159,10 @@ function Log({ battle: b, rejected }: { battle: Battle; rejected: string }) {
   )
 }
 
-function Spectating({ battle: b }: { battle: Battle }) {
+function Spectating({ battle: b, floats }: {
+  battle: Battle
+  floats: Array<{ id: number; slot: string; text: string; band: string }>
+}) {
   const joinable = b.status === 'waiting' && b.sides.length < 2
   return (
     <>
@@ -165,7 +176,8 @@ function Spectating({ battle: b }: { battle: Battle }) {
           <h2>{side.trainer}</h2>
           {side.team.map((p, i) => (
             <MonView key={`${p.name}-${i}`} mon={p} side="them" index={i}
-                     selectable={false} selected={false} onPick={() => {}} />
+                     selectable={false} selected={false} onPick={() => {}}
+                     floats={floats.filter((f) => f.slot === `them-${i}`)} />
           ))}
         </div>
       ))}
