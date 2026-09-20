@@ -9,8 +9,12 @@
 // infers request, reply and hook parameters from the route it is
 // attached to. Spelling them out adds nothing a reader does not get from
 // hovering, and gives the next person something to keep in sync.
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
 import Fastify, { LogController } from 'fastify'
 
+import { ASSET_DIR } from './assets.ts'
 import { register as registerPokedex } from './pokedex.ts'
 import { registerBattle } from './battle.ts'
 import { collectDefaultMetrics, Counter, Histogram, register } from 'prom-client'
@@ -99,6 +103,35 @@ app.addHook('onResponse', (request, reply, done) => {
     }, 'request')
   }
   done()
+})
+
+// The browser bundles.
+//
+// Filenames are content-hashed, so the URL changes whenever the code
+// does and a stale bundle cannot be served from cache. That is what
+// lets these be cached hard - immutable, a year - while a deploy still
+// takes effect immediately.
+//
+// Served by hand rather than with @fastify/static: it is one route
+// over one directory of generated files, and the dependency would be
+// larger than the code it replaces.
+app.get<{ Params: { '*': string } }>('/assets/*', async (request, reply) => {
+  const rel = request.params['*']
+  // No traversal: the only legal shape here is one generated filename.
+  if (!/^[A-Za-z0-9._-]+$/.test(rel)) return reply.code(404).send()
+
+  const type = rel.endsWith('.js') ? 'text/javascript'
+    : rel.endsWith('.css') ? 'text/css'
+    : 'application/octet-stream'
+  try {
+    const body = await readFile(join(ASSET_DIR, rel))
+    return reply
+      .type(type)
+      .header('cache-control', 'public, max-age=31536000, immutable')
+      .send(body)
+  } catch {
+    return reply.code(404).send()
+  }
 })
 
 app.get('/healthz', async (_request, reply) => reply.type('text/plain').send('ok\n'))

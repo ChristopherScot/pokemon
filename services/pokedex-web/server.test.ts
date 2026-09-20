@@ -1,14 +1,16 @@
-import { after, test } from 'node:test'
-import assert from 'node:assert/strict'
+// Vitest, not node:test. Node cannot compile JSX, so a repo with .tsx
+// in it cannot run `node --test` at all; Vitest shares this project's
+// Vite config, which means tests see the same transform the shipped
+// bundle does.
+import { afterAll, assert, expect, test } from 'vitest'
 
-import { installDom } from './client/testdom.ts'
 import { readFile } from 'node:fs/promises'
 
 import { app } from './server.ts'
 
 // app.inject() drives the real routes and hooks without binding a port,
 // so these are fast and need no cleanup between cases.
-after(() => app.close())
+afterAll(() => app.close())
 
 test('healthz reports ok', async () => {
   const res = await app.inject({ method: 'GET', url: '/healthz' })
@@ -55,7 +57,7 @@ test('an unrouted path is never used as a label', async () => {
   await app.inject({ method: 'GET', url: '/secret-token-value/deadbeef' })
   const res = await app.inject({ method: 'GET', url: '/metrics' })
 
-  assert.doesNotMatch(res.body, /deadbeef/)
+  expect(res.body).not.toMatch(/deadbeef/)
   assert.match(res.body, /http_requests_total\{[^}]*route="other"/)
 })
 
@@ -108,143 +110,12 @@ test('every battle route reports 502 when the API is unreachable', async () => {
   }
 })
 
-// A trainer who is not in a battle must still get a board.
-//
-// render() found its own side with findIndex, which returns -1 for a
-// spectator; `1 - (-1)` is 2, so BOTH sides came back undefined and the
-// first `.team` threw. Nothing caught it, so the board sat on its
-// initial "loading…" forever with no error the player could see.
-//
-// Two ordinary paths reach it: opening a battle link somebody sent you,
-// and holding a trainer cookie across a deploy, since battles live in
-// the server's memory and a rollout clears them.
-//
-// Runs the real browser script out of the page rather than matching its
-// text - the arithmetic is the bug, and only executing it proves the
-// guard works.
-test('a spectator gets a board instead of an endless spinner', async () => {
-  // Imports the module. This used to regex the <script> tag out of the
-  // rendered page and eval it, which could only reach what the string
-  // happened to expose and passed whether or not the code compiled.
-  const dom = installDom()
-  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
-  const { render, resetForTest } = await import('./client/battle.ts')
-  resetForTest()
 
-  render({
-    id: 'abc123', status: 'waiting', version: 1, turn: null, log: [],
-    sides: [{ trainer: 'misty', team: [
-      { name: 'staryu', hp: 10, maxHp: 10, types: ['water'], moves: [], fainted: false },
-    ] }],
-  } as never)
 
-  const board = dom.get('board')
-  assert.notEqual(board.innerHTML, 'loading…', 'a non-participant must still get a board')
-  assert.match(board.innerHTML, /staryu/, 'and see the team that is waiting')
-  dom.restore()
-})
 
-// A 404 means the battle is gone. Retrying it forever is what produced
-// 46,000 requests from one tab over thirteen hours, so the loop counts
-// consecutive misses and stops, saying why.
-test('polling stops once the battle is gone', async () => {
-  const dom = installDom()
-  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'someone', colours: {} })
-  dom.replies = [{ ok: false, status: 404 }]
-  const { poll, resetForTest } = await import('./client/battle.ts')
-  resetForTest()
 
-  // Poll repeatedly. A loop that gives up leaves the last call having
-  // scheduled nothing; one that does not will keep asking forever.
-  for (let i = 0; i < 20; i++) {
-    dom.timers = 0
-    await poll()
-    if (dom.timers === 0) break
-  }
 
-  assert.equal(dom.timers, 0, 'the poll never gave up on a battle that is gone')
-  assert.match(dom.get('board').innerHTML, /this battle is over/,
-    'the player is left on a spinner with no explanation')
-  dom.restore()
-})
 
-// Drives the real poll() against a scripted sequence of replies.
-//
-// Imports the module rather than eval'ing the page's <script>: the
-// browser code is a bundle now, so the old harness could only reach
-// minified names, and it never verified the code compiled at all.
-async function pollHarness(responses: Array<{ ok: boolean; status: number }>) {
-  const dom = installDom()
-  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
-  dom.replies = responses.map((r) => ({
-    ...r,
-    body: { version: 1, sides: [], log: [] },
-  }))
-  const { poll, resetForTest } = await import('./client/battle.ts')
-  resetForTest()
-
-  // The module auto-starts only when #board exists in a real document;
-  // under the test harness it does not, so this is the only poll.
-  dom.fetches.length = 0
-  dom.timers = 0
-  await poll()
-
-  return {
-    sent: dom.fetches.map((f) => f.init?.headers ?? {}),
-    reschedules: dom.timers,
-    board: dom.get('board'),
-    dom,
-  }
-}
-
-// The bug this closes: anything that was not 200 or 404 fell through to
-// the retry at the bottom, so a 500 - or an nginx 502 mid-rollout, or a
-// 410 telling this client it is too old - polled once a second forever.
-test('poll stops on a terminal status instead of retrying forever', async () => {
-  for (const status of [410, 501, 505]) {
-    const { reschedules, board } = await pollHarness([{ ok: false, status }])
-    assert.equal(reschedules, 0, `a ${status} should stop the poll, not reschedule it`)
-    assert.match(board.innerHTML, /out of date/, `a ${status} should say why it stopped`)
-  }
-})
-
-// A transient failure still retries: a dropped request or a pod
-// restarting mid-rollout must not kill a live battle.
-test('poll retries a transient failure', async () => {
-  const { reschedules } = await pollHarness([{ ok: false, status: 503 }])
-  assert.equal(reschedules, 1, 'a 503 is transient and should be retried')
-})
-
-// Without a version the server cannot tell which browser code is
-// calling, which is what made the stuck tab impossible to identify or
-// refuse.
-test('every request reports the UI version', async () => {
-  const { UI_VERSION } = await import('./battle.ts')
-  const { sent } = await pollHarness([{ ok: true, status: 200 }])
-  assert.ok(sent.length > 0, 'the poll should have made a request')
-  for (const headers of sent) {
-    assert.equal(headers['Client-Version'], UI_VERSION)
-  }
-})
-
-test('a joinable battle links to the team picker', async () => {
-  const dom = installDom()
-  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
-  const { render, resetForTest } = await import('./client/battle.ts')
-  resetForTest()
-
-  // One side and still waiting: joinable.
-  render({
-    id: 'abc123', status: 'waiting', version: 1, turn: null, log: [],
-    sides: [{ trainer: 'misty', team: [
-      { name: 'staryu', hp: 10, maxHp: 10, types: ['water'], moves: [], fainted: false },
-    ] }],
-  } as never)
-
-  assert.match(dom.get('board').innerHTML, /href="\/\?join=abc123"/,
-    'the join panel should link to the pokedex picker for THIS battle')
-  dom.restore()
-})
 
 test('the lobby sends you to the picker rather than a text box', async () => {
   const { lobbyPage } = await import('./battle.ts')
@@ -255,7 +126,7 @@ test('the lobby sends you to the picker rather than a text box', async () => {
   assert.match(page, /href="\/\?join=xyz789"/, 'each waiting battle should link to the picker')
   // The old comma-separated input is gone; leaving it would be two
   // different ways to do the same thing, disagreeing about which wins.
-  assert.doesNotMatch(page, /id="team"/, 'the typed-team input should be gone')
+  expect(page, 'the typed-team input should be gone').not.toMatch(/id="team"/)
 })
 
 // The lobby rendered once and never changed, so a battle opened after
@@ -346,97 +217,10 @@ test('lobby requests report the UI version', async () => {
   }
 })
 
-// Runs the real render() and returns the float elements it appended
-// for a newly-arrived log entry.
-//
-// Asserting on effectBand alone would have missed the bug this covers:
-// the float loop skipped events with `!e.damage`, and an immune hit
-// deals exactly 0, so the "no effect" branch was unreachable. The
-// classifier was right and the screen still showed nothing.
-async function floatsForEvent(ev: Record<string, unknown>) {
-  const dom = installDom()
-  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
 
-  const appended: Array<{ className: string; textContent: string }> = []
-  const slot = dom.get('slot')
-  slot.appendChild = (c) => { appended.push(c as never); return c }
-  dom.get('board').querySelector = () => slot
 
-  const { render, resetForTest } = await import('./client/battle.ts')
-  resetForTest()
-  const mon = (name: string) => ({
-    name, types: ['normal'], hp: 20, maxHp: 20, fainted: false, moves: [],
-  })
-  const battle = (log: unknown[]) => ({
-    id: 'abc123', version: log.length + 1, status: 'active', turn: 'ash',
-    sides: [
-      { trainer: 'ash', active: 0, team: [mon('pikachu')] },
-      { trainer: 'misty', active: 0, team: [mon('gastly')] },
-    ],
-    log,
-  })
 
-  // First render sets the log baseline; the second delivers the new
-  // event, which is the only one that animates.
-  render(battle([]) as never)
-  appended.length = 0
-  render(battle([ev]) as never)
-  dom.flushFrames()
-  dom.restore()
-  return appended
-}
 
-test('an immune hit shows "no effect" rather than "-0"', async () => {
-  const floats = await floatsForEvent({
-    turnNumber: 1, text: 'gastly is immune', target: 'gastly',
-    damage: 0, effectiveness: 0,
-  })
-  assert.equal(floats.length, 1, 'an immune hit should still float something')
-  assert.equal(floats[0].textContent, 'no effect')
-  assert.match(floats[0].className, /immune/)
-})
-
-test('a normal hit still floats its damage', async () => {
-  const floats = await floatsForEvent({
-    turnNumber: 1, text: 'pikachu hits', target: 'gastly',
-    damage: 7, effectiveness: 1,
-  })
-  assert.equal(floats.length, 1)
-  assert.equal(floats[0].textContent, '-7')
-})
-
-// The full band table, asserted through the same rendering path rather
-// than against the classifier in isolation.
-//
-// An earlier version of this called effectBand() directly out of the
-// LOBBY script, which was wrong twice over: it tested the layer below
-// the bug, and evaluating that script without stubbing setTimeout left
-// the lobby poll re-arming forever, so `node --test` never exited.
-test('effectiveness bands match the server chart', async () => {
-  const cases: Array<[number, string, string]> = [
-    [4, 'super', '-9 !!'],
-    [2, 'super', '-9 !!'],
-    [1, 'normal', '-9'],
-    // No suffix on a weak hit: the web marks only super-effective.
-    [0.5, 'weak', '-9'],
-    [0.25, 'weak', '-9'],
-  ]
-  for (const [eff, band, text] of cases) {
-    const floats = await floatsForEvent({
-      turnNumber: 1, text: 'hit', target: 'gastly', damage: 9, effectiveness: eff,
-    })
-    assert.equal(floats.length, 1, `${eff}x should float`)
-    assert.match(floats[0].className, new RegExp(band), `${eff}x should be ${band}`)
-    assert.equal(floats[0].textContent, text, `${eff}x text`)
-  }
-})
-
-test('a status move with no damage floats nothing', async () => {
-  const floats = await floatsForEvent({
-    turnNumber: 1, text: 'pikachu used growl', target: 'gastly',
-  })
-  assert.equal(floats.length, 0, 'no damage field means nothing to float')
-})
 
 // The lobby was unreachable from the pokedex. A `.battle-link` rule was
 // defined in the CSS and never used by any element, so the only ways in
@@ -563,42 +347,6 @@ test('pressing Ready with no join id still opens a battle', async () => {
   assert.equal(location.href, '/battle/newly-opened', 'and lands on the new battle')
 })
 
-// The attack button ends your turn; the move buttons above only change
-// a selection. They looked identical - same grey, same size, in an
-// identical row directly below - so the thing that fires read as a
-// fifth move.
-test('the attack button is visually distinct from the move buttons', async () => {
-  const dom = installDom()
-  dom.get('boot').textContent = JSON.stringify({ id: 'abc123', me: 'ash', colours: {} })
-  const { render, resetForTest } = await import('./client/battle.ts')
-  resetForTest()
-
-  const mon = (name: string) => ({
-    name, hp: 20, maxHp: 20, types: ['normal'], fainted: false,
-    moves: [{ name: 'tackle', power: 40 }, { name: 'growl', power: 0 }],
-  })
-  render({
-    id: 'abc123', status: 'active', version: 1, turn: 'ash', log: [],
-    sides: [
-      { trainer: 'ash', active: 0, team: [mon('pikachu')] },
-      { trainer: 'misty', active: 0, team: [mon('staryu')] },
-    ],
-  } as never)
-
-  const html = dom.get('board').innerHTML
-  // Its own container, not a second row of .moves - that separation is
-  // what stops it reading as another choice.
-  assert.match(html, /<div class="commit">/, 'attack should sit in its own commit row')
-  assert.match(html, /<div class="commit">\s*<button id="go"/,
-    'and the attack button should be the thing inside it')
-  dom.restore()
-
-  // The style backs it up: red, and pushed to the right.
-  const { battlePage } = await import('./battle.ts')
-  const page = battlePage({ id: 'abc123', trainer: 'ash' })
-  assert.match(page, /\.commit\s*\{[^}]*justify-content:flex-end/, 'commit row aligns right')
-  assert.match(page, /\.commit button\s*\{[^}]*background:#b42318/, 'attack is red')
-})
 
 // Trainers live in the API's memory, so every deploy invalidates every
 // token while the browser's cookie survives. The lobby then said
@@ -724,7 +472,7 @@ test('pokemon cards are real buttons, not click-handling divs', async () => {
     types: [], active: '',
   })
   assert.match(html, /<button type="button" class="card"/, 'a card must be focusable and pressable')
-  assert.doesNotMatch(html, /<article class="card"/, 'the old div-with-a-click-handler is gone')
+  expect(html, 'the old div-with-a-click-handler is gone').not.toMatch(/<article class="card"/)
   // Selection state must reach the accessibility tree: .picked::after is
   // CSS content and announces to nobody.
   assert.match(html, /aria-pressed="false"/)
@@ -748,15 +496,15 @@ test('focused elements show a visible focus ring', async () => {
   assert.match(html, /:focus-visible[^{]*\{[^}]*outline:\s*2px solid/, 'a real focus indicator')
 })
 
-// A live region inside #board is destroyed by every innerHTML swap, so
-// it never announces. "your turn" is the one thing the game must tell a
-// screen-reader user.
-test('the battle banner is a persistent live region', async () => {
+// The battle page's shell only has to give React somewhere to mount
+// and hand it the boot data. What the board RENDERS is asserted in
+// client/Battle.test.tsx, against the components rather than a regex
+// over server markup.
+test('the battle page mounts React with its boot data', async () => {
   const { battlePage } = await import('./battle.ts')
   const html = battlePage({ id: 'abc123', trainer: 'ash' })
-  assert.match(html, /id="banner"[^>]*aria-live="polite"/, 'the banner must announce')
-  const bannerAt = html.indexOf('id="banner"')
-  const boardAt = html.indexOf('id="board"')
-  assert.ok(bannerAt >= 0 && boardAt >= 0 && bannerAt < boardAt,
-    'the banner must sit OUTSIDE #board, or render() destroys it every poll')
+  assert.match(html, /id="root"/, 'React needs a mount point')
+  assert.match(html, /id="boot"[^>]*>\{[^<]*abc123/, 'and the battle it is for')
+  assert.match(html, /<script type="module" src="\/assets\/battle-[^"]+\.js">/,
+    'the page must load the hashed bundle the build produced')
 })

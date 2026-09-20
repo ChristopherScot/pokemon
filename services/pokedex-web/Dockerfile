@@ -44,9 +44,16 @@ ARG VERSION=dev
 ENV VERSION=$VERSION
 
 WORKDIR /app
-# Just the bundle. No node_modules, no source, no package.json - there is
-# nothing else the process needs.
+# The server bundle and the browser assets it serves. No node_modules,
+# no source, no package.json - there is nothing else the process needs.
+#
+# The assets are a separate COPY because they are a separate build: the
+# browser bundle is compiled by vite.client.config.ts with hashed
+# filenames, and the server reads the manifest to know which ones it
+# produced. Miss this layer and every page loads a <script src> that
+# 404s - the page renders, and nothing on it works.
 COPY --from=build --chown=65532:65532 /repo/services/pokedex-web/dist/server.js ./
+COPY --from=build --chown=65532:65532 /repo/services/pokedex-web/dist/assets ./assets
 
 USER 65532:65532
 EXPOSE 3000

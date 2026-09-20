@@ -58,7 +58,7 @@ const esc = (s: unknown): string =>
   String(s).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c)
 
-import { clientBundle } from './clientbundle.ts'
+import { assetURL } from './assets.ts'
 import { UI_VERSION } from './version.ts'
 export { UI_VERSION }
 
@@ -258,14 +258,13 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
   <h1>Battle</h1>
   <p class="sub">you are <strong>${esc(trainer)}</strong> · battle <code>${esc(id)}</code> ·
      <a href="/">back to the pokedex</a></p>
-  <!-- Outside #board on purpose. render() replaces the board's
-       innerHTML every poll, and a live region that is destroyed and
-       recreated does not announce - so a screen-reader user was never
-       told their turn had begun, which is the one thing the game needs
-       to tell them. A persistent node whose textContent changes does
-       announce. -->
-  <div id="banner" class="banner" role="status" aria-live="polite" aria-atomic="true"></div>
-  <div id="board" class="board">loading…</div>
+  <!-- React mounts here. The banner is a component with role=status
+       inside that tree: React updates its text in place rather than
+       replacing the node, so the live region survives and a
+       screen-reader user is actually told their turn began. The old
+       code rebuilt the banner inside a full innerHTML swap, which
+       announces to nobody. -->
+  <div id="root"><div class="board">loading…</div></div>
 
 <!-- What the server knows and the browser needs. A JSON island
      rather than values interpolated into the code, so client/battle.ts
@@ -274,11 +273,8 @@ export function battlePage({ id, trainer }: { id: string; trainer: string }) {
 <script type="application/json" id="boot">${JSON.stringify({
   id,
   me: trainer,
-  colours: TYPE_COLOURS,
 })}</script>
-<script type="module">
-${clientBundle('battle')}
-</script>
+<script type="module" src="${assetURL('battle')}"></script>
 </body></html>`
 }
 

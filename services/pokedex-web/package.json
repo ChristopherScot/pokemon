@@ -9,19 +9,30 @@
     "start:dist": "node dist/server.js",
     "dev": "concurrently -n vite,node -c cyan,green \"vite build --watch\" \"node --watch dist/server.js\"",
     "dev:fast": "node --watch server.ts",
-    "test": "npm run build:client && POKEDEX_NO_RETRY=1 node --test",
+    "test": "npm run build:client && vitest run",
     "typecheck": "tsc --noEmit",
-    "build:client": "vite build --config vite.client.config.ts"
+    "build:client": "vite build --config vite.client.config.ts",
+    "test:watch": "vitest"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^24.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/ui": "^5.0.1",
     "concurrently": "^9.0.0",
+    "jsdom": "^29.1.1",
     "typescript": "^5.9.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vitest": "^5.0.1"
   },
   "dependencies": {
     "@christopherscot/pokedex-client": "^0.6.0",
     "fastify": "^5.12.5",
-    "prom-client": "^15.1.3"
+    "prom-client": "^15.1.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   }
 }

@@ -1,33 +1,38 @@
-// The BROWSER bundle, separate from the server build in vite.config.ts.
+// The BROWSER build: React, bundled per page, emitted with hashed
+// filenames into dist/assets.
 //
-// Two configs because the two targets disagree about everything: the
-// server is ssr/node22/one-file, this is a browser/esm/per-page bundle.
+// Separate from vite.config.ts because the two targets agree about
+// nothing - that one is ssr/node22/one-file, this is a browser bundle
+// the page loads with <script src>.
 //
-// The output is inlined into the page's <script> tag at boot rather
-// than served as a static asset. That keeps the deployment exactly as
-// it was - one file, no node_modules, no static routes, no cache
-// busting - while the SOURCE is ordinary TypeScript the compiler
-// checks and the tests import.
+// Hashed names are what makes caching safe: the server reads the
+// manifest at build time and emits whatever filename this produced, so
+// a deploy changes the URL and no browser can serve a stale bundle.
+import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  plugins: [react()],
   build: {
-    outDir: 'dist/client',
+    outDir: 'dist/assets',
     emptyOutDir: true,
-    // The browsers this has to run in are the ones with import maps and
-    // top-level await; there is no build-for-IE story here.
+    // The browsers this runs in are modern; there is no build-for-IE
+    // story here and downlevelling would only make the bundle bigger.
     target: 'es2022',
     sourcemap: false,
+    // The server needs to know the hashed filenames it should emit.
+    manifest: true,
     rollupOptions: {
       input: {
-        battle: 'client/battle.ts',
+        battle: 'client/battle-entry.tsx',
+        lobby: 'client/lobby-entry.tsx',
+        pokedex: 'client/pokedex-entry.tsx',
       },
       output: {
         format: 'esm',
-        entryFileNames: '[name].js',
-        // One file per page, so a page inlines exactly its own code.
-        inlineDynamicImports: false,
-        manualChunks: undefined,
+        entryFileNames: '[name]-[hash].js',
+        chunkFileNames: '[name]-[hash].js',
+        assetFileNames: '[name]-[hash][extname]',
       },
     },
   },

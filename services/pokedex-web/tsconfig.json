@@ -22,12 +22,17 @@
     // '.js' a compiler would have emitted.
     "allowImportingTsExtensions": true,
 
+    // React 19's automatic runtime: components do not import React just
+    // to use JSX, which is what every current React codebase looks
+    // like.
+    "jsx": "react-jsx",
+
     "strict": true,
     // Skips the dependency tree's own .d.ts files, which are slow to
     // check and not ours to fix. The generated API client's types are
     // still checked at every call site, which is the point.
     "skipLibCheck": true
   },
-  "include": ["*.ts", "client/*.ts"],
+  "include": ["*.ts", "client/**/*.ts", "client/**/*.tsx"],
   "exclude": ["node_modules"]
 }
