@@ -64,6 +64,118 @@ go get github.com/christopherscot/pokedex@v0.2.0
 npm install git+https://github.com/christopherscot/pokedex#v0.2.0
 ```
 
+## Changing the API and its consumers in one commit
+
+Every consumer in this repo builds against the client in this directory,
+not against a published one. So an API change is testable across all four
+services before it is committed, and lands as a single commit rather than
+a spec PR, a publish, and a follow-up PR per consumer.
+
+Two mechanisms, one per language:
+
+| consumer | wiring | where |
+|---|---|---|
+| pokedex-cli, pokedex-tui | `replace ... => ../pokedex` | their `go.mod` |
+| pokedex-web | `"@christopherscot/pokedex-client": "file:../pokedex/clients/ts"` | its `package.json` |
+
+The loop:
+
+```sh
+cd services/pokedex
+$EDITOR openapi.yml              # change the contract
+homelabctl regen                 # rewrites api/ AND clients/ts/
+go test ./...                    # server matches the new spec
+
+cd ../pokedex-cli && go test ./...     # sees it immediately
+cd ../pokedex-tui && go test ./...
+cd ../pokedex-web && npm test          # also immediately
+```
+
+Nothing is published in that loop. `npm publish` happens in CI, only when
+`info.version` names a version not already on npm — a deploy that does not
+touch the spec publishes nothing.
+
+### Two things that make the web side work
+
+`file:` symlinks the client into `node_modules`, and that has two
+consequences worth knowing before you touch either file:
+
+- **`openapi-fetch` is declared in pokedex-web too.** npm does not install
+  a symlinked package's own dependencies, so the client's import of it
+  resolves against pokedex-web's `node_modules`. Removing it there breaks
+  the build with "Cannot find package 'openapi-fetch'", pointing at a file
+  in a directory that looks unrelated.
+- **`resolve.preserveSymlinks: true` in both vite configs, and
+  `--preserve-symlinks` on the `node` scripts.** Resolution follows the
+  symlink to its REAL path, walks up from `services/pokedex/clients/ts/`
+  looking for `node_modules`, finds none, and fails. This is true of
+  Node and of the bundler alike - Node realpaths by default, which is
+  exactly what the flag turns off. Miss the vite side and the container
+  build fails; miss the node side and `npm start` and `dev:fast` fail
+  while the tests still pass, because vitest resolves through vite.
+
+### Restart `npm run dev` after regen
+
+`vite build --watch` does not see edits made through the symlink, so a
+`homelabctl regen` while the dev server is running leaves it serving the
+previous client. Restart it. Editing pokedex-web's own files still
+triggers a rebuild normally.
+
+### If the client gains a dependency
+
+The client declares `openapi-fetch` today, and pokedex-web declares it
+too so the symlink can resolve it. Add a SECOND dependency to the client
+and that one needs the same treatment - declare it in every consumer as
+well.
+
+The failure is loud and names the package, so this cannot ship broken:
+
+```
+[vite]: Rollup failed to resolve import "ulid" from
+  ".../node_modules/@christopherscot/pokedex-client/index.js"
+```
+
+Fix by adding it to the consumer's `package.json`. This is rare - the
+generated client has had one dependency for its whole life - so the cost
+is a build failure with an obvious fix rather than anything structural.
+
+A MISSING dependency fails loudly like that. A SKEWED one does not:
+pokedex-web declares `openapi-fetch: ^0.17.0` independently of the
+client's own range, and nothing keeps the two in step. Move the client
+to `^0.18.0` and npm still resolves pokedex-web's `^0.17.0`, so the
+client runs against a major version it did not ask for, with no error.
+When you change that range in one place, change it in both.
+
+### The consumer's CI has to watch this directory
+
+`file:` makes `services/pokedex/` a build input to pokedex-web, and a
+path filter that only lists the consumer's own directory will skip the
+job that would have caught a breaking change.
+
+`pokedex-web.yaml` therefore triggers on `services/pokedex/clients/ts/**`
+and `services/pokedex/openapi.yml` as well as its own tree. Any new
+consumer needs the same.
+
+This matters more than it sounds, because `vite build` does not
+typecheck - a renamed field compiles fine and renders as a dash. The
+typecheck job is the only thing that catches it, so a filter that skips
+that job lets the break ship.
+
+### Versions, and what does not bump
+
+Three separate things, and only the middle one is tied to the spec:
+
+| | when it changes |
+|---|---|
+| deployed image | every merge to main - image-updater watches the `:latest` digest |
+| client version | only when `info.version` changes in `openapi.yml` |
+| npm publish | only when that version is not already on npm |
+
+A deploy does not bump a client version. `file:` keeps the consumer on
+whatever the spec currently says, so the dependency range never needs
+editing - which is what previously let pokedex-web sit on `^0.6.0` while
+the spec had moved to 0.7.0.
+
 ## Calling this service
 
 ```go

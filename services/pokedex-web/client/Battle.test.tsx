@@ -8,12 +8,31 @@ import { BattleBoard } from './Battle.tsx'
 
 type Battle = components['schemas']['Battle']
 type Mon = components['schemas']['BattlePokemon']
+type Move = components['schemas']['Move']
 
-const mon = (name: string, over: Record<string, unknown> = {}) => ({
+// Real values from pokedex.json rather than invented ones: Move requires
+// description, effect, pp and damageClass, and a fixture that satisfies
+// the type with placeholder text would still be lying about the data the
+// components render.
+const move = (over: Partial<Move>): Move => ({
+  name: 'tackle', type: 'normal', power: 40,
+  description:
+    'A physical attack in which the user charges and slams into the target with its whole body.',
+  effect: 'Inflicts regular damage with no additional effect.',
+  accuracy: 100, pp: 35, damageClass: 'physical',
+  ...over,
+})
+
+const mon = (name: string, over: Record<string, unknown> = {}): Mon => ({
   name, hp: 20, maxHp: 20, sprite: 's.png', types: ['electric'], fainted: false,
   moves: [
-    { name: 'tackle', type: 'normal', power: 40 },
-    { name: 'growl', type: 'normal', power: 0 },
+    move({}),
+    move({
+      name: 'growl', power: 0, pp: 40, damageClass: 'status',
+      description:
+        'The user growls in an endearing way, making opposing Pok\u00e9mon less wary. This lowers their Attack stats.',
+      effect: 'Lowers the target\u2019s Attack by one stage.',
+    }),
   ],
   ...over,
 })

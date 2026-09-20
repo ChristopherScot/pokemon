@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.ts",
+    "start": "node --preserve-symlinks server.ts",
     "build": "npm run build:client && vite build",
     "start:dist": "node dist/server.js",
     "dev": "concurrently -n vite,node -c cyan,green \"vite build --watch\" \"node --watch dist/server.js\"",
-    "dev:fast": "node --watch server.ts",
+    "dev:fast": "node --watch --preserve-symlinks server.ts",
     "test": "npm run build:client && vitest run",
     "typecheck": "tsc --noEmit",
     "build:client": "vite build --config vite.client.config.ts",
@@ -30,7 +30,8 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
-    "@christopherscot/pokedex-client": "^0.6.0",
+    "@christopherscot/pokedex-client": "file:../pokedex/clients/ts",
+    "openapi-fetch": "^0.17.0",
     "fastify": "^5.12.5",
     "prom-client": "^15.1.3",
     "react": "^19.3.0",
