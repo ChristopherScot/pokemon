@@ -79,8 +79,10 @@ jobs:
       # exactly how a change that 500s on every page shipped green.
       - name: Prove the bundle is self-contained
         run: |
-          mkdir -p /tmp/imagelike
-          cp services/pokedex-web/dist/server.js /tmp/imagelike/
+          # The job already runs in services/pokedex-web, so dist/ is
+          # relative to here.
+          rm -rf /tmp/imagelike && mkdir -p /tmp/imagelike
+          cp dist/server.js /tmp/imagelike/
           cd /tmp/imagelike
           PORT=8099 POKEDEX_URL=http://127.0.0.1:1 node server.js &
           pid=$!
