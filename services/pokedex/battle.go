@@ -53,8 +53,13 @@ func maxHP(base, iv, ev, level int) int {
 }
 
 type battle struct {
-	id      string
-	status  string
+	id string
+	// The generated enum, not a string. Nine raw literals encoded
+	// this state machine across two files, and a typo compiled: the
+	// unchecked api.BattleStatus(b.status) cast in toAPI would pass
+	// it straight through, producing a battle that is neither active
+	// nor finished and that takeTurn rejects with the wrong error.
+	status  api.BattleStatus
 	version int
 	sides   []*side
 	log     []api.BattleEvent
@@ -354,7 +359,7 @@ func (m *memStore) waiting(_ context.Context) ([]api.WaitingBattle, error) {
 
 	var out []api.WaitingBattle
 	for _, b := range m.battles {
-		if b.status == "waiting" {
+		if b.status == api.BattleStatusWaiting {
 			out = append(out, b.toWaiting())
 		}
 	}
@@ -406,7 +411,7 @@ func randomID(rng roller, n int) string {
 func newBattle(id, trainer, token string, team []*combatant, now time.Time) *battle {
 	b := &battle{
 		id:      id,
-		status:  "waiting",
+		status:  api.BattleStatusWaiting,
 		version: 1,
 		created: now,
 		touched: now,
@@ -430,7 +435,7 @@ func newBattle(id, trainer, token string, team []*combatant, now time.Time) *bat
 // status, turn, version, touched, the log line - is the engine's, the
 // way it is for every other transition.
 func (b *battle) join(trainer, token string, team []*combatant) error {
-	if b.status != "waiting" {
+	if b.status != api.BattleStatusWaiting {
 		return errBattleFull
 	}
 	if b.sides[0].token == token {
@@ -441,7 +446,7 @@ func (b *battle) join(trainer, token string, team []*combatant) error {
 		token:   token,
 		team:    team,
 	})
-	b.status = "active"
+	b.status = api.BattleStatusActive
 	b.turn = 0
 	b.version++
 	b.touched = time.Now()
@@ -453,10 +458,10 @@ func (b *battle) join(trainer, token string, team []*combatant) error {
 }
 
 func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng roller) error {
-	if b.status == "finished" {
+	if b.status == api.BattleStatusFinished {
 		return errBattleOver
 	}
-	if b.status != "active" {
+	if b.status != api.BattleStatusActive {
 		return errNotWaiting
 	}
 
@@ -548,7 +553,7 @@ func (b *battle) finishTurn(me, opponent *side, hurt *combatant) {
 
 	switch {
 	case opponent.defeated():
-		b.status = "finished"
+		b.status = api.BattleStatusFinished
 		b.winner = me.trainer
 		b.log = append(b.log, api.BattleEvent{
 			TurnNumber: b.turnNumber,
@@ -556,7 +561,7 @@ func (b *battle) finishTurn(me, opponent *side, hurt *combatant) {
 		})
 	case me.defeated():
 		// Reachable through confusion: a Pokemon can knock itself out.
-		b.status = "finished"
+		b.status = api.BattleStatusFinished
 		b.winner = opponent.trainer
 		b.log = append(b.log, api.BattleEvent{
 			TurnNumber: b.turnNumber,
@@ -647,7 +652,7 @@ func (c *combatant) moveUsable(i int) bool {
 func (b *battle) toAPI() *api.Battle {
 	out := &api.Battle{
 		ID:      b.id,
-		Status:  api.BattleStatus(b.status),
+		Status:  b.status,
 		Version: b.version,
 		Log:     b.log,
 	}

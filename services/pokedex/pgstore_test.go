@@ -106,7 +106,7 @@ func TestPGBattleSurvivesANewStore(t *testing.T) {
 	if getErr != nil {
 		t.Fatalf("battle %s not found by a second store", b.id)
 	}
-	if string(got.Status) != b.status || len(got.Sides) != len(b.sides) {
+	if got.Status != b.status || len(got.Sides) != len(b.sides) {
 		t.Errorf("read back status %q with %d sides, want %q with %d",
 			got.Status, len(got.Sides), b.status, len(b.sides))
 	}
@@ -241,7 +241,7 @@ func newTestBattle(t *testing.T, dex *pokedex, trainer, token string) *battle {
 	}
 	return &battle{
 		id:      randomID(rng, 6),
-		status:  "waiting",
+		status:  api.BattleStatusWaiting,
 		version: 1,
 		created: time.Now(),
 		touched: time.Now(),

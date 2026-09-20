@@ -93,7 +93,7 @@ func TestDamageSurvivesPersistence(t *testing.T) {
 
 	b := &battle{
 		id:     "persist",
-		status: "active",
+		status: api.BattleStatusActive,
 		sides: []*side{
 			{trainer: "ash", token: "a", team: mine},
 			{trainer: "misty", token: "m", team: theirs},
@@ -107,7 +107,7 @@ func TestDamageSurvivesPersistence(t *testing.T) {
 	// fromRow is the real load path, so this is exactly what a pod does
 	// when it picks a battle back up out of postgres.
 	now := time.Now()
-	reloaded, err := fromRow(b.id, b.status, 1, 0, 1, "", now, now, raw)
+	reloaded, err := fromRow(b.id, string(b.status), 1, 0, 1, "", now, now, raw)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -78,13 +78,24 @@ func TestMigrateIsIdempotent(t *testing.T) {
 		t.Fatalf("second migrate: %v", err)
 	}
 
+	// Counted against the files on disk rather than a hardcoded 1:
+	// the point is that migrating twice records each migration once,
+	// which should stay true as migrations are added. Hardcoding it
+	// meant the second migration ever written broke this test for
+	// the wrong reason.
+	files, err := migrationFS.ReadDir("migrations")
+	if err != nil {
+		t.Fatalf("listing migrations: %v", err)
+	}
+	want := len(files)
+
 	var count int
 	if err := pool.QueryRow(ctx,
 		"SELECT count(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("schema_migrations has %d rows, want 1 - a migration ran twice", count)
+	if count != want {
+		t.Errorf("schema_migrations has %d rows, want %d - a migration ran twice", count, want)
 	}
 }
 
@@ -116,7 +127,13 @@ func TestMigrateConcurrentReplicas(t *testing.T) {
 		"SELECT count(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("schema_migrations has %d rows, want 1", count)
+	// Derived, as above: concurrent starters must each record a
+	// migration exactly once, however many there are.
+	files, err := migrationFS.ReadDir("migrations")
+	if err != nil {
+		t.Fatalf("listing migrations: %v", err)
+	}
+	if count != len(files) {
+		t.Errorf("schema_migrations has %d rows, want %d", count, len(files))
 	}
 }
