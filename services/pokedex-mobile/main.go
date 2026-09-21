@@ -284,6 +284,10 @@ func statusFor(err error) string {
 		return "Cannot reach the server."
 	case strings.Contains(msg, "401"), strings.Contains(msg, "403"):
 		return "That trainer is not recognised. Register again."
+	case strings.Contains(msg, "is taken"):
+		// The server says so plainly and the message is already
+		// player-facing, so pass it through rather than paraphrasing.
+		return msg
 	}
 
 	// Anything else: show it, but trimmed on a RUNE boundary so a
