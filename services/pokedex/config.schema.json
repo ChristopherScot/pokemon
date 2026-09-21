@@ -138,7 +138,8 @@
                 "properties": {
                   "name": { "type": "string" },
                   "tls": { "type": "boolean" },
-                  "public": { "type": "boolean", "description": "Route THIS host via the internet-facing controller. Omit to follow ingress.public. Per host, so a service can hold a LAN name and a public one without dragging one onto the other's controller." }
+                  "public": { "type": "boolean", "description": "Route THIS host via the internet-facing controller. Omit to follow ingress.public. Per host, so a service can hold a LAN name and a public one without dragging one onto the other's controller." },
+                  "rateLimitRPS": { "type": "integer", "minimum": 1, "description": "Requests per second allowed from ONE CLIENT IP on this host. Per IP, not per user and not a total, and per controller replica. Covers every path on the host: nginx cannot vary a limit by path." }
                 }
               }
             ]
