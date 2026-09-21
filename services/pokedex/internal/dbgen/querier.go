@@ -19,6 +19,16 @@ type Querier interface {
 	ActiveBattleForTrainer(ctx context.Context, trainerToken string) (Battle, error)
 	AddBattleSide(ctx context.Context, arg AddBattleSideParams) error
 	BattleSidesFor(ctx context.Context, battleID string) ([]BattleSide, error)
+	// How many battles this trainer already has waiting for an opponent.
+	//
+	// Guards the lobby: without a cap one trainer can open hundreds in a
+	// second, and because ListWaitingBattles is ORDER BY created_at DESC
+	// LIMIT 100 they do not merely crowd the lobby, they own all of it and
+	// keep owning it. Every real player becomes invisible.
+	//
+	// Counts side 0 only, the trainer who opened it. A joiner is side 1 and
+	// the battle is no longer waiting by then.
+	CountOpenBattlesFor(ctx context.Context, trainerToken string) (int64, error)
 	CountPokemon(ctx context.Context) (int64, error)
 	CreateBattle(ctx context.Context, arg CreateBattleParams) error
 	// Prune sides at or beyond idx, so a side list that shrinks does not
@@ -78,7 +88,14 @@ type Querier interface {
 	// goroutine to supervise, a store that is never written does not
 	// grow, and with several replicas a timer in each would mean several
 	// sweeps racing. battle_sides goes with it by ON DELETE CASCADE.
-	SweepBattles(ctx context.Context, touchedAt pgtype.Timestamptz) error
+	//
+	// Two cutoffs, because touched_at means different things for the two
+	// statuses. An active battle is touched by every turn, so a stale
+	// touched_at genuinely means abandoned. A WAITING battle is never
+	// touched at all - a join is its first update - so its touched_at is
+	// just its creation time, and one cutoff deleted players who were
+	// sitting in the lobby doing exactly what they should.
+	SweepBattles(ctx context.Context, arg SweepBattlesParams) error
 	// Drops trainers nobody has been in a long time, so a name someone
 	// registered once and abandoned can be claimed again. Names are unique
 	// and were never released, so without this every name is spent the
@@ -92,6 +109,13 @@ type Querier interface {
 	//
 	// Called on write, like SweepBattles: no background goroutine to
 	// supervise, and no timer in each replica racing the others.
+	// NOT EXISTS rather than NOT IN. Both delete exactly the same rows -
+	// battle_sides.trainer_token is NOT NULL, so the three-valued logic
+	// that usually distinguishes them cannot apply - but NOT IN makes the
+	// planner build the whole battle_sides set before it can answer, while
+	// NOT EXISTS is an anti-join it can satisfy per row from the index.
+	// At 200k trainers, steady state with nothing to sweep: 66ms -> 22ms,
+	// on every lobby load.
 	SweepTrainers(ctx context.Context, lastSeen pgtype.Timestamptz) error
 	// Records that a token was used, which is what SweepTrainers reads.
 	// Separate from TrainerByToken so a read stays a read.

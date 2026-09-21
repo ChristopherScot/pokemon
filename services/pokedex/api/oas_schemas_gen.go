@@ -429,6 +429,10 @@ type CreateBattleBadRequest Error
 
 func (*CreateBattleBadRequest) createBattleRes() {}
 
+type CreateBattleConflict Error
+
+func (*CreateBattleConflict) createBattleRes() {}
+
 type CreateBattleUnauthorized Error
 
 func (*CreateBattleUnauthorized) createBattleRes() {}

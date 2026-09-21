@@ -888,6 +888,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description This trainer already has a battle waiting for an opponent. One at a time: a trainer can only play the battle they are in, and without the limit one client can fill the lobby and keep it. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description Unexpected error. */
             default: {
                 headers: {

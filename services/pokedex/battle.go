@@ -18,7 +18,29 @@ import (
 const (
 	teamSize = 3
 
+	// How long a battle in progress survives without a turn. Two hours
+	// is far longer than a game takes, so reaching it means both
+	// players have gone.
 	battleTTL = 2 * time.Hour
+
+	// A battle nobody has joined yet gets much longer, because nothing
+	// refreshes it.
+	//
+	// touched_at only advances on UpdateBattle, and a waiting battle
+	// has no updates by definition - a join is its first. Reads do not
+	// touch it, so polling the lobby does not either. That meant a
+	// player who opened a battle and waited for an opponent had it
+	// deleted out from under them at exactly two hours, however
+	// attentively they were watching, and the client saw a bare 404
+	// indistinguishable from a wrong id.
+	//
+	// Touching on read would fix it by putting a write on the path of
+	// every poll from every client. A longer TTL costs one comparison
+	// in the sweep. SweepTrainers already reasons that "a trainer
+	// waiting in the lobby may sit for hours" and spares them; this is
+	// the same allowance for the battle they are waiting in, which
+	// otherwise expires first and unprotects the trainer anyway.
+	waitingBattleTTL = 24 * time.Hour
 
 	// How long a name is held for someone who never comes back.
 	//
@@ -31,6 +53,13 @@ const (
 	//
 	// A trainer in a battle is never swept, whatever this says.
 	trainerTTL = 7 * 24 * time.Hour
+
+	// maxOpenBattlesPerTrainer caps how many battles one trainer can
+	// have waiting at once. One, because a trainer can only play the
+	// battle they are in - a second open battle is useless to its own
+	// owner and, since the lobby is the newest 100, crowds everyone
+	// else out of the only discovery mechanism the clients have.
+	maxOpenBattlesPerTrainer = 1
 
 	damageSpread = 0.15
 
@@ -257,6 +286,9 @@ type store interface {
 	// like an auth bug to whoever debugs it.
 	trainerByToken(ctx context.Context, token string) (string, error)
 	registerTrainer(ctx context.Context, name string) (string, error)
+	// openBattlesFor counts the waiting battles a trainer already has,
+	// so one trainer cannot fill the lobby.
+	openBattlesFor(ctx context.Context, token string) (int, error)
 
 	update(ctx context.Context, id string, fn func(*battle) error) error
 }
@@ -389,6 +421,21 @@ func (m *memStore) waiting(_ context.Context) ([]api.WaitingBattle, error) {
 	return out, nil
 }
 
+func (m *memStore) openBattlesFor(_ context.Context, token string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sweepLocked()
+
+	n := 0
+	for _, b := range m.battles {
+		if b.status == api.BattleStatusWaiting && len(b.sides) > 0 && b.sides[0].token == token {
+			n++
+		}
+	}
+	// Cannot fail: the error exists for the Postgres implementation.
+	return n, nil
+}
+
 func (b *battle) toWaiting() api.WaitingBattle {
 	w := api.WaitingBattle{
 		BattleId:  b.id,
@@ -402,8 +449,18 @@ func (b *battle) toWaiting() api.WaitingBattle {
 }
 
 func (m *memStore) sweepLocked() {
-	cutoff := time.Now().Add(-battleTTL)
+	// Two cutoffs, matching the SQL: a waiting battle is never touched
+	// (a join is its first update), so its touched_at is really its
+	// creation time and the active cutoff would evict a player who is
+	// sitting in the lobby exactly as intended.
+	now := time.Now()
+	active := now.Add(-battleTTL)
+	openCutoff := now.Add(-waitingBattleTTL)
 	for id, b := range m.battles {
+		cutoff := active
+		if b.status == api.BattleStatusWaiting {
+			cutoff = openCutoff
+		}
 		if b.touched.Before(cutoff) {
 			delete(m.battles, id)
 		}

@@ -142,7 +142,10 @@ func (p *pgStore) create(ctx context.Context, b *battle) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := dbgen.New(tx)
 
-	if err := q.SweepBattles(ctx, pgTime(time.Now().Add(-battleTTL))); err != nil {
+	if err := q.SweepBattles(ctx, dbgen.SweepBattlesParams{
+		ActiveBefore:  pgTime(time.Now().Add(-battleTTL)),
+		WaitingBefore: pgTime(time.Now().Add(-waitingBattleTTL)),
+	}); err != nil {
 		slog.Warn("sweeping old battles", "err", err)
 	}
 
@@ -298,9 +301,20 @@ func (p *pgStore) attemptUpdate(ctx context.Context, id string, fn func(*battle)
 	return tx.Commit(ctx)
 }
 
+func (p *pgStore) openBattlesFor(ctx context.Context, token string) (int, error) {
+	n, err := dbgen.New(p.pool).CountOpenBattlesFor(ctx, token)
+	if err != nil {
+		return 0, fmt.Errorf("counting open battles: %w", err)
+	}
+	return int(n), nil
+}
+
 func (p *pgStore) waiting(ctx context.Context) ([]api.WaitingBattle, error) {
 	q := dbgen.New(p.pool)
-	if err := q.SweepBattles(ctx, pgTime(time.Now().Add(-battleTTL))); err != nil {
+	if err := q.SweepBattles(ctx, dbgen.SweepBattlesParams{
+		ActiveBefore:  pgTime(time.Now().Add(-battleTTL)),
+		WaitingBefore: pgTime(time.Now().Add(-waitingBattleTTL)),
+	}); err != nil {
 		slog.Warn("sweeping expired battles", "error", err)
 	}
 	// After the battles, never before: a trainer is spared while they
