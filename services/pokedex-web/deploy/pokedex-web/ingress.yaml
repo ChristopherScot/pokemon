@@ -29,6 +29,7 @@ metadata:
   namespace: pokedex-web
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/limit-rps: "20"
 spec:
   ingressClassName: public
   tls:

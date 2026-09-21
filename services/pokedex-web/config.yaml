@@ -29,6 +29,10 @@ ingress:
         - name: pokemon.chrisscotmartin.com
           tls: true
           public: true
+          # Per client IP, on this host only. The LAN name above is
+          # where a battle board polls every second; that is the
+          # household, not abuse.
+          rateLimitRPS: 20
 
 # secrets:
 #   vaultPath: <name>/config      # one Vault path per service
