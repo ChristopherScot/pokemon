@@ -145,6 +145,7 @@ func (p *pgStore) create(ctx context.Context, b *battle) error {
 	if err := q.SweepBattles(ctx, dbgen.SweepBattlesParams{
 		ActiveBefore:  pgTime(time.Now().Add(-battleTTL)),
 		WaitingBefore: pgTime(time.Now().Add(-waitingBattleTTL)),
+		BatchSize:     sweepBatchSize,
 	}); err != nil {
 		slog.Warn("sweeping old battles", "err", err)
 	}
@@ -314,6 +315,7 @@ func (p *pgStore) waiting(ctx context.Context) ([]api.WaitingBattle, error) {
 	if err := q.SweepBattles(ctx, dbgen.SweepBattlesParams{
 		ActiveBefore:  pgTime(time.Now().Add(-battleTTL)),
 		WaitingBefore: pgTime(time.Now().Add(-waitingBattleTTL)),
+		BatchSize:     sweepBatchSize,
 	}); err != nil {
 		slog.Warn("sweeping expired battles", "error", err)
 	}

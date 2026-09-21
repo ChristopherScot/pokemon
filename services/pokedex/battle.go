@@ -61,6 +61,11 @@ const (
 	// else out of the only discovery mechanism the clients have.
 	maxOpenBattlesPerTrainer = 1
 
+	// sweepBatchSize bounds one sweep. The sweep runs inside a user's
+	// request, so an unbounded DELETE makes a backlog their problem -
+	// 992ms at 193k expired battles, versus 37ms for a batch.
+	sweepBatchSize = 1000
+
 	damageSpread = 0.15
 
 	damageScale = 0.85
