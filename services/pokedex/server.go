@@ -250,14 +250,14 @@ func handler() (http.Handler, error) {
 		if dex, err = loadPokedexFromDB(ctx, pool); err != nil {
 			return nil, fmt.Errorf("loading the pokedex: %w", err)
 		}
-		store = newPGStore(pool, rngSeed)
+		store = newPGStore(pool)
 		readyFn = pool.Ping
 		slog.Info("state is in postgres")
 	} else {
 		if dex, err = loadPokedex(); err != nil {
 			return nil, err
 		}
-		store = newMemStore(rngSeed)
+		store = newMemStore()
 		slog.Info("state is in memory; set DATABASE_URL to use postgres")
 	}
 

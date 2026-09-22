@@ -37,7 +37,7 @@ func TestAWholeGameOverPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := service{dex: dex, battles: newPGStore(pool, 1), rng: rngFor(1)}
+	s := service{dex: dex, battles: newPGStore(pool), rng: rngFor(1)}
 
 	ash, err := s.battles.registerTrainer(ctx, "ash")
 	if err != nil {

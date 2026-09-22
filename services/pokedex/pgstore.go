@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	randv2 "math/rand/v2"
 	"time"
 
@@ -31,11 +30,10 @@ const maxRetryBackoff = 50 * time.Millisecond
 
 type pgStore struct {
 	pool *pgxpool.Pool
-	rng  *rand.Rand
 }
 
-func newPGStore(pool *pgxpool.Pool, seed int64) *pgStore {
-	return &pgStore{pool: pool, rng: rand.New(rand.NewSource(seed))}
+func newPGStore(pool *pgxpool.Pool) *pgStore {
+	return &pgStore{pool: pool}
 }
 
 type battleState struct {
@@ -135,14 +133,18 @@ func (p *pgStore) create(ctx context.Context, b *battle) error {
 		return fmt.Errorf("marshalling battle state: %w", err)
 	}
 
-	tx, err := p.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("beginning transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := dbgen.New(tx)
-
-	if err := q.SweepBattles(ctx, dbgen.SweepBattlesParams{
+	// On the POOL, before the transaction opens, and its error is
+	// logged rather than returned.
+	//
+	// Both halves of that matter. Postgres aborts a whole transaction
+	// on any failed statement, so a sweep that failed INSIDE this
+	// transaction made every later statement return 25P02 and the
+	// commit roll back - best-effort housekeeping silently failing the
+	// user's write, reported only at warn level while POST /battles
+	// returned an unrelated-looking commit error. Outside it, a failed
+	// sweep is what the comment always claimed: skipped, and retried
+	// by the next writer.
+	if err := dbgen.New(p.pool).SweepBattles(ctx, dbgen.SweepBattlesParams{
 		ActiveBefore:  pgTime(time.Now().Add(-battleTTL)),
 		WaitingBefore: pgTime(time.Now().Add(-waitingBattleTTL)),
 		BatchSize:     sweepBatchSize,
@@ -150,15 +152,40 @@ func (p *pgStore) create(ctx context.Context, b *battle) error {
 		slog.Warn("sweeping old battles", "err", err)
 	}
 
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbgen.New(tx)
+
+	// The opener's token, but only while the battle is waiting: the
+	// unique index on this column is what actually enforces one open
+	// battle per trainer, and it must stop constraining the trainer
+	// once someone has joined.
+	var waitingFor *string
+	if b.status == api.BattleStatusWaiting && len(b.sides) > 0 {
+		tok := b.sides[0].token
+		waitingFor = &tok
+	}
+
 	if err := q.CreateBattle(ctx, dbgen.CreateBattleParams{
-		ID:         b.id,
-		Status:     string(b.status),
-		Version:    int32(b.version),
-		Turn:       int32(b.turn),
-		TurnNumber: int32(b.turnNumber),
-		Winner:     b.winner,
-		State:      state,
+		WaitingForToken: waitingFor,
+		ID:              b.id,
+		Status:          string(b.status),
+		Version:         int32(b.version),
+		Turn:            int32(b.turn),
+		TurnNumber:      int32(b.turnNumber),
+		Winner:          b.winner,
+		State:           state,
 	}); err != nil {
+		// The unique index on waiting_for_token, which is the real
+		// enforcement of one open battle per trainer. Reaching here
+		// means another create for this token committed between the
+		// handler's count and this insert.
+		if isUniqueViolation(err) {
+			return errAlreadyWaiting
+		}
 		return fmt.Errorf("inserting battle %s: %w", b.id, err)
 	}
 	for i, side := range b.sides {

@@ -16,7 +16,7 @@ type Querier interface {
 	// of the JSONB blob: this is the one question asked across battles,
 	// and scanning every state document to answer it would not scale past
 	// a handful.
-	ActiveBattleForTrainer(ctx context.Context, trainerToken string) (Battle, error)
+	ActiveBattleForTrainer(ctx context.Context, trainerToken string) (ActiveBattleForTrainerRow, error)
 	AddBattleSide(ctx context.Context, arg AddBattleSideParams) error
 	BattleSidesFor(ctx context.Context, battleID string) ([]BattleSide, error)
 	// How many battles this trainer already has waiting for an opponent.
@@ -30,6 +30,11 @@ type Querier interface {
 	// the battle is no longer waiting by then.
 	CountOpenBattlesFor(ctx context.Context, trainerToken string) (int64, error)
 	CountPokemon(ctx context.Context) (int64, error)
+	// waiting_for_token carries the opener's token while the battle is
+	// waiting, and battles_one_waiting_per_trainer makes it unique - so a
+	// trainer's second concurrent create fails with 23505 instead of
+	// slipping past a Go check that read a stale count. The caller maps
+	// that to the same 409 it already returns.
 	CreateBattle(ctx context.Context, arg CreateBattleParams) error
 	// Prune sides at or beyond idx, so a side list that shrinks does not
 	// leave a stale row behind. Nothing shrinks one today; this keeps the
@@ -40,12 +45,12 @@ type Querier interface {
 	// truncating the table, which would break the foreign key for every
 	// other row mid-seed.
 	DeletePokemonMovesFor(ctx context.Context, pokemonID int32) error
-	GetBattle(ctx context.Context, id string) (Battle, error)
+	GetBattle(ctx context.Context, id string) (GetBattleRow, error)
 	// The read half of update(). Inside a SERIALIZABLE transaction this
 	// is what Postgres tracks to detect a conflicting write: two pods
 	// reading the same row and both writing it means one gets 40001 and
 	// retries, rather than silently clobbering the other.
-	GetBattleForUpdate(ctx context.Context, id string) (Battle, error)
+	GetBattleForUpdate(ctx context.Context, id string) (GetBattleForUpdateRow, error)
 	ListMoves(ctx context.Context) ([]Move, error)
 	// Reference data: the Pokedex itself.
 	//
@@ -69,7 +74,7 @@ type Querier interface {
 	// bitmap scan and sorts afterwards, so the DESC in the index buys
 	// nothing. Measured at 200k battles - 17ms with a sort, 0.1ms with
 	// this plus the partial index from migration 003.
-	ListWaitingBattles(ctx context.Context) ([]Battle, error)
+	ListWaitingBattles(ctx context.Context) ([]ListWaitingBattlesRow, error)
 	// Game state: trainers and battles.
 	//
 	// Unlike the reference queries, these run on the request path. Every

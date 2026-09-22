@@ -21,7 +21,7 @@ import (
 func TestReadyzReturns503WhenTheDatabaseIsUnreachable(t *testing.T) {
 	s := service{
 		dex:     &pokedex{},
-		battles: newMemStore(1),
+		battles: newMemStore(),
 		rng:     rngFor(1),
 		ready: func(context.Context) error {
 			return errors.New("dial tcp: connection refused")
@@ -46,7 +46,7 @@ func TestReadyzReturns503WhenTheDatabaseIsUnreachable(t *testing.T) {
 func TestReadyzReturns200WhenTheDatabaseAnswers(t *testing.T) {
 	s := service{
 		dex:     &pokedex{},
-		battles: newMemStore(1),
+		battles: newMemStore(),
 		rng:     rngFor(1),
 		ready:   func(context.Context) error { return nil },
 	}

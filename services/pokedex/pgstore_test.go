@@ -29,7 +29,7 @@ func freshPG(t *testing.T) (*pgxpool.Pool, *pgStore, *pokedex) {
 	if err != nil {
 		t.Fatalf("loading pokedex: %v", err)
 	}
-	return pool, newPGStore(pool, 1), dex
+	return pool, newPGStore(pool), dex
 }
 
 func TestPGRegisterTrainer(t *testing.T) {
@@ -101,7 +101,7 @@ func TestPGBattleSurvivesANewStore(t *testing.T) {
 	b := newTestBattle(t, dex, "Ash", token)
 	store.create(context.Background(), b)
 
-	other := newPGStore(pool, 2)
+	other := newPGStore(pool)
 	got, getErr := other.get(context.Background(), b.id)
 	if getErr != nil {
 		t.Fatalf("battle %s not found by a second store", b.id)

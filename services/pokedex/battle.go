@@ -5,7 +5,6 @@ import (
 	crand "crypto/rand"
 	"errors"
 	"fmt"
-	"math/rand"
 	"sort"
 	"strings"
 	"sync"
@@ -72,17 +71,22 @@ const (
 )
 
 var (
-	errNoBattle      = errors.New("no such battle")
-	errNoTrainer     = errors.New("unknown trainer token")
-	errNotYourTurn   = errors.New("not your turn")
-	errIllegalMove   = errors.New("illegal move")
-	errBattleOver    = errors.New("battle is already finished")
-	errBattleFull    = errors.New("battle already has two trainers")
-	errAlreadyIn     = errors.New("you are already in this battle")
-	errNotWaiting    = errors.New("battle is not waiting for an opponent")
-	errUnknownMon    = errors.New("unknown pokemon")
-	errNotYourMon    = errors.New("that pokemon is not yours")
-	errTargetFainted = errors.New("that target has already fainted")
+	errNoBattle = errors.New("no such battle")
+	// errAlreadyWaiting is the unique index refusing a trainer's
+	// second open battle. The handler checks the count first, so this
+	// only surfaces when two creates raced - which is exactly the case
+	// the count cannot catch.
+	errAlreadyWaiting = errors.New("already have a battle waiting")
+	errNoTrainer      = errors.New("unknown trainer token")
+	errNotYourTurn    = errors.New("not your turn")
+	errIllegalMove    = errors.New("illegal move")
+	errBattleOver     = errors.New("battle is already finished")
+	errBattleFull     = errors.New("battle already has two trainers")
+	errAlreadyIn      = errors.New("you are already in this battle")
+	errNotWaiting     = errors.New("battle is not waiting for an opponent")
+	errUnknownMon     = errors.New("unknown pokemon")
+	errNotYourMon     = errors.New("that pokemon is not yours")
+	errTargetFainted  = errors.New("that target has already fainted")
 )
 
 const (
@@ -304,16 +308,14 @@ type memStore struct {
 	trainers map[string]string    // token -> name
 	lastSeen map[string]time.Time // token -> when it was last used
 	names    map[string]bool      // claimed names
-	rng      *rand.Rand
 }
 
-func newMemStore(seed int64) *memStore {
+func newMemStore() *memStore {
 	return &memStore{
 		battles:  map[string]*battle{},
 		trainers: map[string]string{},
 		lastSeen: map[string]time.Time{},
 		names:    map[string]bool{},
-		rng:      rand.New(rand.NewSource(seed)),
 	}
 }
 
@@ -760,7 +762,7 @@ func (b *battle) toAPI() *api.Battle {
 		Version: b.version,
 		Log:     b.log,
 	}
-	if b.status == "active" {
+	if b.status == api.BattleStatusActive {
 		out.Turn = api.NewOptString(b.sides[b.turn].trainer)
 	}
 	if b.winner != "" {
@@ -770,7 +772,7 @@ func (b *battle) toAPI() *api.Battle {
 		side := api.Side{Trainer: s.trainer}
 		// Whose side may act at all. Computed once here rather than
 		// per Pokemon, and the clients no longer compute it at all.
-		sideActive := b.status == "active" && b.turn == i
+		sideActive := b.status == api.BattleStatusActive && b.turn == i
 		for _, c := range s.team {
 			bp := api.BattlePokemon{
 				Name:    c.mon.Name,
