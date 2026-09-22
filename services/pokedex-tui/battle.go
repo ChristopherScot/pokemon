@@ -16,10 +16,29 @@ const drainPerFrame = 4
 type frameMsg time.Time
 
 type battleMsg struct {
+	// polled distinguishes a background poll from the result of an
+	// action the player took, the same way lobbyMsg does.
+	//
+	// Without it the handler could not tell them apart and re-armed
+	// pollBattle on every battleMsg - so each attack started a SECOND
+	// poll chain on top of the one already running, and they never
+	// merged or stopped. Ten turns meant eleven GETs a second against
+	// the API, growing for as long as the battle lasted.
+	polled bool
+
+	// id is the battle this reply is about.
+	//
+	// A tea.Cmd cannot be cancelled, so leaving a battle does not stop
+	// its poll - the reply still arrives a second later. The handler
+	// only checked that SOME battle was open, so joining a new one
+	// inside that window applied the old battle's state to the new
+	// one: wrong HP, wrong teams, wrong log, under the new battle's
+	// id. Worse, the foreign Version overwrote `seen`, so real updates
+	// at lower versions stopped animating for the rest of the game.
+	id string
+
 	battle *api.Battle
 	err    error
-
-	misses int
 }
 
 type lobbyMsg struct {
@@ -59,8 +78,6 @@ type battleState struct {
 	focus        pickFocus
 
 	seen int
-
-	logFrom int
 }
 
 type pickFocus int
@@ -100,7 +117,7 @@ func pollBattle(c *battleclient.Client, id string) tea.Cmd {
 		ctx, cancel := shortCtx()
 		defer cancel()
 		b, err := c.Get(ctx, id)
-		return battleMsg{battle: b, err: err}
+		return battleMsg{polled: true, id: id, battle: b, err: err}
 	})
 }
 
@@ -216,7 +233,12 @@ func (bs *battleState) advance() bool {
 		im.life--
 		if im.life <= 0 {
 			delete(bs.impacts, k)
+			continue
 		}
+		// Only for an impact that survives, matching the float and
+		// pulse loops. Claiming motion on the frame that deletes the
+		// last one costs an extra tick and makes advance()'s "is
+		// anything still moving" answer not quite true.
 		moving = true
 	}
 
@@ -247,8 +269,8 @@ func (bs *battleState) clampCursors() {
 	if !ok {
 		return
 	}
-	bs.pickAttacker = clampAlive(mine.Team, bs.pickAttacker)
-	bs.pickTarget = clampAlive(theirs.Team, bs.pickTarget)
+	bs.pickAttacker = clampPick(mine.Team, bs.pickAttacker, battleclient.CanAct)
+	bs.pickTarget = clampPick(theirs.Team, bs.pickTarget, battleclient.CanBeTargeted)
 	if bs.pickAttacker < len(mine.Team) {
 		if n := len(mine.Team[bs.pickAttacker].Moves); n > 0 && bs.pickMove >= n {
 			bs.pickMove = n - 1
@@ -256,16 +278,18 @@ func (bs *battleState) clampCursors() {
 	}
 }
 
-// clampAlive moves an index onto a Pokemon that is still standing.
-func clampAlive(team []api.BattlePokemon, i int) int {
+// clampPick moves an index onto a Pokemon the cursor may select.
+// Takes the predicate for the same reason nextPick does: an attacker
+// and a target are selected by different rules.
+func clampPick(team []api.BattlePokemon, i int, selectable func(api.BattlePokemon) bool) int {
 	if len(team) == 0 {
 		return 0
 	}
-	if i >= 0 && i < len(team) && battleclient.CanAct(team[i]) {
+	if i >= 0 && i < len(team) && selectable(team[i]) {
 		return i
 	}
 	for j, p := range team {
-		if battleclient.CanAct(p) {
+		if selectable(p) {
 			return j
 		}
 	}
@@ -314,6 +338,6 @@ func (m model) attack() tea.Cmd {
 		ctx, cancel := shortCtx()
 		defer cancel()
 		b, err := bc.Attack(ctx, id, a, mv, t)
-		return battleMsg{battle: b, err: err}
+		return battleMsg{id: id, battle: b, err: err}
 	}
 }

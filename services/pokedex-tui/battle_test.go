@@ -134,11 +134,11 @@ func TestCursorSkipsFaintedPokemon(t *testing.T) {
 		t.Errorf("target cursor on %d, want 1", got)
 	}
 
-	if got := nextAlive(team, 1); got != 1 {
-		t.Errorf("nextAlive wrapped onto a fainted pokemon: %d", got)
+	if got := nextPick(team, 1, battleclient.CanAct); got != 1 {
+		t.Errorf("nextPick wrapped onto a fainted pokemon: %d", got)
 	}
-	if got := prevAlive(team, 1); got != 1 {
-		t.Errorf("prevAlive wrapped onto a fainted pokemon: %d", got)
+	if got := prevPick(team, 1, battleclient.CanAct); got != 1 {
+		t.Errorf("prevPick wrapped onto a fainted pokemon: %d", got)
 	}
 }
 
