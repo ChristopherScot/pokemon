@@ -138,7 +138,7 @@ func (a *ui) monLine(gtx layout.Context, th *material.Theme, p api.BattlePokemon
 			rigid(func(gtx layout.Context) layout.Dimensions {
 				return layout.Inset{Right: gapS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					return a.spriteOrMonogram(gtx, th, p.Sprite,
-						strings.ToUpper(p.Name[:1]), unit.Dp(36), selected)
+						initial(p.Name), unit.Dp(36), selected)
 				})
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
@@ -363,5 +363,5 @@ func (a *ui) keepWatching(b *api.Battle) {
 		return
 	}
 	a.watching = true
-	a.watch(b.ID, a.lastSeen)
+	a.watch(b.ID, a.lastVersion)
 }
