@@ -50,6 +50,10 @@ type model struct {
 
 	screen screen
 
+	// animating is true while a frame chain is running, so a version
+	// bump during an animation does not start a second one.
+	animating bool
+
 	bc      *battleclient.Client
 	trainer string
 
@@ -144,11 +148,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case frameMsg:
 		if m.battle == nil {
+			m.animating = false
 			return m, nil
 		}
 		if m.battle.advance() {
 			return m, tick()
 		}
+		m.animating = false
 		return m, nil
 
 	case battleMsg:
@@ -195,7 +201,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.polled {
 			cmds = append(cmds, pollBattle(m.bc, m.battle.id))
 		}
-		if start {
+		// One frame chain at a time. frameMsg re-arms itself while
+		// advance() reports movement, so a version bump landing during
+		// an existing drain used to start a SECOND chain - both calling
+		// advance(), so HP drained and floats expired at double speed,
+		// getting faster the more turns were played.
+		if start && !m.animating {
+			m.animating = true
 			cmds = append(cmds, tick())
 		}
 		return m, tea.Batch(cmds...)
