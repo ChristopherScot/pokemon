@@ -5,6 +5,7 @@ import (
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
+	"github.com/christopherscot/pokemon/services/pokedex/battletext"
 )
 
 // serverMon is a Pokemon shaped the way the SERVER publishes one.
@@ -82,5 +83,51 @@ func TestTheAttackerCursorUsesCanAct(t *testing.T) {
 	if got := nextPick(mine, 0, battleclient.CanBeTargeted); got != 0 {
 		t.Logf("sanity: CanBeTargeted is false on your own side, so it would "+
 			"freeze the attacker cursor at %d", got)
+	}
+}
+
+// A row's colour and its glyph agree about what happened.
+//
+// The TUI re-derived "super effective" / "resisted" / "no effect"
+// from the raw effectiveness float at four separate sites, while the
+// glyph came from battletext.EventIcon - which classifies via
+// Classify, and Classify ranks Fainted ABOVE effectiveness. So a
+// killing super-effective blow showed the skull icon and
+// super-effective styling in the same row, describing two different
+// events. The four copies had also drifted among themselves: two
+// guarded the resisted case with e > 0 && e < 1, two used a bare
+// e < 1.
+func TestAKillingBlowIsStyledAsAFaintNotAsSuperEffective(t *testing.T) {
+	ev := api.BattleEvent{
+		Text:          "Charmander used Ember on Bulbasaur!",
+		Target:        api.NewOptString("bulbasaur"),
+		Damage:        api.NewOptInt(60),
+		Effectiveness: api.NewOptFloat64(2),
+		Fainted:       api.NewOptBool(true),
+	}
+	if got, want := battletext.Classify(ev), battletext.EventFainted; got != want {
+		t.Fatalf("Classify = %v, want %v - the rest of this test assumes "+
+			"fainting outranks effectiveness", got, want)
+	}
+
+	// Style and glyph must come from that same answer.
+	faint := impactStyle(battletext.EventFainted)
+	super := impactStyle(battletext.EventSuperEffective)
+	if faint.Render("x") == super.Render("x") {
+		t.Error("a faint and a super-effective hit render identically; the " +
+			"skull icon and the colour would be describing different events")
+	}
+}
+
+// And the resisted boundary is one rule, not four.
+func TestResistedIsClassifiedOnceForEveryPartOfTheRow(t *testing.T) {
+	for _, e := range []float64{0.25, 0.5} {
+		ev := api.BattleEvent{
+			Text: "hit", Target: api.NewOptString("x"),
+			Damage: api.NewOptInt(3), Effectiveness: api.NewOptFloat64(e),
+		}
+		if got := battletext.Classify(ev); got != battletext.EventResisted {
+			t.Errorf("Classify(%v) = %v, want EventResisted", e, got)
+		}
 	}
 }

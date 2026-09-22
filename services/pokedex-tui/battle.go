@@ -7,6 +7,7 @@ import (
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
+	"github.com/christopherscot/pokemon/services/pokedex/battletext"
 )
 
 const frameRate = time.Second / 30
@@ -95,15 +96,24 @@ const (
 type damageFloat struct {
 	slot   slot
 	amount int
-	effect float64
+	// kind is battletext.Classify's answer, not the raw effectiveness.
+	//
+	// The TUI used to re-derive "super effective" / "resisted" / "no
+	// effect" from the float at four separate sites, and the copies
+	// had drifted: two guarded the resisted case with e > 0 && e < 1
+	// and two used a bare e < 1, and none of them knew about fainting
+	// at all - so a killing super-effective blow showed the skull icon
+	// from EventIcon and super-effective styling from the local
+	// ladder, in the same row.
+	kind battletext.EventKind
 	// frames remaining; the float rises and fades as this counts down.
 	life int
 }
 
 type impact struct {
-	slot   slot
-	effect float64
-	life   int
+	slot slot
+	kind battletext.EventKind
+	life int
 }
 
 const (
@@ -172,21 +182,25 @@ func (bs *battleState) applyBattle(b *api.Battle) {
 				continue
 			}
 			if k, found := bs.findSlot(target); found {
-				eff := ev.Effectiveness.Or(1)
+				// One classification, from the package that owns it,
+				// used by every part of the row. faintLife comes from
+				// the same answer rather than a second read of
+				// ev.Fainted.
+				kind := battletext.Classify(ev)
 				bs.floats = append(bs.floats, damageFloat{
 					slot:   k,
 					amount: dmg,
-					effect: eff,
+					kind:   kind,
 					life:   floatLife,
 				})
 				if bs.impacts == nil {
 					bs.impacts = map[slot]*impact{}
 				}
 				life := impactLife
-				if ev.Fainted.Or(false) {
+				if kind == battletext.EventFainted {
 					life = faintLife
 				}
-				bs.impacts[k] = &impact{slot: k, effect: eff, life: life}
+				bs.impacts[k] = &impact{slot: k, kind: kind, life: life}
 			}
 		}
 	}
