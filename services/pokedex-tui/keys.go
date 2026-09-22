@@ -162,6 +162,10 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.screen = screenLobby
 		m.battle = nil
+		// Clear it, like every other transition into the lobby does.
+		// An error raised in the battle - a refused turn, say - used to
+		// follow the player out and render under the lobby.
+		m.status = ""
 		return m, fetchLobby(m.bc)
 	}
 
@@ -182,18 +186,18 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		switch bs.focus {
 		case focusAttacker:
-			bs.pickAttacker = prevAlive(mine.Team, bs.pickAttacker)
+			bs.pickAttacker = prevPick(mine.Team, bs.pickAttacker, battleclient.CanAct)
 			bs.pickMove = 0
 		case focusTarget:
-			bs.pickTarget = prevAlive(theirs.Team, bs.pickTarget)
+			bs.pickTarget = prevPick(theirs.Team, bs.pickTarget, battleclient.CanBeTargeted)
 		}
 	case "down", "j":
 		switch bs.focus {
 		case focusAttacker:
-			bs.pickAttacker = nextAlive(mine.Team, bs.pickAttacker)
+			bs.pickAttacker = nextPick(mine.Team, bs.pickAttacker, battleclient.CanAct)
 			bs.pickMove = 0
 		case focusTarget:
-			bs.pickTarget = nextAlive(theirs.Team, bs.pickTarget)
+			bs.pickTarget = nextPick(theirs.Team, bs.pickTarget, battleclient.CanBeTargeted)
 		}
 	case "left", "h":
 		if bs.pickMove > 0 {
@@ -218,27 +222,38 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// nextAlive and prevAlive move the cursor to the next Pokemon that can
-// actually be chosen.
+// nextPick and prevPick move a cursor to the next Pokemon it may
+// select, using the server's own answer for what that means.
 //
-// battleclient.CanAct rather than !Fainted: fainted is the INPUT the
-// server used to decide, and reading it here would be a second copy
-// of the rule. The cursor now skips whatever the server says is
-// unselectable, whether or not this client knows why.
-func nextAlive(team []api.BattlePokemon, i int) int {
+// The predicate is a parameter because the two cursors ask DIFFERENT
+// questions, and using one for both broke the target cursor
+// completely. The server publishes
+//
+//	CanAct:        sideActive && c.canAct()
+//	CanBeTargeted: !sideActive && c.canBeTargeted()
+//
+// so the two are mutually exclusive: every Pokemon on the opposing
+// side has CanAct false, always. A target cursor gated on CanAct
+// found nothing selectable and never moved - you could not attack the
+// opponent's second or third Pokemon at all.
+//
+// Either way it is the server's verdict rather than !Fainted, which
+// is the input the server used and would be a second copy of the rule
+// here.
+func nextPick(team []api.BattlePokemon, i int, selectable func(api.BattlePokemon) bool) int {
 	for step := 1; step <= len(team); step++ {
 		j := (i + step) % len(team)
-		if battleclient.CanAct(team[j]) {
+		if selectable(team[j]) {
 			return j
 		}
 	}
 	return i
 }
 
-func prevAlive(team []api.BattlePokemon, i int) int {
+func prevPick(team []api.BattlePokemon, i int, selectable func(api.BattlePokemon) bool) int {
 	for step := 1; step <= len(team); step++ {
 		j := (i - step + len(team)*2) % len(team)
-		if battleclient.CanAct(team[j]) {
+		if selectable(team[j]) {
 			return j
 		}
 	}
