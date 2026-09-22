@@ -1,4 +1,11 @@
 // Package battleclient is the part of playing a battle that every Go
+// client needs: where the trainer identity is stored, the typed calls
+// against the generated API, and the turn-legality check that keeps a
+// client from offering a move the server will reject.
+//
+// The CLI, the TUI and the Gio app all import it, so anything here is
+// shared by three front ends - which is the point, and the reason a
+// fourth copy of the rules is not needed.
 package battleclient
 
 import (

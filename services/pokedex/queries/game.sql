@@ -48,9 +48,14 @@ WHERE t.last_seen < $1
   AND NOT EXISTS (SELECT 1 FROM battle_sides s WHERE s.trainer_token = t.token);
 
 -- name: CreateBattle :exec
+-- waiting_for_token carries the opener's token while the battle is
+-- waiting, and battles_one_waiting_per_trainer makes it unique - so a
+-- trainer's second concurrent create fails with 23505 instead of
+-- slipping past a Go check that read a stale count. The caller maps
+-- that to the same 409 it already returns.
 INSERT INTO battles (
-    id, status, version, turn, turn_number, winner, state
-) VALUES ($1, $2, $3, $4, $5, $6, $7);
+    id, status, version, turn, turn_number, winner, state, waiting_for_token
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
 
 -- name: GetBattle :one
 SELECT id, status, version, turn, turn_number, winner,
@@ -77,7 +82,12 @@ UPDATE battles SET
     turn_number = $4,
     winner = $5,
     state = $6,
-    touched_at = now()
+    touched_at = now(),
+    -- Released the moment the battle stops waiting, or its opener
+    -- could never open another: the unique index on this column is
+    -- what caps them at one, so holding it past the join would be a
+    -- one-battle-per-trainer-ever rule rather than one-at-a-time.
+    waiting_for_token = CASE WHEN $2 = 'waiting' THEN waiting_for_token ELSE NULL END
 WHERE id = $1;
 
 -- name: ListWaitingBattles :many

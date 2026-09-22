@@ -74,6 +74,15 @@ func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params
 
 	b := newBattle(randomID(s.rng, 6), trainer, params.XTrainerToken, team, time.Now())
 	if err := s.battles.create(ctx, b); err != nil {
+		// The count above is a fast path, not the guarantee: two
+		// creates can both read zero. The database refuses the second,
+		// and it gets the same answer the count would have given.
+		if errors.Is(err, errAlreadyWaiting) {
+			return &api.CreateBattleConflict{
+				Message: "you already have a battle waiting for an opponent; " +
+					"play it or let it expire before opening another",
+			}, nil
+		}
 		return nil, fmt.Errorf("creating battle: %w", err)
 	}
 	return b.toAPI(), nil

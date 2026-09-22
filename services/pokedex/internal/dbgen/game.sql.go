@@ -21,14 +21,26 @@ ORDER BY b.touched_at DESC
 LIMIT 1
 `
 
+type ActiveBattleForTrainerRow struct {
+	ID         string
+	Status     string
+	Version    int32
+	Turn       int32
+	TurnNumber int32
+	Winner     string
+	CreatedAt  pgtype.Timestamptz
+	TouchedAt  pgtype.Timestamptz
+	State      []byte
+}
+
 // Which battle a trainer is in, for a client that reconnects holding
 // only its token. The reason battle_sides is a table rather than part
 // of the JSONB blob: this is the one question asked across battles,
 // and scanning every state document to answer it would not scale past
 // a handful.
-func (q *Queries) ActiveBattleForTrainer(ctx context.Context, trainerToken string) (Battle, error) {
+func (q *Queries) ActiveBattleForTrainer(ctx context.Context, trainerToken string) (ActiveBattleForTrainerRow, error) {
 	row := q.db.QueryRow(ctx, activeBattleForTrainer, trainerToken)
-	var i Battle
+	var i ActiveBattleForTrainerRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
@@ -110,20 +122,26 @@ func (q *Queries) CountOpenBattlesFor(ctx context.Context, trainerToken string) 
 
 const createBattle = `-- name: CreateBattle :exec
 INSERT INTO battles (
-    id, status, version, turn, turn_number, winner, state
-) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    id, status, version, turn, turn_number, winner, state, waiting_for_token
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `
 
 type CreateBattleParams struct {
-	ID         string
-	Status     string
-	Version    int32
-	Turn       int32
-	TurnNumber int32
-	Winner     string
-	State      []byte
+	ID              string
+	Status          string
+	Version         int32
+	Turn            int32
+	TurnNumber      int32
+	Winner          string
+	State           []byte
+	WaitingForToken *string
 }
 
+// waiting_for_token carries the opener's token while the battle is
+// waiting, and battles_one_waiting_per_trainer makes it unique - so a
+// trainer's second concurrent create fails with 23505 instead of
+// slipping past a Go check that read a stale count. The caller maps
+// that to the same 409 it already returns.
 func (q *Queries) CreateBattle(ctx context.Context, arg CreateBattleParams) error {
 	_, err := q.db.Exec(ctx, createBattle,
 		arg.ID,
@@ -133,6 +151,7 @@ func (q *Queries) CreateBattle(ctx context.Context, arg CreateBattleParams) erro
 		arg.TurnNumber,
 		arg.Winner,
 		arg.State,
+		arg.WaitingForToken,
 	)
 	return err
 }
@@ -160,9 +179,21 @@ SELECT id, status, version, turn, turn_number, winner,
 FROM battles WHERE id = $1
 `
 
-func (q *Queries) GetBattle(ctx context.Context, id string) (Battle, error) {
+type GetBattleRow struct {
+	ID         string
+	Status     string
+	Version    int32
+	Turn       int32
+	TurnNumber int32
+	Winner     string
+	CreatedAt  pgtype.Timestamptz
+	TouchedAt  pgtype.Timestamptz
+	State      []byte
+}
+
+func (q *Queries) GetBattle(ctx context.Context, id string) (GetBattleRow, error) {
 	row := q.db.QueryRow(ctx, getBattle, id)
-	var i Battle
+	var i GetBattleRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
@@ -183,13 +214,25 @@ SELECT id, status, version, turn, turn_number, winner,
 FROM battles WHERE id = $1
 `
 
+type GetBattleForUpdateRow struct {
+	ID         string
+	Status     string
+	Version    int32
+	Turn       int32
+	TurnNumber int32
+	Winner     string
+	CreatedAt  pgtype.Timestamptz
+	TouchedAt  pgtype.Timestamptz
+	State      []byte
+}
+
 // The read half of update(). Inside a SERIALIZABLE transaction this
 // is what Postgres tracks to detect a conflicting write: two pods
 // reading the same row and both writing it means one gets 40001 and
 // retries, rather than silently clobbering the other.
-func (q *Queries) GetBattleForUpdate(ctx context.Context, id string) (Battle, error) {
+func (q *Queries) GetBattleForUpdate(ctx context.Context, id string) (GetBattleForUpdateRow, error) {
 	row := q.db.QueryRow(ctx, getBattleForUpdate, id)
-	var i Battle
+	var i GetBattleForUpdateRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
@@ -213,6 +256,18 @@ ORDER BY created_at DESC
 LIMIT 100
 `
 
+type ListWaitingBattlesRow struct {
+	ID         string
+	Status     string
+	Version    int32
+	Turn       int32
+	TurnNumber int32
+	Winner     string
+	CreatedAt  pgtype.Timestamptz
+	TouchedAt  pgtype.Timestamptz
+	State      []byte
+}
+
 // The lobby: open invitations, newest first.
 //
 // LIMIT, because every row here has its state JSONB deserialised in
@@ -223,15 +278,15 @@ LIMIT 100
 // bitmap scan and sorts afterwards, so the DESC in the index buys
 // nothing. Measured at 200k battles - 17ms with a sort, 0.1ms with
 // this plus the partial index from migration 003.
-func (q *Queries) ListWaitingBattles(ctx context.Context) ([]Battle, error) {
+func (q *Queries) ListWaitingBattles(ctx context.Context) ([]ListWaitingBattlesRow, error) {
 	rows, err := q.db.Query(ctx, listWaitingBattles)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Battle
+	var items []ListWaitingBattlesRow
 	for rows.Next() {
-		var i Battle
+		var i ListWaitingBattlesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Status,
@@ -402,7 +457,12 @@ UPDATE battles SET
     turn_number = $4,
     winner = $5,
     state = $6,
-    touched_at = now()
+    touched_at = now(),
+    -- Released the moment the battle stops waiting, or its opener
+    -- could never open another: the unique index on this column is
+    -- what caps them at one, so holding it past the join would be a
+    -- one-battle-per-trainer-ever rule rather than one-at-a-time.
+    waiting_for_token = CASE WHEN $2 = 'waiting' THEN waiting_for_token ELSE NULL END
 WHERE id = $1
 `
 

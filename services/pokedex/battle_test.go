@@ -17,7 +17,7 @@ func testService(t *testing.T) service {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return service{dex: dex, battles: newMemStore(1), rng: rngFor(1)}
+	return service{dex: dex, battles: newMemStore(), rng: rngFor(1)}
 }
 
 func activeBattle(t *testing.T, s service) (*battle, string, string) {
@@ -391,9 +391,17 @@ func TestCreateWithNoTeamPicksOne(t *testing.T) {
 	}
 }
 
-func TestTokensDoNotFollowTheSeed(t *testing.T) {
-	a := newMemStore(42)
-	b := newMemStore(42)
+// Tokens come from crypto/rand, not from anything reproducible.
+//
+// This was TestTokensDoNotFollowTheSeed, from when the stores took a
+// seed: two stores built with the SAME seed had to mint different
+// tokens, or a trainer's identity would be guessable by anyone who
+// knew when the process started. The seed is gone - it configured
+// nothing - but the property it guarded is the one that matters, so
+// the test stays and the name now says what it checks.
+func TestTokensAreUnpredictableAndUnique(t *testing.T) {
+	a := newMemStore()
+	b := newMemStore()
 
 	ta, err := a.registerTrainer(context.Background(), "ash")
 	if err != nil {
@@ -404,7 +412,7 @@ func TestTokensDoNotFollowTheSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	if ta == tb {
-		t.Error("two stores with the same seed minted the same token; it is derived from the seed")
+		t.Error("two stores minted the same token; identity would be guessable")
 	}
 
 	// And tokens within one store differ from each other.

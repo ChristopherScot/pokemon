@@ -9,15 +9,16 @@ import (
 )
 
 type Battle struct {
-	ID         string
-	Status     string
-	Version    int32
-	Turn       int32
-	TurnNumber int32
-	Winner     string
-	CreatedAt  pgtype.Timestamptz
-	TouchedAt  pgtype.Timestamptz
-	State      []byte
+	ID              string
+	Status          string
+	Version         int32
+	Turn            int32
+	TurnNumber      int32
+	Winner          string
+	CreatedAt       pgtype.Timestamptz
+	TouchedAt       pgtype.Timestamptz
+	State           []byte
+	WaitingForToken *string
 }
 
 type BattleSide struct {

@@ -15,7 +15,7 @@ import (
 // neither re-register it nor recover it.
 func TestAnAbandonedNameCanBeClaimedAgain(t *testing.T) {
 	ctx := context.Background()
-	m := newMemStore(1)
+	m := newMemStore()
 
 	if _, err := m.registerTrainer(ctx, "ash"); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestAnAbandonedNameCanBeClaimedAgain(t *testing.T) {
 // and strands whoever eventually joins.
 func TestASweepNeverStrandsSomeoneInABattle(t *testing.T) {
 	ctx := context.Background()
-	m := newMemStore(1)
+	m := newMemStore()
 
 	waiting, err := m.registerTrainer(ctx, "waiting-for-a-game")
 	if err != nil {
@@ -84,7 +84,7 @@ func TestASweepNeverStrandsSomeoneInABattle(t *testing.T) {
 // Acting refreshes the claim, so a regular player never loses a name.
 func TestUsingATokenKeepsTheName(t *testing.T) {
 	ctx := context.Background()
-	m := newMemStore(1)
+	m := newMemStore()
 
 	token, err := m.registerTrainer(ctx, "regular")
 	if err != nil {
@@ -127,7 +127,7 @@ func TestSweepOverPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := service{dex: dex, battles: newPGStore(pool, 1), rng: rngFor(1)}
+	s := service{dex: dex, battles: newPGStore(pool), rng: rngFor(1)}
 
 	idle, err := s.battles.registerTrainer(ctx, "abandoned")
 	if err != nil {
