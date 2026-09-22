@@ -153,3 +153,49 @@ func TestAReplyForAnAbandonedBattleIsDropped(t *testing.T) {
 			"lets it die")
 	}
 }
+
+// Only one frame chain runs at a time.
+//
+// frameMsg re-arms itself while advance() reports movement, and a
+// version bump used to schedule another tick with nothing checking
+// whether one was already running. Both chains called advance(), so
+// HP drained and floats expired at double speed - and faster still
+// the more turns were played, because each bump could add another.
+func TestASecondVersionBumpDoesNotDoubleTheFrameRate(t *testing.T) {
+	m := modelInBattle(t)
+
+	// First bump: starts animating.
+	out, _ := m.Update(battleMsg{id: "abc", polled: true, battle: battleAt(2)})
+	first := out.(model)
+	if !first.animating {
+		t.Fatal("the first version bump did not start a frame chain")
+	}
+
+	// Second bump while it is still running: must not start another.
+	out2, cmd := first.Update(battleMsg{id: "abc", polled: true, battle: battleAt(3)})
+	if ticksIn(cmd) != 0 {
+		t.Error("a version bump during an animation started a second frame " +
+			"chain; both call advance(), so everything animates at double speed")
+	}
+	if !out2.(model).animating {
+		t.Error("the flag was cleared while a chain is still running")
+	}
+}
+
+// ticksIn reports how many frame chains a command starts.
+func ticksIn(cmd tea.Cmd) int {
+	if cmd == nil {
+		return 0
+	}
+	switch v := cmd().(type) {
+	case frameMsg:
+		return 1
+	case tea.BatchMsg:
+		n := 0
+		for _, c := range v {
+			n += ticksIn(c)
+		}
+		return n
+	}
+	return 0
+}
