@@ -47,6 +47,24 @@ ingress:
 # flaky network rather than missing shared state.
 replicas: 1
 
+# Readiness and liveness answer different questions, so they get
+# different endpoints.
+#
+# Liveness asks whether to RESTART this pod: /healthz answers from the
+# process alone, so a slow query or a dead database does not get the
+# pod killed and restarted into the same problem.
+#
+# Readiness asks whether to SEND IT TRAFFIC: /readyz pings the pool,
+# so a pod whose database connection is gone is taken out of the
+# Service instead of accepting requests it will fail. Without this the
+# probe hit /healthz and a pod reported Ready with a dead connection.
+#
+# Both paths must exist before this is set - readyPath defaults to
+# path, which is what the services with only /healthz rely on.
+probes:
+  path: /healthz
+  readyPath: /readyz
+
 # 64Mi was the template default and too tight here: the whole move
 # catalogue is loaded into memory at startup and ListMoves serves all
 # ~9000 rows uncached, so a few concurrent catalogue reads could
