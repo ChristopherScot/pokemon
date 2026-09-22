@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
@@ -12,8 +13,13 @@ import (
 )
 
 func index1(s, what string) (int, error) {
-	var n int
-	if _, err := fmt.Sscanf(strings.TrimSpace(s), "%d", &n); err != nil {
+	// Atoi, not Sscanf: Sscanf stops at the first byte that does not
+	// match and reports success for the prefix it consumed, so "2x",
+	// "1.9" and "2 3" all parsed as numbers and the rest was dropped
+	// in silence - `attack abc 1 2.9 3` used move 2 without a word.
+	// Atoi rejects the whole string unless it is exactly an integer.
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
 		return 0, fmt.Errorf("%s: %q is not a number", what, s)
 	}
 	if n < 1 {
@@ -75,6 +81,13 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 		}
 	case c.MyTurn(b):
 		fmt.Println("\nyour moves")
+		// The first pokemon that can actually act, which is what the
+		// usage hint below has to describe. It used to read
+		// mine.Team[0] unconditionally - on the same line that
+		// guarded len(mine.Team) - so an empty team panicked, and a
+		// team whose slot 0 had a different move count printed the
+		// wrong range.
+		firstUsable := -1
 		for i, p := range mine.Team {
 			// CanAct, not !Fainted: this decides what the player is
 			// OFFERED, which is a rule, and the server owns the
@@ -82,6 +95,9 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 			// presentation and correctly still reads Fainted.
 			if !battleclient.CanAct(p) {
 				continue
+			}
+			if firstUsable < 0 {
+				firstUsable = i
 			}
 			fmt.Printf("  %d %s\n", i+1, p.Name)
 			for j, mv := range p.Moves {
@@ -96,8 +112,12 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 				fmt.Printf("      %d %-16s %-9s %s%s\n", j+1, mv.Name, mv.Type, power, note)
 			}
 		}
-		fmt.Printf("\nyour move: pokedex-cli attack %s <your 1-%d> <move 1-%d> <their 1-%d>\n",
-			b.ID, len(mine.Team), len(mine.Team[0].Moves), len(theirs.Team))
+		// Only when there IS something to offer: with no usable
+		// pokemon the hint would describe a move nobody can make.
+		if firstUsable >= 0 {
+			fmt.Printf("\nyour move: pokedex-cli attack %s <your 1-%d> <move 1-%d> <their 1-%d>\n",
+				b.ID, len(mine.Team), len(mine.Team[firstUsable].Moves), len(theirs.Team))
+		}
 	default:
 		fmt.Printf("\nwaiting on %s. `watch %s` to block until it is your turn.\n", b.Turn.Value, b.ID)
 	}
@@ -164,18 +184,33 @@ func teamLine(s api.Side) string {
 	return strings.Join(names, ", ")
 }
 
-func identityHint(err error) error {
-	switch {
-	case errors.Is(err, battleclient.ErrNoIdentity):
-		fmt.Fprintln(os.Stderr, "no trainer registered yet.")
-		fmt.Fprintln(os.Stderr, "  pokedex-cli register <your-name>")
-	case errors.Is(err, battleclient.ErrStaleIdentity):
-		fmt.Fprintln(os.Stderr, "the server no longer knows this trainer -")
-		fmt.Fprintln(os.Stderr, "it restarted, and trainers live in its memory.")
+// identityHint prints what to do about an identity error, and clears
+// a token the server has forgotten.
+//
+// The wording comes from battleclient.IdentityAdvice so the CLI, the
+// TUI and the phone say the same thing. This used to be a second copy
+// of the same errors.Is ladder with its own text, and the two had
+// already drifted - the copy here still told players "trainers live
+// in its memory", which stopped being true when trainers moved to
+// postgres and a restart stopped losing them.
+//
+// The one thing that is genuinely the CLI's: clearing the stored
+// token. That is recovery rather than wording, and it belongs where
+// the file is.
+//
+// No return value: it only ever handed back its own argument, and
+// main.go printed the error separately anyway.
+func identityHint(err error) {
+	advice := battleclient.IdentityAdvice(err)
+	if advice == "" {
+		return
+	}
+	fmt.Fprintln(os.Stderr, advice)
+
+	if errors.Is(err, battleclient.ErrStaleIdentity) {
 		if clearErr := battleclient.ClearIdentity(); clearErr != nil {
 			fmt.Fprintf(os.Stderr, "  (could not remove the stored token: %v)\n", clearErr)
 		}
-		fmt.Fprintln(os.Stderr, "  pokedex-cli register <your-name>")
 	}
-	return err
+	fmt.Fprintln(os.Stderr, "  pokedex-cli register <your-name>")
 }
