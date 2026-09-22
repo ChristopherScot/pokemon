@@ -112,9 +112,28 @@ LIMIT 100;
 -- touched at all - a join is its first update - so its touched_at is
 -- just its creation time, and one cutoff deleted players who were
 -- sitting in the lobby doing exactly what they should.
-DELETE FROM battles
-WHERE (status <> 'waiting' AND touched_at < @active_before)
-   OR (status =  'waiting' AND touched_at < @waiting_before);
+-- Bounded, because an unbounded DELETE here is a user's request.
+--
+-- With a backlog - any outage, restart gap or traffic spike leaves
+-- one - the predicate stops being selective, the planner abandons
+-- battles_touched_idx for a sequential scan, and the FK cascade fires
+-- once per row. Measured at 193k expired battles: 992ms and 193,000
+-- trigger calls, inside POST /battles and the lobby GET. With several
+-- replicas each serving a lobby load, those all issue the same DELETE
+-- and contend on the same rows.
+--
+-- A limit caps the worst case at something a request can absorb -
+-- 37ms and 1,000 trigger calls for the same backlog - and still
+-- drains it across successive writes, oldest first. Steady state is
+-- unaffected: 5.8ms unbounded vs 3.1ms batched, with nothing to
+-- delete.
+DELETE FROM battles WHERE id IN (
+    SELECT b.id FROM battles b
+    WHERE (b.status <> 'waiting' AND b.touched_at < @active_before)
+       OR (b.status =  'waiting' AND b.touched_at < @waiting_before)
+    ORDER BY b.touched_at
+    LIMIT @batch_size
+);
 
 -- name: AddBattleSide :exec
 INSERT INTO battle_sides (battle_id, idx, trainer_token)
