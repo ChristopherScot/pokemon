@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"strings"
+	"unicode/utf8"
 
 	"gioui.org/io/key"
 	"gioui.org/layout"
@@ -190,7 +191,7 @@ func (a *ui) dexRow(gtx layout.Context, th *material.Theme, p api.Pokemon, i int
 		trailing = "#" + strconv.Itoa(pos) + " on team"
 	}
 	lead := func(gtx layout.Context) layout.Dimensions {
-		return a.spriteOrMonogram(gtx, th, p.Sprite, strings.ToUpper(p.Name[:1]), unit.Dp(48), pos > 0)
+		return a.spriteOrMonogram(gtx, th, p.Sprite, initial(p.Name), unit.Dp(48), pos > 0)
 	}
 	return layout.Inset{Bottom: gapXS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return listItemTyped(gtx, th, &a.dexClicks[i], lead, title(p.Name), p.Types, trailing, pos > 0)
@@ -199,6 +200,27 @@ func (a *ui) dexRow(gtx layout.Context, th *material.Theme, p api.Pokemon, i int
 
 // title capitalises a name for display. The API returns lowercase
 // ids; a list of lowercase names reads as data, not as a Pokedex.
+// initial is the monogram letter for a name, which the server may send
+// empty and may send starting with a multi-byte rune.
+//
+// Three call sites did strings.ToUpper(name[:1]) directly, next to a
+// title() that guards the empty case - so an empty name was a panic
+// inside layout, on the UI goroutine, taking the app down mid-battle.
+// In the lobby that name comes from ANOTHER player, so one empty
+// registration could stop everyone opening the Lobby tab.
+//
+// DecodeRuneInString rather than [:1] because the slice takes a BYTE:
+// a name starting with a non-Latin letter rendered as a replacement
+// box. The spec puts no pattern on a trainer name, and the CLI can
+// register any UTF-8.
+func initial(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	if size == 0 || r == utf8.RuneError {
+		return "?"
+	}
+	return strings.ToUpper(string(r))
+}
+
 func title(s string) string {
 	if s == "" {
 		return s
@@ -321,7 +343,7 @@ func (a *ui) lobbyScreen(gtx layout.Context, th *material.Theme) layout.Dimensio
 						}
 						sup = "bringing " + strings.Join(names, ", ")
 					}
-					initial := strings.ToUpper(waiting[i].Trainer[:1])
+					initial := initial(waiting[i].Trainer)
 					return listItem(gtx, th, &a.lobbyBtns[i], initial,
 						title(waiting[i].Trainer), sup, "", false)
 				})

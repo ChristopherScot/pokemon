@@ -16,8 +16,11 @@ package main
 // Kotlin: the edit-run loop does not involve a device.
 
 import (
+	"context"
+	"errors"
 	"image/color"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -143,7 +146,10 @@ type ui struct {
 	backBtn  widget.Clickable
 	logList  widget.List
 	watching bool
-	lastSeen int
+	// lastVersion is the battle version the watch has already seen.
+	// Named for the quantity it holds: it was lastSeen, and a log
+	// length was assigned to it.
+	lastVersion int
 
 	// nav
 	navBtns [4]widget.Clickable
@@ -226,6 +232,25 @@ func (a *ui) apply(r result) {
 	a.busy = false
 	if r.err != nil {
 		a.status = statusFor(r.err)
+		// A stale identity has to lead somewhere.
+		//
+		// The server forgets trainers when it restarts, and the status
+		// said "register again" - but screenRegister was set in
+		// exactly one place, first launch, and ClearIdentity was never
+		// called at all. So the app told the player to do something it
+		// gave them no way to do, and on a phone the only way out was
+		// reinstalling. The CLI has handled this correctly all along.
+		if errors.Is(r.err, battleclient.ErrStaleIdentity) {
+			if clearErr := battleclient.ClearIdentity(); clearErr != nil {
+				slog.Warn("could not remove the stale identity", "err", clearErr)
+			}
+			a.bc = nil
+			a.id = battleclient.Identity{}
+			a.battle = nil
+			a.watching = false
+			a.screen = screenRegister
+			return
+		}
 		// A failed watch should not stop us watching, or the battle
 		// silently stops updating and looks frozen.
 		if r.kind == resBattle {
@@ -255,7 +280,15 @@ func (a *ui) apply(r result) {
 		a.sel.reset()
 		if r.battle != nil {
 			a.screen = screenBattle
-			a.lastSeen = len(r.battle.Log)
+			// The VERSION, not the log length. Watch compares
+			// b.Version > seen, so passing a log length compared two
+			// different quantities: at battle start len(Log) is 0
+			// while Version is already 1, so the long poll returned
+			// immediately, keepWatching re-armed it the next frame,
+			// and the phone hammered GET /battles/{id} at frame rate
+			// for the whole of the opponent's turn. The CLI keeps the
+			// two deliberately separate.
+			a.lastVersion = r.battle.Version
 		}
 	}
 }
@@ -274,16 +307,35 @@ func statusFor(err error) string {
 	}
 	msg := err.Error()
 
+	// Typed errors first. battleclient publishes sentinels for the
+	// identity cases and IdentityAdvice for their wording, which the
+	// CLI and TUI both use - matching "401" as a substring also fires
+	// on a battle id or an HP value that happens to contain those
+	// digits.
+	if advice := battleclient.IdentityAdvice(err); advice != "" {
+		return advice
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "No answer from the server. Check your connection."
+	}
+
 	switch {
 	case strings.Contains(msg, "decode response"), strings.Contains(msg, "field required"):
 		return "The server rejected that. Try a different name."
 	case strings.Contains(msg, "context deadline exceeded"),
 		strings.Contains(msg, "Client.Timeout"):
+		// The sentinel check above catches a properly wrapped
+		// deadline. This still catches one that reached us as text -
+		// an error built with errors.New, or wrapped by something that
+		// did not preserve the chain.
 		return "No answer from the server. Check your connection."
+	case strings.Contains(msg, "401"), strings.Contains(msg, "403"):
+		// IdentityAdvice above handles a typed identity error. This is
+		// the fallback for a bare status that never became one; it is
+		// deliberately LAST so a real sentinel is preferred.
+		return "That trainer is not recognised. Register again."
 	case strings.Contains(msg, "no such host"), strings.Contains(msg, "dial tcp"):
 		return "Cannot reach the server."
-	case strings.Contains(msg, "401"), strings.Contains(msg, "403"):
-		return "That trainer is not recognised. Register again."
 	case strings.Contains(msg, "is taken"):
 		// The server says so plainly and the message is already
 		// player-facing, so pass it through rather than paraphrasing.
