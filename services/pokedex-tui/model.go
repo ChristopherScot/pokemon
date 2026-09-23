@@ -50,6 +50,10 @@ type model struct {
 
 	screen screen
 
+	// animating is true while a frame chain is running, so a version
+	// bump during an animation does not start a second one.
+	animating bool
+
 	bc      *battleclient.Client
 	trainer string
 
@@ -144,25 +148,44 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case frameMsg:
 		if m.battle == nil {
+			m.animating = false
 			return m, nil
 		}
 		if m.battle.advance() {
 			return m, tick()
 		}
+		m.animating = false
 		return m, nil
 
 	case battleMsg:
-		if m.battle == nil {
+		// Belongs to the battle we are actually in, or it is the reply
+		// to a poll for one we have left. A tea.Cmd cannot be
+		// cancelled, so that reply still arrives - and joining a new
+		// battle inside the poll interval used to apply the OLD
+		// battle's state to the new one. Dropping it here also ends
+		// the orphaned chain, because nothing re-arms it.
+		if m.battle == nil || msg.id != m.battle.id {
 			return m, nil
 		}
 		if msg.err != nil {
-			m.battle.err = msg.err
 			m.battle.misses++
+			// Only fatal once the retry budget is spent. Setting err on
+			// the FIRST miss replaced the whole battle - HP, teams, log -
+			// with "battle error, press esc", so misses 2 through 5 were
+			// invisible to a player who had already been told it was
+			// broken. The counter exists precisely because one miss is
+			// expected to be survivable.
 			if m.battle.misses >= maxPollMisses {
+				m.battle.err = msg.err
 				m.screen = screenLobby
 				m.status = "that battle is over - the server restarted and battles do not survive it"
 				m.battle = nil
 				return m, fetchLobby(m.bc)
+			}
+			// Keep the last good battle on screen and keep trying, but
+			// only the poll chain re-arms itself.
+			if !msg.polled {
+				return m, nil
 			}
 			return m, pollBattle(m.bc, m.battle.id)
 		}
@@ -170,8 +193,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.battle.misses = 0
 		start := msg.battle.Version > m.battle.seen
 		m.battle.applyBattle(msg.battle)
-		cmds := []tea.Cmd{pollBattle(m.bc, m.battle.id)}
-		if start {
+
+		// Re-arm only for a poll. An attack's reply is a battleMsg too,
+		// and re-arming on it started a second chain that never stopped:
+		// one more GET per second for every turn taken.
+		var cmds []tea.Cmd
+		if msg.polled {
+			cmds = append(cmds, pollBattle(m.bc, m.battle.id))
+		}
+		// One frame chain at a time. frameMsg re-arms itself while
+		// advance() reports movement, so a version bump landing during
+		// an existing drain used to start a SECOND chain - both calling
+		// advance(), so HP drained and floats expired at double speed,
+		// getting faster the more turns were played.
+		if start && !m.animating {
+			m.animating = true
 			cmds = append(cmds, tick())
 		}
 		return m, tea.Batch(cmds...)

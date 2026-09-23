@@ -34,13 +34,20 @@ var (
 	weakStyle  = lipgloss.NewStyle().Faint(true)
 )
 
-func impactStyle(effect float64) lipgloss.Style {
-	switch {
-	case effect >= 2:
+// impactStyle colours a hit by what the event WAS, not by re-reading
+// the effectiveness float. battletext.Classify is the one place that
+// decides, and it ranks fainting above effectiveness - so a killing
+// blow is styled as a faint rather than as super-effective, matching
+// the skull EventIcon already puts on the same row.
+func impactStyle(kind battletext.EventKind) lipgloss.Style {
+	switch kind {
+	case battletext.EventFainted:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	case battletext.EventSuperEffective:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true)
-	case effect == 0:
+	case battletext.EventNoEffect:
 		return dimStyle
-	case effect < 1:
+	case battletext.EventResisted:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	default:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
@@ -109,7 +116,7 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 		if im.life%4 < 2 {
 			lead = " "
 		}
-		bar = impactStyle(im.effect).Render(strings.Repeat("━", 14))
+		bar = impactStyle(im.kind).Render(strings.Repeat("━", 14))
 	}
 
 	line := lead + fmt.Sprintf("%s %s %s %s",
@@ -136,23 +143,19 @@ func (bs *battleState) monLine(si, pi int, p api.BattlePokemon, selected bool) s
 
 func renderFloat(f damageFloat) string {
 	text := fmt.Sprintf("-%d", f.amount)
-	switch {
-	case f.effect == 0:
-		text = "no effect"
-	case f.effect >= 2:
-		text += " !!"
-	case f.effect < 1:
-		text += " ..."
-	}
-
 	style := hpDanger
-	switch {
-	case f.effect == 0:
-		style = dimStyle
-	case f.effect >= 2:
+	// One switch on the server's own classification, where there were
+	// two ladders over the raw float - which disagreed with each other
+	// and with logView about where "resisted" starts.
+	switch f.kind {
+	case battletext.EventNoEffect:
+		text, style = "no effect", dimStyle
+	case battletext.EventSuperEffective:
+		text, style = text+" !!", superStyle
+	case battletext.EventResisted:
+		text, style = text+" ...", weakStyle
+	case battletext.EventFainted:
 		style = superStyle
-	case f.effect < 1:
-		style = weakStyle
 	}
 	if f.life < floatLife/2 {
 		style = style.Faint(true)
@@ -272,12 +275,16 @@ func (bs *battleState) logView(height int) string {
 	var sb strings.Builder
 	for _, ev := range log[from:] {
 		text := ev.Text
-		switch e := ev.Effectiveness.Or(1); {
-		case e >= 2:
+		// The same classification the icon below uses, so a row's
+		// colour and its glyph cannot disagree. This was a fourth copy
+		// of the effectiveness ladder, and it was the only one that
+		// guarded the resisted case the way Classify does.
+		switch battletext.Classify(ev) {
+		case battletext.EventSuperEffective:
 			text = superStyle.Render(text)
-		case e > 0 && e < 1:
+		case battletext.EventResisted:
 			text = weakStyle.Render(text)
-		case e == 0:
+		case battletext.EventNoEffect:
 			text = dimStyle.Render(text)
 		}
 		if icon := battletext.EventIcon(ev); icon != "" {

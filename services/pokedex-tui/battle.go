@@ -7,6 +7,7 @@ import (
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
+	"github.com/christopherscot/pokemon/services/pokedex/battletext"
 )
 
 const frameRate = time.Second / 30
@@ -18,10 +19,29 @@ type frameMsg time.Time
 
 // battleMsg carries new state from a poll.
 type battleMsg struct {
+	// polled distinguishes a background poll from the result of an
+	// action the player took, the same way lobbyMsg does.
+	//
+	// Without it the handler could not tell them apart and re-armed
+	// pollBattle on every battleMsg - so each attack started a SECOND
+	// poll chain on top of the one already running, and they never
+	// merged or stopped. Ten turns meant eleven GETs a second against
+	// the API, growing for as long as the battle lasted.
+	polled bool
+
+	// id is the battle this reply is about.
+	//
+	// A tea.Cmd cannot be cancelled, so leaving a battle does not stop
+	// its poll - the reply still arrives a second later. The handler
+	// only checked that SOME battle was open, so joining a new one
+	// inside that window applied the old battle's state to the new
+	// one: wrong HP, wrong teams, wrong log, under the new battle's
+	// id. Worse, the foreign Version overwrote `seen`, so real updates
+	// at lower versions stopped animating for the rest of the game.
+	id string
+
 	battle *api.Battle
 	err    error
-
-	misses int
 }
 
 // lobbyMsg carries the list of open battles.
@@ -63,8 +83,6 @@ type battleState struct {
 	focus        pickFocus
 
 	seen int
-
-	logFrom int
 }
 
 type pickFocus int
@@ -78,15 +96,24 @@ const (
 type damageFloat struct {
 	slot   slot
 	amount int
-	effect float64
+	// kind is battletext.Classify's answer, not the raw effectiveness.
+	//
+	// The TUI used to re-derive "super effective" / "resisted" / "no
+	// effect" from the float at four separate sites, and the copies
+	// had drifted: two guarded the resisted case with e > 0 && e < 1
+	// and two used a bare e < 1, and none of them knew about fainting
+	// at all - so a killing super-effective blow showed the skull icon
+	// from EventIcon and super-effective styling from the local
+	// ladder, in the same row.
+	kind battletext.EventKind
 	// frames remaining; the float rises and fades as this counts down.
 	life int
 }
 
 type impact struct {
-	slot   slot
-	effect float64
-	life   int
+	slot slot
+	kind battletext.EventKind
+	life int
 }
 
 const (
@@ -106,7 +133,7 @@ func pollBattle(c *battleclient.Client, id string) tea.Cmd {
 		ctx, cancel := shortCtx()
 		defer cancel()
 		b, err := c.Get(ctx, id)
-		return battleMsg{battle: b, err: err}
+		return battleMsg{polled: true, id: id, battle: b, err: err}
 	})
 }
 
@@ -155,21 +182,25 @@ func (bs *battleState) applyBattle(b *api.Battle) {
 				continue
 			}
 			if k, found := bs.findSlot(target); found {
-				eff := ev.Effectiveness.Or(1)
+				// One classification, from the package that owns it,
+				// used by every part of the row. faintLife comes from
+				// the same answer rather than a second read of
+				// ev.Fainted.
+				kind := battletext.Classify(ev)
 				bs.floats = append(bs.floats, damageFloat{
 					slot:   k,
 					amount: dmg,
-					effect: eff,
+					kind:   kind,
 					life:   floatLife,
 				})
 				if bs.impacts == nil {
 					bs.impacts = map[slot]*impact{}
 				}
 				life := impactLife
-				if ev.Fainted.Or(false) {
+				if kind == battletext.EventFainted {
 					life = faintLife
 				}
-				bs.impacts[k] = &impact{slot: k, effect: eff, life: life}
+				bs.impacts[k] = &impact{slot: k, kind: kind, life: life}
 			}
 		}
 	}
@@ -222,7 +253,12 @@ func (bs *battleState) advance() bool {
 		im.life--
 		if im.life <= 0 {
 			delete(bs.impacts, k)
+			continue
 		}
+		// Only for an impact that survives, matching the float and
+		// pulse loops. Claiming motion on the frame that deletes the
+		// last one costs an extra tick and makes advance()'s "is
+		// anything still moving" answer not quite true.
 		moving = true
 	}
 
@@ -253,8 +289,8 @@ func (bs *battleState) clampCursors() {
 	if !ok {
 		return
 	}
-	bs.pickAttacker = clampAlive(mine.Team, bs.pickAttacker)
-	bs.pickTarget = clampAlive(theirs.Team, bs.pickTarget)
+	bs.pickAttacker = clampPick(mine.Team, bs.pickAttacker, battleclient.CanAct)
+	bs.pickTarget = clampPick(theirs.Team, bs.pickTarget, battleclient.CanBeTargeted)
 	if bs.pickAttacker < len(mine.Team) {
 		if n := len(mine.Team[bs.pickAttacker].Moves); n > 0 && bs.pickMove >= n {
 			bs.pickMove = n - 1
@@ -262,18 +298,18 @@ func (bs *battleState) clampCursors() {
 	}
 }
 
-// clampAlive moves an index onto a Pokemon that is still standing.
-func clampAlive(team []api.BattlePokemon, i int) int {
+// clampPick moves an index onto a Pokemon the cursor may select.
+// Takes the predicate for the same reason nextPick does: an attacker
+// and a target are selected by different rules.
+func clampPick(team []api.BattlePokemon, i int, selectable func(api.BattlePokemon) bool) int {
 	if len(team) == 0 {
 		return 0
 	}
-	// CanAct rather than !Fainted: this keeps the cursor on something
-	// the player may actually choose, which is a rule the server owns.
-	if i >= 0 && i < len(team) && battleclient.CanAct(team[i]) {
+	if i >= 0 && i < len(team) && selectable(team[i]) {
 		return i
 	}
 	for j, p := range team {
-		if battleclient.CanAct(p) {
+		if selectable(p) {
 			return j
 		}
 	}
@@ -323,6 +359,6 @@ func (m model) attack() tea.Cmd {
 		ctx, cancel := shortCtx()
 		defer cancel()
 		b, err := bc.Attack(ctx, id, a, mv, t)
-		return battleMsg{battle: b, err: err}
+		return battleMsg{id: id, battle: b, err: err}
 	}
 }

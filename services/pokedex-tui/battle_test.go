@@ -11,6 +11,7 @@ import (
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
+	"github.com/christopherscot/pokemon/services/pokedex/battletext"
 )
 
 func mon(name string, hp, max int, fainted bool) api.BattlePokemon {
@@ -95,8 +96,8 @@ func TestDamageFloatsComeFromTheLog(t *testing.T) {
 	if len(bs.floats) != 1 {
 		t.Fatalf("got %d floats, want 1", len(bs.floats))
 	}
-	if bs.floats[0].amount != 30 || bs.floats[0].effect != 2 {
-		t.Errorf("float = %+v, want 30 damage at 2x", bs.floats[0])
+	if bs.floats[0].amount != 30 || bs.floats[0].kind != battletext.EventSuperEffective {
+		t.Errorf("float = %+v, want 30 damage classified super-effective", bs.floats[0])
 	}
 	if bs.floats[0].slot != (slot{1, 0}) {
 		t.Errorf("float landed on %+v, want the opponent's first slot", bs.floats[0].slot)
@@ -134,11 +135,11 @@ func TestCursorSkipsFaintedPokemon(t *testing.T) {
 		t.Errorf("target cursor on %d, want 1", got)
 	}
 
-	if got := nextAlive(team, 1); got != 1 {
-		t.Errorf("nextAlive wrapped onto a fainted pokemon: %d", got)
+	if got := nextPick(team, 1, battleclient.CanAct); got != 1 {
+		t.Errorf("nextPick wrapped onto a fainted pokemon: %d", got)
 	}
-	if got := prevAlive(team, 1); got != 1 {
-		t.Errorf("prevAlive wrapped onto a fainted pokemon: %d", got)
+	if got := prevPick(team, 1, battleclient.CanAct); got != 1 {
+		t.Errorf("prevPick wrapped onto a fainted pokemon: %d", got)
 	}
 }
 
@@ -265,7 +266,7 @@ func TestBannerPulsesWhenTheTurnArrives(t *testing.T) {
 }
 
 func TestAnImmuneHitDoesNotFloatAsDamage(t *testing.T) {
-	got := renderFloat(damageFloat{slot: slot{0, 0}, amount: 0, effect: 0, life: floatLife})
+	got := renderFloat(damageFloat{slot: slot{0, 0}, amount: 0, kind: battletext.EventNoEffect, life: floatLife})
 	if strings.Contains(got, "-0") {
 		t.Errorf("immune float = %q, want it to say what happened rather than -0", got)
 	}
@@ -276,15 +277,15 @@ func TestAnImmuneHitDoesNotFloatAsDamage(t *testing.T) {
 
 // The ordinary bands still read as they did.
 func TestFloatsKeepTheirEffectivenessMarkers(t *testing.T) {
-	super := renderFloat(damageFloat{slot: slot{0, 0}, amount: 30, effect: 2, life: floatLife})
+	super := renderFloat(damageFloat{slot: slot{0, 0}, amount: 30, kind: battletext.EventSuperEffective, life: floatLife})
 	if !strings.Contains(super, "-30") || !strings.Contains(super, "!!") {
 		t.Errorf("super float = %q, want the damage and its marker", super)
 	}
-	weak := renderFloat(damageFloat{slot: slot{0, 0}, amount: 3, effect: 0.5, life: floatLife})
+	weak := renderFloat(damageFloat{slot: slot{0, 0}, amount: 3, kind: battletext.EventResisted, life: floatLife})
 	if !strings.Contains(weak, "-3") || !strings.Contains(weak, "...") {
 		t.Errorf("weak float = %q, want the damage and its marker", weak)
 	}
-	normal := renderFloat(damageFloat{slot: slot{0, 0}, amount: 12, effect: 1, life: floatLife})
+	normal := renderFloat(damageFloat{slot: slot{0, 0}, amount: 12, kind: battletext.EventHit, life: floatLife})
 	if !strings.Contains(normal, "-12") {
 		t.Errorf("normal float = %q, want the damage", normal)
 	}
