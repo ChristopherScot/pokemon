@@ -60,12 +60,27 @@ export function teamSlots(ctx: Ctx): string {
       ` hx-post="/team?drop=${encodeURIComponent(name)}"` +
       ` hx-include="#team-form" hx-sync="#team-form:queue all"` +
       ` hx-target="#team" hx-swap="outerHTML"` +
-      ` hx-vals='{"active":"${esc(ctx.active)}","join":"${esc(ctx.join)}"}'>×</button>` +
+      ` hx-vals='${vals(ctx)}'>×</button>` +
       `</div>`
   }).join('')
 
   return `<div class="team-slots" id="team">${slots}</div>`
 }
+
+// hx-vals is a JSON document inside an HTML attribute, so it needs
+// both escapings, in the right order.
+//
+// It used to interpolate esc() into hand-written JSON. esc turns " into
+// &quot;, the HTML parser turns that back into " before htmx reads the
+// attribute, and JSON.parse then fails on the bare quote - proven with
+// ?type=fi"re, a URL a user can be handed. Every card's hx-vals stopped
+// parsing, so the filter was dropped AND so was the join id, which
+// turns joining someone's battle into opening a new one. Silently.
+//
+// JSON.stringify handles quotes and backslashes; esc then makes the
+// result safe inside the single-quoted attribute.
+const vals = (ctx: Ctx): string =>
+  esc(JSON.stringify({ active: ctx.active, join: ctx.join }))
 
 export const readyAction = (ctx: Ctx): string =>
   ctx.join ? `/battle/${encodeURIComponent(ctx.join)}/join` : '/battle/open'
@@ -107,7 +122,7 @@ export function card(mon: Pokemon, ctx: Ctx): string {
     ` hx-post="/team?toggle=${encodeURIComponent(mon.name)}"` +
     ` hx-include="#team-form" hx-sync="#team-form:queue all"` +
     ` hx-target="#team" hx-swap="outerHTML"` +
-    ` hx-vals='{"active":"${esc(ctx.active)}","join":"${esc(ctx.join)}"}'>` +
+    ` hx-vals='${vals(ctx)}'>` +
     `<header><span class="num">#${String(mon.id).padStart(3, '0')}</span>` +
     `<h2>${esc(mon.name)}</h2></header>` +
     `<img src="${esc(mon.sprite)}" alt="" loading="lazy" width="96" height="96">` +

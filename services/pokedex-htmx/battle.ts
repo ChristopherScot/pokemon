@@ -41,6 +41,12 @@ export type Float = { id: string; slot: string; text: string; band: string }
 // write-once.
 type Seen = { at: number; logLength: number }
 
+// Per-POD state, which is why config.yaml pins replicas to 1.
+//
+// Two replicas means two pollers of one battle land on different pods
+// with different histories, and the floats flicker or repeat. Scaling
+// out needs timestamps on the API's log events so this can be derived
+// per request instead of remembered.
 const seen = new Map<string, Seen[]>()
 
 export function observe(b: Battle, now = Date.now()): void {
@@ -185,9 +191,24 @@ function log(b: Battle, rejected: string): string {
     `${rejected ? `<div class="weak">${esc(rejected)}</div>` : ''}</div>`
 }
 
+// verdict is passed in because the two sides are selected by DIFFERENT
+// rules, and using one for both broke targeting completely.
+//
+// The API publishes them asymmetrically:
+//
+//   CanAct:        sideActive && c.canAct()
+//   CanBeTargeted: !sideActive && c.canBeTargeted()
+//
+// so on your turn the opponent's side is not active and every one of
+// their canAct is false. Reading canAct for them rendered no
+// name="target" radio at all - the form posted no target, readTurn
+// fell back to 0, and every attack hit their first slot while the
+// button said "attack staryu". In a 3-v-3 game that is most of the
+// tactics, gone silently.
 const sideBlock = (
   title: string, team: BattlePokemon[], side: 'me' | 'them',
   floats: Float[], selectable: boolean, selectedAt: number,
+  verdict: (p: BattlePokemon) => boolean,
 ): string =>
   `<div class="side"><h2>${esc(title)}</h2>` +
   team.map((p, i) => mon(p, side, i, {
@@ -195,7 +216,7 @@ const sideBlock = (
     // canAct, not !fainted: fainted is the input the server used,
     // and reading it here is a second copy of the rule. usableMoves
     // and canAct are the server's own verdict.
-    selectable: selectable && (p.canAct ?? !p.fainted),
+    selectable: selectable && verdict(p),
     selected: selectedAt === i,
     name: p.name,
   })).join('') +
@@ -267,7 +288,8 @@ function spectating(b: Battle, floats: Float[]): string {
 
   return `<div class="banner theirs" id="banner" role="status" aria-live="polite">${esc(head)}</div>` +
     b.sides.map((side) =>
-      sideBlock(side.trainer, side.team, 'them', floats, false, -1)).join('') +
+      sideBlock(side.trainer, side.team, 'them', floats, false, -1,
+        (p) => p.canBeTargeted ?? !p.fainted)).join('') +
     (joinable
       ? `<div class="pick" id="pick"><a class="btn" href="/?join=${encodeURIComponent(b.id)}">` +
         `pick your team →</a></div>`
@@ -314,8 +336,10 @@ export function board(
 
   return open +
     banner(b, me, myTurn) +
-    sideBlock(theirs.trainer, theirs.team, 'them', floats, myTurn, sel.target) +
-    sideBlock('you', mine.team, 'me', floats, myTurn, sel.attacker) +
+    sideBlock(theirs.trainer, theirs.team, 'them', floats, myTurn, sel.target,
+      (p) => p.canBeTargeted ?? !p.fainted) +
+    sideBlock('you', mine.team, 'me', floats, myTurn, sel.attacker,
+      (p) => p.canAct ?? !p.fainted) +
     (myTurn ? pick(b, mine, theirs, sel) : '') +
     log(b, rejected) +
     `</div>`
