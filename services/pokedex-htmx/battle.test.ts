@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { board, effectBand, floatsFor, LIFE_MS, observe, sideFor } from './battle.ts'
+import { board, effectBand, floatsFor, sideFor } from './battle.ts'
 
 type AnyBattle = Parameters<typeof floatsFor>[0]
 
@@ -21,8 +21,8 @@ const battle = (over: Partial<AnyBattle> = {}): AnyBattle => ({
   ...over,
 } as AnyBattle)
 
-const damage = (target: string, dmg: number, eff?: number) =>
-  ({ turnNumber: 1, text: `hit ${target}`, target, damage: dmg, effectiveness: eff })
+const damage = (target: string, dmg: number, eff?: number, turnNumber = 1) =>
+  ({ turnNumber, text: `hit ${target}`, target, damage: dmg, effectiveness: eff })
 
 test('effectBand names the bands the CSS styles', () => {
   assert.equal(effectBand(undefined), 'normal')
@@ -40,48 +40,53 @@ test('effectBand names the bands the CSS styles', () => {
 // specifically warned about.
 test('a float keeps the same id across polls, so morph leaves it alone', () => {
   const b = battle({ log: [damage('staryu', 4)] })
-  observe(b, 1000)
-  const first = floatsFor(b, 0, 1000)
-  const later = floatsFor(b, 0, 1900)
+  const first = floatsFor(b, 0)
+  const later = floatsFor(b, 0)
   assert.equal(first.length, 1)
   assert.deepEqual(first.map((f) => f.id), later.map((f) => f.id))
   assert.equal(first[0].id, 'f-0-them-0')
 })
 
-test('a float expires exactly at its CSS lifetime', () => {
-  const b = battle({ log: [damage('staryu', 4)] })
-  observe(b, 1000)
-  assert.equal(floatsFor(b, 0, 1000 + LIFE_MS - 1).length, 1)
-  assert.equal(floatsFor(b, 0, 1000 + LIFE_MS).length, 0)
+// Floats show the LATEST turn, which is what "what just happened"
+// means. This used to be decided by a wall clock kept in the server's
+// memory - which worked, but meant the service could only run as one
+// copy, because a second copy would keep its own separate record.
+test('only the latest turn floats', () => {
+  const b = battle({
+    log: [
+      damage('staryu', 4, undefined, 1),
+      damage('staryu', 6, undefined, 2),
+      damage('pikachu', 3, undefined, 2),
+    ],
+  })
+  const floats = floatsFor(b, 0)
+  assert.equal(floats.length, 2, 'both hits from turn 2, neither from turn 1')
+  assert.ok(floats.every((f) => !f.text.includes('-4')), 'turn 1 should not float')
 })
 
-// Two browsers poll the same battle, and a spectator may arrive at any
-// moment. If observing a version were not write-once, one poll would cut
-// another viewer's float short.
-test('polling repeatedly does not restart a float\'s clock', () => {
+// The same battle gives the same answer however many times it is
+// rendered, on whichever copy of the service. That is the property the
+// in-memory version could not offer.
+test('rendering the same battle twice gives identical floats', () => {
   const b = battle({ log: [damage('staryu', 4)] })
-  observe(b, 1000)
-  // Later polls of the SAME log must not re-stamp its birth time: if
-  // they did, the float would be reborn on every tick and never expire.
-  for (let t = 1050; t < 3000; t += 50) observe(b, t)
-  assert.equal(floatsFor(b, 0, 1000 + LIFE_MS - 1).length, 1, 'alive just before its lifetime')
-  assert.equal(floatsFor(b, 0, 1000 + LIFE_MS).length, 0, 'expired on schedule, not restarted')
+  assert.deepEqual(floatsFor(b, 0), floatsFor(b, 0))
+  // And a second "server" - a separate call with no shared state -
+  // agrees, which is what makes more than one replica safe.
+  assert.deepEqual(floatsFor(b, 0), floatsFor(structuredClone(b), 0))
 })
 
 test('an immune hit is named rather than shown as -0', () => {
   const b = battle({ log: [damage('staryu', 0, 0)] })
-  observe(b, 1000)
-  const [f] = floatsFor(b, 0, 1000)
+  const [f] = floatsFor(b, 0)
   assert.equal(f.band, 'immune')
   assert.equal(f.text, 'no effect')
 })
 
 test('a float lands on the side it belongs to', () => {
   const b = battle({ log: [damage('pikachu', 3)] })
-  observe(b, 1000)
-  assert.equal(floatsFor(b, 0, 1000)[0].slot, 'me-0')
+  assert.equal(floatsFor(b, 0)[0].slot, 'me-0')
   // The same event seen by the OTHER trainer is on their opponent.
-  assert.equal(floatsFor(b, 1, 1000)[0].slot, 'them-0')
+  assert.equal(floatsFor(b, 1)[0].slot, 'them-0')
 })
 
 test('sideFor finds both sides, and nothing for an onlooker', () => {
@@ -91,29 +96,26 @@ test('sideFor finds both sides, and nothing for an onlooker', () => {
   assert.equal(sideFor(b, 'brock'), null)
 })
 
-// A turn appends two or three log entries, so a fixed-count history was
-// about six turns - and dropping an entry still inside a float's life
-// pushes its birth time FORWARD, leaving it on screen after its CSS
-// animation has already finished.
-test('a float still expires when the log is busy', () => {
-  const b = battle({ log: [damage('staryu', 4)] })
-  observe(b, 1000)
-  // Twenty more entries arrive quickly, as two fast players would.
-  for (let i = 1; i <= 20; i++) {
-    b.log.push(damage('staryu', 1))
-    observe(b, 1000 + i * 80)
-  }
-  // The first entry was born at t=1000, so it must be gone by 3400.
-  const alive = floatsFor(b, 0, 1000 + LIFE_MS + 10).some((f) => f.id === 'f-0-them-0')
-  assert.equal(alive, false, 'the first float outlived its animation')
+// A busy log used to be a hazard: the history was bounded, so an
+// entry could be dropped while its float was still on screen and the
+// float would outlive its animation. Freshness now comes from the turn
+// number, so the length of the log does not matter at all.
+test('a busy log does not float stale turns', () => {
+  const log = [damage('staryu', 4, undefined, 1)]
+  for (let i = 0; i < 20; i++) log.push(damage('staryu', 1, undefined, 2))
+  const b = battle({ log })
+
+  const floats = floatsFor(b, 0)
+  assert.equal(floats.length, 20, 'every hit from the latest turn floats')
+  assert.ok(!floats.some((f) => f.id === 'f-0-them-0'),
+    'the turn-1 hit should not still be floating')
 })
 
 // Battles live in the API's memory, so a restart - or a reused id -
-// gives this service a shorter log under a id it has already seen.
+// gives this service a shorter log under an id it has seen before.
+// This needed careful handling when birth times were remembered; with
+// nothing remembered, a new battle is simply a new battle.
 test('a battle that starts over still shows floats', () => {
-  const b = battle({ log: [damage('staryu', 4), damage('staryu', 4), damage('staryu', 4)] })
-  observe(b, 1000)
   const fresh = battle({ log: [damage('staryu', 7)] })
-  observe(fresh, 9000)
-  assert.equal(floatsFor(fresh, 0, 9000).length, 1, 'the new battle renders no float')
+  assert.equal(floatsFor(fresh, 0).length, 1, 'the new battle renders no float')
 })

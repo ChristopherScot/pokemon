@@ -24,20 +24,6 @@ ingress:
     hosts:
         - pokedex-htmx.home.chrisscotmartin.com
 
-# One replica, and that is load-bearing rather than incidental.
-#
-# battle.ts keeps a module-level `seen` map: the per-battle history the
-# damage floats are timed from, which cannot be derived from the battle
-# alone because the API's log entries carry no timestamp. That state
-# lives in the pod. With two replicas, two pollers of the same battle
-# reach different pods with different histories, and the floats flicker
-# or repeat.
-#
-# Scaling out needs timestamps on the log events first - a change to the
-# API, not to this service. Until then an HPA here would look harmless
-# and break the animation.
-replicas: 1
-
 # The NetworkPolicy this service owns.
 manifests:
   - networkpolicy.yaml

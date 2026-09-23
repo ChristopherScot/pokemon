@@ -13,6 +13,9 @@ type BattlePokemon = components['schemas']['BattlePokemon']
 // and renders the floats that are still alive on each poll. Morph
 // preserves a float whose id and attributes have not changed, so the
 // animation runs uninterrupted across ticks rather than restarting.
+// How long the float animation runs, in milliseconds. css.ts
+// interpolates this so the number lives in one place rather than being
+// written here and again as "2.4s" in the stylesheet.
 export const LIFE_MS = 2400
 
 export const effectBand = (e: number | null | undefined): string => {
@@ -27,68 +30,35 @@ export type Float = { id: string; slot: string; text: string; band: string }
 
 // Which floats are still on screen.
 //
-// The API's log entries carry no timestamp - only a turnNumber - so age
-// cannot be read off the battle. What the API does give is `version`,
-// which increases on every change. This BFF therefore keeps one small
-// record per battle: the log length it first saw at each version, and
-// the wall clock when it saw it. A log entry's birth time is the time of
-// the earliest version whose log was already that long.
+// Derived from the battle in hand, with no memory between requests.
 //
-// It matters that this is IDEMPOTENT. Two browsers poll the same battle
-// a few hundred ms apart, and a spectator may join at any point; a
-// function that mutated state per call would let one poll cut another's
-// float short. Observing a version is the only write, and it is
-// write-once.
-type Seen = { at: number; logLength: number }
-
-// Per-POD state, which is why config.yaml pins replicas to 1.
+// This used to keep a Map of when each battle's log first reached each
+// length, because the API does not timestamp log entries. That worked,
+// but it meant the service could only ever run as ONE copy: a second
+// copy would build its own separate record, a browser could be served
+// by either, and the same damage number would have two different ages.
+// Code that pins replicas to 1 is code with a bug in it.
 //
-// Two replicas means two pollers of one battle land on different pods
-// with different histories, and the floats flicker or repeat. Scaling
-// out needs timestamps on the API's log events so this can be derived
-// per request instead of remembered.
-const seen = new Map<string, Seen[]>()
-
-export function observe(b: Battle, now = Date.now()): void {
-  let history = seen.get(b.id) ?? []
-
-  // A log that SHRANK is not this battle's log any more: the API keeps
-  // battles in memory, so a restart - or a reused id - starts a new one.
-  // Without this the old timestamps are kept, every entry reads as older
-  // than a float lifetime, and the new battle renders no floats at all.
-  if (history.length && history[history.length - 1].logLength > b.log.length) {
-    history = []
-  }
-
-  if (!history.some((h) => h.logLength >= b.log.length)) {
-    history.push({ at: now, logLength: b.log.length })
-    // Bounded by TIME, not by count. A turn appends two or three entries,
-    // so a fixed 16 was about six turns - easily inside 2.4s with two
-    // quick players, and dropping an entry that is still needed pushes a
-    // float's birth time FORWARD, leaving it on screen after its
-    // animation has finished.
-    while (history.length > 1 && now - history[0].at > LIFE_MS) history.shift()
-    seen.set(b.id, history)
-  }
-  if (seen.size > 500) {
-    for (const [id, h] of seen) {
-      if (now - h[h.length - 1].at > LIFE_MS * 10) seen.delete(id)
-    }
-  }
-}
-
-// When the log first reached length i+1, i.e. when entry i appeared.
-function bornAt(battleId: string, i: number, now: number): number {
-  const history = seen.get(battleId) ?? []
-  for (const h of history) if (h.logLength >= i + 1) return h.at
-  return now
-}
-
-export function floatsFor(b: Battle, mineIdx: number, now = Date.now()): Float[] {
+// Every log event carries a turnNumber, so "what just happened" is
+// simply "the events from the highest turn number in the log". That is
+// a property of the battle, identical on every copy of the service and
+// on every request, so any number of replicas agree.
+//
+// The trade: a float now clears when the next turn lands rather than
+// after a fixed 2.4s. In practice a turn takes longer than that, and
+// the CSS animation still runs for 2.4s and holds its end state, so
+// what a player sees is unchanged. What changes is that a battle left
+// idle keeps its last floats faded-out on screen rather than removing
+// the elements - which morph handles, because the ids are stable.
+export function floatsFor(b: Battle, mineIdx: number): Float[] {
   const out: Float[] = []
+  if (b.log.length === 0) return out
+
+  const latest = b.log.reduce((n, e) => (e.turnNumber > n ? e.turnNumber : n), 0)
+
   b.log.forEach((e, i) => {
+    if (e.turnNumber !== latest) return
     if (e.damage === undefined || e.damage === null || !e.target) return
-    if (now - bornAt(b.id, i, now) >= LIFE_MS) return
     for (const [si, side] of b.sides.entries()) {
       const at = side.team.findIndex((p) => p.name === e.target)
       if (at < 0) continue
@@ -314,12 +284,11 @@ const POLL =
   ` hx-include="#turn" hx-target="this"`
 
 export function board(
-  { b, me, sel, rejected, now }:
-  { b: Battle; me: string; sel: Turn; rejected: string; now?: number },
+  { b, me, sel, rejected }:
+  { b: Battle; me: string; sel: Turn; rejected: string },
 ): string {
-  observe(b, now)
   const mineIdx = b.sides.findIndex((s) => s.trainer === me)
-  const floats = floatsFor(b, mineIdx, now)
+  const floats = floatsFor(b, mineIdx)
   const sides = sideFor(b, me)
 
   const poll = b.status === 'finished'
