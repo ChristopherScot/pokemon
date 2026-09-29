@@ -1,12 +1,4 @@
-# pokedex-cli — the same commands locally and in CI.
-#
-#   make          what you can do
-#   make test     what CI runs, so green here means green there
-#   make run      start it
-#
-# Include Makefile.local for anything specific to this service - a
-# database, a seed step, extra env - and it will not be overwritten when
-# this file is regenerated.
+# Local targets mirror CI. Service-specific overrides go in Makefile.local (untracked, not regenerated).
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -23,16 +15,11 @@ ifneq (,$(wildcard Makefile.local))
 	@$(MAKE) --no-print-directory help-local 2>/dev/null || true
 endif
 
-# -o, and the package rather than ./... - `go build ./...` compiles
-# every package and THROWS THE BINARY AWAY, so `make build` looked like
-# it worked and left nothing to run. It writes ./pokedex-cli,
-# which is what `make clean` removes and what you type to run it.
+# `go build ./...` throws the binary away; -o keeps it.
 .PHONY: build
 build:
 	go build -o pokedex-cli .
 
-# -race because CI runs it that way, and a data race that only appears
-# under load is the kind of thing you want to find here instead.
 .PHONY: test
 test:
 	go vet ./...

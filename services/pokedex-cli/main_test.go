@@ -45,7 +45,6 @@ func TestIsNewer(t *testing.T) {
 		{"v1.2.0", "v1.10.0", false, "and the reverse still holds"},
 		{"v2.0.0", "v1.99.99", true, "major wins over any minor"},
 
-		// A prerelease sorts before its release.
 		{"v1.0.0", "v1.0.0-rc1", true, "release supersedes its rc"},
 		{"v1.0.0-rc1", "v1.0.0", false, "an rc does not supersede the release"},
 
@@ -107,20 +106,16 @@ func TestTeamCompleterSkipsWhatIsAlreadyPicked(t *testing.T) {
 	}
 }
 
-// join's first argument is the battle id, so the team starts one later.
 func TestTeamCompleterSkipsTheBattleID(t *testing.T) {
 	names := func() ([]string, error) { return []string{"pikachu", "onix", "gengar"}, nil }
 	complete := makeTeamCompleter(names, 1, 3)
 
-	// No id typed yet: nothing to complete, and definitely not a Pokemon.
 	if got, _ := complete(nil, nil, ""); len(got) != 0 {
 		t.Errorf("offered %v in the battle-id position", got)
 	}
-	// Id present: the first team slot is open.
 	if got, _ := complete(nil, []string{"abc123"}, ""); len(got) != 3 {
 		t.Errorf("completions after the id = %v, want all three", got)
 	}
-	// Id plus a full team: done.
 	if got, _ := complete(nil, []string{"abc123", "pikachu", "onix", "gengar"}, ""); len(got) != 0 {
 		t.Errorf("offered %v with a full team", got)
 	}
@@ -138,7 +133,7 @@ func TestSpectatingAnActiveBattleDoesNotClaimItIsWaiting(t *testing.T) {
 		},
 	}
 
-	c := &battleclient.Client{Name: "brock"} // watching, in neither side
+	c := &battleclient.Client{Name: "brock"}
 	out := captureStdout(t, func() { printBattle(c, b) })
 
 	if strings.Contains(out, "waiting for an opponent") {
@@ -152,7 +147,6 @@ func TestSpectatingAnActiveBattleDoesNotClaimItIsWaiting(t *testing.T) {
 	}
 }
 
-// A battle with one side really is waiting, and still says so.
 func TestAOneSidedBattleStillReadsAsWaiting(t *testing.T) {
 	b := &api.Battle{
 		ID:     "abc123",

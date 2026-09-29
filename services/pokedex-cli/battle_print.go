@@ -76,10 +76,7 @@ func printBattle(c *battleclient.Client, b *api.Battle) {
 	case c.MyTurn(b):
 		fmt.Println("\nyour moves")
 		for i, p := range mine.Team {
-			// CanAct, not !Fainted: this decides what the player is
-			// OFFERED, which is a rule, and the server owns the
-			// rules. The "(fainted)" label further down is
-			// presentation and correctly still reads Fainted.
+			// CanAct gates what we offer (server rule); the "(fainted)" label below is presentation.
 			if !battleclient.CanAct(p) {
 				continue
 			}
