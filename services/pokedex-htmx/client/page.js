@@ -1,15 +1,7 @@
-// The pokedex page's script, in full. Three jobs, none of which is a
-// hypermedia exchange, and none of which touches server data.
 (function () {
   'use strict'
 
-  // 1. Search: a pure VIEW filter over a list the server already sent.
-  //
-  // Deliberately not `hx-get="/?q=" hx-trigger="keyup changed delay:200ms"`.
-  // The whole pokedex is already in this document, so filtering is
-  // instant; a debounced round trip per keystroke would be SLOWER than
-  // the React version it is replacing. The essays allow client state
-  // that "does not affect server data" - this is that case exactly.
+  // Search is a pure view filter: the whole pokedex is already in the document.
   var search = document.getElementById('search')
   var count = document.getElementById('count')
 
@@ -28,32 +20,21 @@
       empty.hidden = !(q && shown === 0)
       document.getElementById('no-match-q').textContent = search.value
     }
-    // Announced, not just visible: filtering used to change the grid
-    // silently, so a screen-reader user had no idea how many were left.
+    // Announced, or filtering the grid changes silently for a screen reader.
     count.textContent = q ? shown + ' pokemon match ' + search.value : ''
   }
 
   if (search) {
     search.addEventListener('input', filter)
-    // LOAD-BEARING. Picking a pokemon swaps a whole new grid in out of
-    // band (see POST /team in routes.ts), and those cards arrive without
-    // the .hidden class this filter applies - so a search typed before
-    // the pick would silently come undone. Re-applying here is what
-    // keeps the two in step; deleting this breaks search on every pick.
-    // afterSETTLE, not afterSwap: a pick swaps three fragments, and the
-    // swap events interleave, so filtering on afterSwap ran before the
-    // last grid was in place and the filter came undone.
+    // Load-bearing: /team swaps a new grid out of band, so the filter has to
+    // be re-applied after each swap or a search-in-progress is lost.
+    // afterSettle, not afterSwap: three fragments interleave and afterSwap
+    // fires before the grid is in place.
     document.body.addEventListener('htmx:afterSettle', filter)
   }
 
-  // 2. Publish the topbar's real height as --topbar-h.
-  //
-  // The filters pin underneath it and the offset was a hardcoded 86px,
-  // roughly right on a desktop and wrong everywhere else - the topbar
-  // wraps, so on a phone it is two or three rows tall and the filters
-  // slid behind it. ResizeObserver rather than a resize listener: it
-  // also changes height when a slot fills, which fires no resize event,
-  // and here that happens on an htmx swap.
+  // Publish topbar height as --topbar-h so filters pin under it correctly.
+  // ResizeObserver catches slot-fills on htmx swaps that fire no resize event.
   var bar = document.getElementById('topbar')
   if (bar && typeof ResizeObserver !== 'undefined') {
     var publish = function () {
@@ -64,13 +45,9 @@
     new ResizeObserver(publish).observe(bar)
   }
 
-  // 3. Platform detection for the downloads footer.
-  //
-  // This cannot move to the server: telling Apple Silicon from Intel
-  // needs a WebGL renderer probe and userAgentData, both of which only
-  // exist in the browser. The browser detects, then asks the SERVER for
-  // the footer - so the release list is still fetched server-side and
-  // the browser never sees GitHub's JSON.
+  // Client-only: telling Apple Silicon from Intel needs a WebGL renderer
+  // probe and userAgentData. The browser probes, then asks the server for
+  // the footer, so GitHub's JSON is still fetched server-side.
   window.platform = function () { return window.__plat || {} }
 
   function detect() {
@@ -101,8 +78,7 @@
     })
   }
 
-  // The footer waits for this: its hx-trigger is fired here, once the
-  // probe has an answer to send.
+  // Fires the footer's hx-trigger once the probe has an answer.
   var footer = document.getElementById('downloads')
   if (footer) {
     detect().then(function (plat) {

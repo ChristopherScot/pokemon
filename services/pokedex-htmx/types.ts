@@ -12,8 +12,7 @@ const ENTITIES: Record<string, string> = {
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }
 
-// Every interpolation into markup goes through this. A trainer name is
-// user-supplied and reaches the page on every route.
+// Every interpolation into markup goes through this.
 export const esc = (s: unknown): string =>
   String(s).replace(/[&<>"']/g, (c) => ENTITIES[c] ?? c)
 

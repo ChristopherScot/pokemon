@@ -20,7 +20,6 @@ const TOOLS: Tool[] = [
     prefix: 'pokedex-cli',
     name: 'Pokedex CLI',
     blurb: 'One-shot lookups and scripting',
-    // A chevron prompt.
     icon: ICON('<path d="M4 6l5 6-5 6M12 18h8" />'),
   },
 ]
@@ -41,15 +40,9 @@ export function pickLinks(releases: Release[], os: string, arch: string): Link[]
     for (const release of releases) {
       if (release.draft || release.prerelease) continue
       const asset = (release.assets ?? []).find((a) => a.name === tool.prefix + want)
-      // The URL is third-party and goes straight into an href, so the
-      // scheme is checked rather than trusted. esc() stops it breaking
-      // out of the attribute; it does not stop `javascript:`.
+      // Scheme-checked because esc() does not block `javascript:` URLs.
       if (asset && asset.browser_download_url.startsWith('https://')) {
-        // The tag is shown to a person, so strip the namespace a
-        // monorepo release carries: "pokedex-cli/v0.1.3" is a tag, but
-        // "v0.1.3" is the version they are downloading. Selection above
-        // matches on the ASSET name, so prefixes never affected which
-        // release is picked - only how it reads.
+        // Strip the monorepo namespace: "pokedex-cli/v0.1.3" → "v0.1.3".
         const tag = release.tag_name.includes('/')
           ? release.tag_name.slice(release.tag_name.lastIndexOf('/') + 1)
           : release.tag_name
@@ -65,10 +58,6 @@ export const label = (os: string, arch: string): string =>
   `${os === 'darwin' ? 'macOS' : 'Linux'} · ${
     arch === 'arm64' ? (os === 'darwin' ? 'Apple Silicon' : 'ARM64') : 'Intel / AMD'}`
 
-// The release list is fetched HERE, by the pod, and rendered to HTML.
-// pokedex-web fetched GitHub's JSON from the browser; only the platform
-// probe has to stay client-side, because telling Apple Silicon from
-// Intel needs a WebGL renderer string that exists nowhere else.
 export async function downloadsFooter(
   os: string, arch: string, fetchImpl: typeof fetch = fetch,
 ): Promise<string> {
@@ -79,16 +68,13 @@ export async function downloadsFooter(
   try {
     const res = await fetchImpl(RELEASES, {
       headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'pokedex-htmx' },
-      // Every page load fires this once. Without a deadline a blackholed
-      // connection to GitHub parks the handler until the OS gives up -
-      // minutes - and they accumulate. An abort throws, which the catch
-      // below already turns into "no footer", the intended degradation.
+      // Every page load fires this once, so a blackholed connection must not
+      // park the handler for minutes; abort degrades to no footer via catch.
       signal: AbortSignal.timeout(3000),
     })
     if (!res.ok) return ''
     releases = await res.json()
   } catch {
-    // Offline, rate limited, or blocked. Stay hidden, as before.
     return ''
   }
   if (!Array.isArray(releases)) return ''
@@ -99,17 +85,14 @@ export async function downloadsFooter(
   const row = links.map(({ tool, url, tag }) =>
     `<a class="dl" href="${esc(url)}" download>${tool.icon}<span>` +
     `<span class="dl-name">${esc(tool.name)}</span><br>` +
-    // Each tool carries its OWN version, because they are not released
-    // together - one line naming a single version would be wrong for
-    // whichever tool is not on it.
+    // Tools have independent versions, so each carries its own tag.
     `<span class="dl-meta">${esc(tool.blurb)} · ${esc(tag)}</span></span></a>`).join('')
 
   return `<footer id="downloads">` +
     `<h2>Play from a terminal</h2>` +
     `<p class="sub">for ${esc(label(os, arch))}</p>` +
     `<div class="dl-row" id="dl-row">${row}</div>` +
-    // The escape hatch. This footer only appears for a platform we build
-    // for, so anyone else needs a way to the full list.
+    // Escape hatch for unsupported platforms.
     `<p class="dl-other"><a href="https://github.com/ChristopherScot/pokemon/releases/latest"` +
     ` target="_blank" rel="noopener">All downloads &amp; other platforms</a></p>` +
     `</footer>`

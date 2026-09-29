@@ -1,10 +1,3 @@
-// The stylesheets, carried over byte-for-byte from pokedex-web so the
-// two render identically. They were extracted from that service's
-// template literals rather than retyped, which is the only way to be
-// sure "near identical" is actually true.
-//
-// Additions for this port are at the bottom of each block, marked.
-
 export const POKEDEX_CSS = `
   :root { color-scheme: dark; --bg:#12141c; --card:#1c1f2b; --fg:#e8eaf2; --dim:#8b91a7; }
   * { box-sizing: border-box; }
@@ -123,15 +116,11 @@ export const POKEDEX_CSS = `
              text-align:right; }
   .empty { color:var(--dim); padding:32px 0; }
 
-  /* The form wrapping the slots and the button is display:contents, so
-     its children are the topbar's own flex items - exactly the four
-     pokedex-web had (title, search, slots, button). Without this the
-     form is a single item and the button wraps onto a second row. */
+  /* display:contents so slots and button remain topbar flex items,
+     not a single wrapping item that would push the button to a second row. */
   #team-form { display:contents; }
 
-  /* htmx: the request-in-flight cue. pokedex-web showed "opening…" by
-     swapping React state; here the indicator class does the same job
-     with no state to track. */
+  /* htmx request-in-flight cue. */
   .htmx-indicator { opacity:0; transition:opacity .15s; }
   .htmx-request .htmx-indicator { opacity:1; }
   .htmx-request.card { opacity:.6; }
@@ -218,22 +207,13 @@ export const BATTLE_CSS = `
   .pick.hidden { display:none; }
   @keyframes celebrate { 0%,100% { box-shadow:none; } 50% { box-shadow:0 0 40px rgba(74,222,128,.35); } }
   .board.won { animation:celebrate 1.2s ease-in-out 2; border-radius:14px; }
-  /* Added for this port. pokedex-web made each mon and each move a
-     <button> and tracked the choice in React state; here they are
-     <label>s wrapping a radio, so the CHOICE IS THE FORM and the server
-     renders which one is checked. These rules make a label look exactly
-     like the button it replaced. */
+  /* Mon rows and moves are <label>s wrapping a radio, so the choice IS
+     the form and the server renders which one is checked. */
   .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
              overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
-  /* pokedex-web's selectable .mon was a <button>, which as a grid
-     container shrinks to fit rather than filling the row. A <label> is
-     block-level and would stretch, so it is made to size itself the same
-     way - otherwise selectable rows are full width and unselectable ones
-     are not, which is visible the moment it stops being your turn. */
-  /* The 1px transparent border is not decoration: pokedex-web's .mon
-     was a <button>, so it picked up BOTH the box and the #333a4d edge
-     from the generic button rule above. A bare <label> gets neither,
-     which left every selectable row 2px smaller and visibly unedged. */
+  /* width:fit-content mimics the <button> that these labels replaced, so
+     selectable and unselectable rows size the same. The 1px border replaces
+     the box a bare <label> does not inherit from the generic button rule. */
   label.mon { cursor:pointer; width:fit-content; text-align:center;
               border:1px solid #333a4d; }
   label.mon:has(input:focus-visible) { outline:2px solid #a78bfa; outline-offset:2px; }
@@ -243,8 +223,6 @@ export const BATTLE_CSS = `
   .movebtn:hover { background:#2f3547; border-color:#4a5268; }
   .movebtn.sel { background:#3b3170; border-color:#6d5ae0; }
   .movebtn:has(input:focus-visible) { outline:2px solid #a78bfa; outline-offset:2px; }
-  /* A move you may not use this turn is not a greyed control: the
-     server omits the control and states the reason. */
   .move-off { display:inline-block; padding:5px 10px; border-radius:8px;
               border:1px dashed #333a4d; color:var(--dim); font-size:13px; }
   .move-off small { opacity:.8; }

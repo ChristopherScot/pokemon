@@ -15,19 +15,13 @@ export type Ctx = {
   active: string
   join: string
   team: string[]
-  // The sprite for each PICKED name. Separate from `pokemon`, because
-  // that list is filtered: pick pikachu, filter to water, and the slot
-  // has a name with no entry to read a sprite from. pokedex-web kept
-  // the sprite alongside the name in sessionStorage; here the server
-  // looks it up so the picks can stay bare names in the URL.
+  // Sprites for picked names, kept separate from `pokemon` because that list
+  // is filtered: a name picked before filtering has no sprite in it.
   sprites: Record<string, string>
   resume: string
 }
 
-// The team travels in the querystring, so a filter link keeps it and a
-// reload restores it. pokedex-web kept it in sessionStorage, which a
-// link cannot carry; this is the same picks surviving the same actions,
-// and additionally survives sharing the URL.
+// Team travels in the querystring so filter links and reloads preserve it.
 export function url(
   { active, join, team }: { active?: string; join?: string; team?: string[] },
 ): string {
@@ -41,12 +35,8 @@ export function url(
 const spriteOf = (ctx: Ctx, name: string): string =>
   ctx.sprites[name] ?? ctx.pokemon.find((p) => p.name === name)?.sprite ?? ''
 
-// The slots, and the hidden inputs that ARE the team.
-//
-// There is no session and no /team/toggle state on the server: the form
-// carries the picks, a toggle posts them back, and the server returns
-// the new set. The API only learns about a team at open/join, which is
-// exactly when it becomes real.
+// The slots and their hidden inputs ARE the team: no server-side session.
+// The API only learns about a team at open/join.
 export function teamSlots(ctx: Ctx): string {
   const slots = Array.from({ length: TEAM_SIZE }, (_, i) => {
     const name = ctx.team[i]
@@ -86,24 +76,17 @@ export function card(mon: Pokemon, ctx: Ctx): string {
   const moves = mon.moves.map((m) =>
     `<li><span>${esc(m.name)}</span>` +
     `<span class="move-type" style="color:${colour(m.type)}">${esc(m.type)}</span>` +
-    // Status moves have power 0, which reads as a bug rather than
-    // "deals no damage" - a dash, as the CLI prints.
+    // Status moves have power 0; render as a dash so it reads as "no damage".
     `<b>${m.power || '—'}</b></li>`).join('')
 
-  // Disabled rather than omitted, and that is not a HATEOAS lapse: the
-  // card is not only a control. It is the pokedex ENTRY - id, sprite,
-  // types, height, weight, moves - which is what the reader came for.
-  // Removing it would delete information, not withdraw an action.
+  // Disabled rather than omitted: the card is also the pokedex entry, and
+  // removing it would withdraw information, not just an action.
   const disabled = full && !picked ? ' disabled' : ''
 
   return `<button type="button" id="card-${esc(mon.name)}"` +
     ` class="card${picked ? ' picked' : ''}" aria-pressed="${picked}"${disabled}` +
-    // hx-sync on the FORM, not on the card: every pick posts the team
-    // the form holds at click time, so two requests in flight carry two
-    // different teams and the slower one wins. Clicking three cards
-    // quickly left ONE pokemon picked - the bug a person hits
-    // immediately and a scripted test with waits between clicks never
-    // sees. `queue all` keeps every click instead of dropping any.
+    // hx-sync on the FORM: every pick posts the team the form holds at click
+    // time, so `queue all` keeps concurrent clicks from racing each other.
     ` hx-post="/team?toggle=${encodeURIComponent(mon.name)}"` +
     ` hx-include="#team-form" hx-sync="#team-form:queue all"` +
     ` hx-target="#team" hx-swap="outerHTML"` +
@@ -119,12 +102,8 @@ export function card(mon: Pokemon, ctx: Ctx): string {
 }
 
 export function grid(ctx: Ctx, oob = false): string {
-  // morph, not the default outerHTML. An OOB swap REPLACES the element,
-  // which threw away every card in the grid - including the one that
-  // was clicked, and any click still queued behind it. Clicking three
-  // cards quickly sent one request and silently dropped the other two,
-  // because the elements they belonged to no longer existed. Morphing
-  // mutates the cards in place, so they survive their own swap.
+  // morph rather than default outerHTML: a plain oob swap replaces the
+  // element and destroys queued clicks against the cards it removed.
   return `<main class="grid" id="grid"${oob ? ' hx-swap-oob="morph:outerHTML"' : ''}>` +
     `${ctx.pokemon.map((p) => card(p, ctx)).join('')}` +
     `<p class="empty" id="no-match" hidden>nothing matches “<span id="no-match-q"></span>”.</p>` +
@@ -136,9 +115,8 @@ export function filters(ctx: Ctx, oob = false): string {
     `<a href="${url({ ...q, join: ctx.join, team: ctx.team })}"` +
     `${on ? ' class="on"' : ''}${style}>${label}</a>`
 
-  // Type filters stay LINKS, as in pokedex-web: each is a real URL you
-  // can share. The join id AND the team ride along, or filtering to
-  // "water" mid-pick would quietly drop both.
+  // Each filter is a shareable URL; the join id and team ride along so a
+  // filter mid-pick does not drop them.
   return `<nav class="filters" id="filters"${oob ? ' hx-swap-oob="morph:outerHTML"' : ''}>` +
     link({}, 'all', !ctx.active) +
     ctx.types.map((t) =>
@@ -155,10 +133,7 @@ function topbar(ctx: Ctx): string {
       `<a class="battle-link" href="/battle">back to the lobby</a>`
     : `${ctx.pokemon.length} pokemon · <a class="battle-link" href="/battle">Battle lobby →</a>`
 
-  // Wandering off to the pokedex mid-battle is normal - you want to
-  // check what a move does. pokedex-web kept this in sessionStorage;
-  // here the server already sets a cookie on the battle page, so the
-  // link is rendered server-side and needs no script at all.
+  // Battle-in-progress link is rendered server-side from the battle cookie.
   const resume = ctx.resume && ctx.resume !== ctx.join
     ? `<p class="sub">you are in battle <code>${esc(ctx.resume)}</code> · ` +
       `<a class="battle-link" href="/battle/${encodeURIComponent(ctx.resume)}">back to it →</a></p>`
@@ -168,14 +143,8 @@ function topbar(ctx: Ctx): string {
     `<div class="title"><h1>${title}</h1><p class="sub">${sub}</p>${resume}</div>` +
     `<input id="search" type="search" aria-label="Search pokemon by name"` +
     ` placeholder="Search pokemon..." autocomplete="off">` +
-    // One form wraps the slots and the button: the hidden inputs inside
-    // it are the team, and submitting it posts them.
-    // The filter and the join id travel WITH the team, so a failed
-    // Ready lands back on the page the trainer was actually looking at.
-    // hx-post, not a native submit: the server answers either with
-    // HX-Redirect to the new battle or with the name dialog, and a
-    // native submit would navigate to the endpoint and render the
-    // fragment as the whole document.
+    // hx-post, not a native submit: the server answers with HX-Redirect or
+    // the name dialog, and a native submit would navigate away instead.
     `<form id="team-form" hx-post="${esc(readyAction(ctx))}"` +
     ` hx-target="#dialog" hx-swap="innerHTML">` +
     `<input type="hidden" name="active" value="${esc(ctx.active)}">` +

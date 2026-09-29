@@ -1,16 +1,5 @@
-// Two players, clicked in a browser, at the speed a person clicks.
-//
-// Every bug this file exists for got past the unit tests AND a pixel
-// diff: a taken name that silently did nothing, and three quick clicks
-// that left one pokemon picked. Both need a real browser and no
-// artificial waiting between clicks to reproduce.
-//
-// NOT run by `make test`, and NOT run by CI. It needs a browser and a
-// running stack, and Playwright is deliberately not a dependency here.
-// Nothing will tell you if it breaks - run it yourself when you change
-// how the page behaves. See the README for the two commands that bring
-// the stack up without a database.
-//
+// Not run by `make test` or CI: needs a browser and running stack, run manually.
+// See the README for stack-up commands.
 //   B=http://127.0.0.1:3001 node e2e/journey.js
 import { chromium } from 'playwright'
 const B = process.env.B || 'http://127.0.0.1:3001'
@@ -28,7 +17,7 @@ const hn='h'+Math.floor(Math.random()*99999), gn='g'+Math.floor(Math.random()*99
 
 console.log('1. host: pick a team as a new visitor, then register when asked')
 await h.goto(B+'/',{waitUntil:'networkidle'})
-for(const n of ['pikachu','onix','gengar']) await h.click('#card-'+n)   // no waits
+for(const n of ['pikachu','onix','gengar']) await h.click('#card-'+n)
 await h.waitForTimeout(2500)
 ok(await h.locator('.slot.filled').count()===3, 'three slots filled after rapid clicks')
 await h.click('#ready'); await h.waitForTimeout(1500)

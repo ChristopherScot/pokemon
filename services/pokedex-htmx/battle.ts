@@ -8,11 +8,8 @@ type Battle = components['schemas']['Battle']
 type Side = components['schemas']['Side']
 type BattlePokemon = components['schemas']['BattlePokemon']
 
-// A float lives 2400ms, matching `animation:floatUp 2.4s` in the CSS.
-// pokedex-web kept this clock in the browser; here the server owns it
-// and renders the floats that are still alive on each poll. Morph
-// preserves a float whose id and attributes have not changed, so the
-// animation runs uninterrupted across ticks rather than restarting.
+// Must match `animation:floatUp 2.4s` in the CSS: morph preserves a float
+// with a stable id, so the animation runs uninterrupted across polls.
 export const LIFE_MS = 2400
 
 export const effectBand = (e: number | null | undefined): string => {
@@ -25,20 +22,9 @@ export const effectBand = (e: number | null | undefined): string => {
 
 export type Float = { id: string; slot: string; text: string; band: string }
 
-// Which floats are still on screen.
-//
-// The API's log entries carry no timestamp - only a turnNumber - so age
-// cannot be read off the battle. What the API does give is `version`,
-// which increases on every change. This BFF therefore keeps one small
-// record per battle: the log length it first saw at each version, and
-// the wall clock when it saw it. A log entry's birth time is the time of
-// the earliest version whose log was already that long.
-//
-// It matters that this is IDEMPOTENT. Two browsers poll the same battle
-// a few hundred ms apart, and a spectator may join at any point; a
-// function that mutated state per call would let one poll cut another's
-// float short. Observing a version is the only write, and it is
-// write-once.
+// Log entries carry no timestamp, so birth time is derived from the earliest
+// poll that saw the log at length i+1. Observing is write-once and idempotent:
+// two viewers polling must not cut each other's floats short.
 type Seen = { at: number; logLength: number }
 
 const seen = new Map<string, Seen[]>()
@@ -46,21 +32,16 @@ const seen = new Map<string, Seen[]>()
 export function observe(b: Battle, now = Date.now()): void {
   let history = seen.get(b.id) ?? []
 
-  // A log that SHRANK is not this battle's log any more: the API keeps
-  // battles in memory, so a restart - or a reused id - starts a new one.
-  // Without this the old timestamps are kept, every entry reads as older
-  // than a float lifetime, and the new battle renders no floats at all.
+  // A shrunk log means the battle id was reused; keeping old timestamps
+  // would make every entry read as older than LIFE_MS.
   if (history.length && history[history.length - 1].logLength > b.log.length) {
     history = []
   }
 
   if (!history.some((h) => h.logLength >= b.log.length)) {
     history.push({ at: now, logLength: b.log.length })
-    // Bounded by TIME, not by count. A turn appends two or three entries,
-    // so a fixed 16 was about six turns - easily inside 2.4s with two
-    // quick players, and dropping an entry that is still needed pushes a
-    // float's birth time FORWARD, leaving it on screen after its
-    // animation has finished.
+    // Bounded by time, not count: dropping a still-needed entry pushes its
+    // birth time forward and leaves the float on screen past its animation.
     while (history.length > 1 && now - history[0].at > LIFE_MS) history.shift()
     seen.set(b.id, history)
   }
@@ -71,7 +52,6 @@ export function observe(b: Battle, now = Date.now()): void {
   }
 }
 
-// When the log first reached length i+1, i.e. when entry i appeared.
 function bornAt(battleId: string, i: number, now: number): number {
   const history = seen.get(battleId) ?? []
   for (const h of history) if (h.logLength >= i + 1) return h.at
@@ -91,7 +71,6 @@ export function floatsFor(b: Battle, mineIdx: number, now = Date.now()): Float[]
       out.push({
         id: `f-${i}-${slot}`,
         slot,
-        // An immune hit deals 0, so "-0" says nothing. Name it.
         text: band === 'immune' ? 'no effect' : `-${e.damage}${band === 'super' ? ' !!' : ''}`,
         band,
       })
@@ -105,10 +84,8 @@ const hpColour = (hp: number, max: number): string => {
   return f <= 0.2 ? 'var(--danger)' : f <= 0.5 ? 'var(--warn)' : 'var(--good)'
 }
 
-// One team member. Every element that animates or holds state carries a
-// STABLE ID: that is what lets idiomorph match it across a swap and
-// mutate it in place instead of replacing it. Without the ids the HP
-// bar renders already-drained and every float restarts each second.
+// Every element that animates or holds state carries a stable id, so idiomorph
+// matches it across a swap and mutates in place rather than replacing.
 export function mon(
   p: BattlePokemon, side: 'me' | 'them', i: number,
   { floats, selectable, selected, name }:
@@ -118,9 +95,8 @@ export function mon(
   const pct = p.maxHp > 0 ? Math.max(0, (p.hp / p.maxHp) * 100) : 0
   const mine = floats.filter((f) => f.slot === slot)
 
-  // The shake fires when a float is live on this slot. Morph only
-  // touches `class` when the value actually changes, so it fires once
-  // on arrival and does not re-trigger while the float persists.
+  // Morph only touches `class` when the value changes, so the shake fires
+  // once on arrival and does not re-trigger while the float persists.
   const hit = mine.some((f) => f.band !== 'immune')
   const hard = mine.some((f) => f.band === 'super')
 
@@ -141,14 +117,9 @@ export function mon(
   if (!selectable) {
     return `<div class="${cls}" id="mon-${slot}" data-slot="${slot}">${inner}</div>`
   }
-  // A real radio, so the selection is part of the form that posts the
-  // turn. `checked` is rendered by the SERVER, which already owns turn
-  // state - idiomorph forces a live checked property to match the
-  // markup, so a client-only selection would be clobbered each poll.
-  //
-  // form="turn" names a form that is NOT an ancestor: it lives in
-  // battlePage(), outside the polled region, so the poll cannot rebuild
-  // it mid-choice. HTML allows the association by id.
+  // Server-rendered `checked`: idiomorph forces a live checked property to
+  // match markup, so a client-only selection would be clobbered each poll.
+  // form="turn" points at the form in battlePage(), outside the polled region.
   const field = side === 'me' ? 'attacker' : 'target'
   return `<label class="${cls}" id="mon-${slot}" data-slot="${slot}"` +
     `${selected ? ' style="outline:2px solid #6d5ae0"' : ''}>` +
@@ -169,9 +140,7 @@ function banner(b: Battle, me: string, myTurn: boolean): string {
     text = myTurn ? 'your turn' : `waiting on ${b.turn}…`
     cls = myTurn ? 'mine' : 'theirs'
   }
-  // One node with a stable id, so morph mutates the text in place. A
-  // replaced live region announces nothing, which was a real regression
-  // in the version before pokedex-web.
+  // Stable id so morph mutates in place: a replaced live region announces nothing.
   return `<div class="banner ${cls}" id="banner" role="status" aria-live="polite"` +
     ` aria-atomic="true">${esc(text)}</div>`
 }
@@ -192,40 +161,27 @@ const sideBlock = (
   `<div class="side"><h2>${esc(title)}</h2>` +
   team.map((p, i) => mon(p, side, i, {
     floats,
-    // canAct, not !fainted: fainted is the input the server used,
-    // and reading it here is a second copy of the rule. usableMoves
-    // and canAct are the server's own verdict.
+    // canAct is the server's verdict; !fainted would be re-deriving the rule.
     selectable: selectable && (p.canAct ?? !p.fainted),
     selected: selectedAt === i,
     name: p.name,
   })).join('') +
   `</div>`
 
-// The move picker. Note what is NOT here: there is no client-side copy
-// of the server's turn rules. pokedex-web shipped an 18-line checkTurn()
-// that re-implemented the server's validation so it could grey buttons
-// out; the server simply does not render a control you may not use.
-//
-// That claim used to be almost true - this file still decided a move
-// was unusable by comparing against disabledMove, which is the rule
-// rather than the verdict. It now reads usableMoves and canAct, which
-// the server computes.
+// HATEOAS: the server does not render a control the trainer may not use, so
+// there is no client-side copy of the turn rules to drift from them.
 function pick(b: Battle, mine: Side, theirs: Side, sel: Turn): string {
   const attacker = mine.team[sel.attacker]
   if (!attacker) return ''
 
   const moves = attacker.moves.map((m, i) => {
-    // A disabled move is not a disabled button: the control is omitted
-    // and the reason stated, because "disabled this turn" is real
-    // information and a greyed button hides it behind a tooltip.
-    // usableMoves is the server's answer, one entry per move. The
-    // disabledMove fallback is for a battle from a server that
-    // predates the field.
+    // A disabled move is omitted (with the reason stated), not greyed:
+    // "disabled this turn" is information a tooltip would hide.
+    // disabledMove is a fallback for a battle from a pre-usableMoves server.
     const usable = attacker.usableMoves ? attacker.usableMoves[i] : attacker.disabledMove !== i
     if (!usable) {
       return `<span class="move-off">${esc(m.name)} <small>disabled this turn</small></span>`
     }
-    // form="turn" - the form is in battlePage(), see mon() above.
     return `<label class="movebtn${sel.move === i ? ' sel' : ''}" id="move-${i}">` +
       `<input type="radio" name="move" value="${i}" form="turn" class="sr-only"` +
       `${sel.move === i ? ' checked' : ''}>` +
@@ -234,15 +190,11 @@ function pick(b: Battle, mine: Side, theirs: Side, sel: Turn): string {
 
   const target = theirs.team[sel.target]
 
-  // Every wrapper in here carries an id for the same reason the mon
-  // rows do: without one, morph has nothing to match and rebuilds the
-  // subtree, which DETACHES the attack button. A player who clicked as
-  // a poll landed lost the click and their turn.
+  // Every wrapper needs an id or morph rebuilds the subtree and detaches the
+  // attack button; a click landing mid-poll would then be lost.
   return `<div class="pick" id="pick">` +
     `<strong id="pick-who">${esc(attacker.name)}</strong> uses…` +
     `<div class="moves" id="moves">${moves}</div>` +
-    // Its own row, red and right-aligned: this ENDS the turn, and it
-    // used to look like a fifth move.
     `<div class="commit" id="commit"><button id="go" type="submit" form="turn">` +
     `attack ${esc(target?.name ?? '')}</button></div>` +
     `</div>`
@@ -256,9 +208,6 @@ export const sideFor = (b: Battle, me: string): { mine: Side; theirs: Side } | n
   return { mine: b.sides[i], theirs: b.sides[1 - i] }
 }
 
-// A spectator gets a different board, not a disabled one: both sides are
-// rendered as "them", there is no move picker, and if the battle is
-// still open they get a link to join it.
 function spectating(b: Battle, floats: Float[]): string {
   const joinable = b.status === 'waiting' && b.sides.length < 2
   const head = joinable
@@ -274,18 +223,13 @@ function spectating(b: Battle, floats: Float[]): string {
       : '')
 }
 
-// The polling control lives INSIDE the fragment it swaps, so a board
-// that should stop polling simply comes back without it. That replaces
-// pokedex-web's client-side rules - five 404s in a row, and a set of
-// terminal status codes - with the absence of a control.
-// hx-include sends the turn form with every poll, so the selection the
-// user has made comes BACK to the server and is rendered as `checked`.
-//
-// Without it the board is correct but the picker is not: idiomorph forces
-// a live `checked` property to match the markup it is given, so a
-// client-only selection is reset on the next tick. Server-authoritative
-// checked is also the right answer - the server already owns turn state -
-// but it only works if the server is told what was picked.
+// Polling control lives inside the fragment it swaps, so a board that should
+// stop polling simply comes back without it. hx-include sends the turn form
+// each poll so the selection round-trips: morph forces `checked` to match
+// server markup, so client-only state would be reset. hx-sync=this:replace
+// drops an in-flight poll when the next tick fires, so slow responses do not
+// pile up. ignoreActiveValue keeps morph from clobbering the value the user
+// is typing into a focused input.
 const POLL =
   ` hx-get="{url}" hx-trigger="every 1s [!document.hidden]"` +
   ` hx-sync="this:replace" hx-swap="morph:{ignoreActiveValue:true}"` +
@@ -321,9 +265,8 @@ export function board(
     `</div>`
 }
 
-// The turn form lives in the PAGE, not in the board fragment, so the 1s
-// poll never rebuilds it. The radios inside the board reference it by
-// `form="turn"`, which HTML allows across the document.
+// The turn form lives in the page, not the polled board fragment. The radios
+// inside the board reference it by `form="turn"` (HTML allows cross-document).
 export function battlePage(
   { id, trainer, first }: { id: string; trainer: string; first: string },
 ): string {
@@ -346,9 +289,7 @@ export function battlePage(
 </body></html>`
 }
 
-// The board a battle that is gone comes back as. No hx-trigger, so the
-// poll stops because the control is absent rather than because a client
-// counted failures.
+// No hx-trigger, so polling stops via absence-of-control, not a client counter.
 export const goneBoard = (message: string): string =>
   `<div class="board" id="board">` +
   `<div class="banner over" id="banner" role="status">${esc(message)}</div>` +

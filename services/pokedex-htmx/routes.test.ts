@@ -8,9 +8,7 @@ after(() => app.close())
 
 const req = (cookie: string) => ({ headers: { cookie } }) as never
 
-// A cookie is sent on EVERY request to the origin, so a value this
-// service cannot parse is not a one-off error: the page stays broken
-// until the user clears it by hand.
+// A cookie ships on every request, so a parse failure sticks until cleared.
 test('a malformed resume cookie does not break the page', async () => {
   const res = await app.inject({ method: 'GET', url: '/', headers: { cookie: 'battle=%zz' } })
   assert.notEqual(res.statusCode, 500)
@@ -24,9 +22,7 @@ test('a trainer cookie that is not a trainer is no trainer', () => {
   assert.deepEqual(ok, { name: 'ash', token: 't' })
 })
 
-// Three of the same pokemon is a legal team as far as the API is
-// concerned - it looks each name up independently - so it has to be
-// refused here, and a crafted querystring is the way in.
+// The API accepts three-of-a-kind, so dedupe has to happen here.
 test('a team cannot be three of the same pokemon', () => {
   assert.deepEqual(readTeam(['pikachu', 'pikachu', 'pikachu']), ['pikachu'])
   // Dedupe BEFORE the cap, or a,a,b,c silently loses c.
@@ -36,8 +32,6 @@ test('a team cannot be three of the same pokemon', () => {
   assert.deepEqual(readTeam('solo'), ['solo'])
 })
 
-// Index 0 is the only index guaranteed to exist, which is why it is the
-// fallback: garbage becomes a legal move rather than an API error.
 test('a turn index is always one the board could have produced', () => {
   assert.deepEqual(readTurn({}), { attacker: 0, move: 0, target: 0 })
   assert.deepEqual(readTurn({ attacker: '9' }).attacker, 0)
