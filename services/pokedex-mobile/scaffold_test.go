@@ -1,10 +1,5 @@
 package main
 
-// Tests for the app's logic. Nothing here opens a window: Gio's layout
-// needs a frame and CI has no display, so anything drawing is an
-// integration test with a device in it. What IS testable is everything
-// in state.go, which is why the decisions live there.
-
 import (
 	"strconv"
 	"strings"
@@ -24,17 +19,13 @@ func mon(name string, hp, maxHP int, fainted bool) api.BattlePokemon {
 	}
 }
 
-// The version is stamped by CI with -ldflags. A released build
-// reporting "dev" means that flag was dropped, which is invisible
-// until someone asks a user what version they are running.
+// Version is stamped by CI's -ldflags; a released build reporting "dev" means the flag was dropped.
 func TestVersionHasADefault(t *testing.T) {
 	if version == "" {
 		t.Error("version is empty; the ldflags default was removed")
 	}
 }
 
-// Pick order is what the server reads as the team list, so the first
-// pick leads. Removing from the middle must not resort the rest.
 func TestToggleTeamKeepsPickOrder(t *testing.T) {
 	var team []string
 	for _, n := range []string{"pikachu", "geodude", "staryu"} {
@@ -44,12 +35,11 @@ func TestToggleTeamKeepsPickOrder(t *testing.T) {
 		t.Fatalf("team = %q, want pick order preserved", got)
 	}
 
-	team = toggleTeam(team, "geodude") // remove the middle
+	team = toggleTeam(team, "geodude")
 	if got := strings.Join(team, ","); got != "pikachu,staryu" {
 		t.Errorf("after removing the middle, team = %q", got)
 	}
 
-	// Re-adding appends rather than restoring the old slot.
 	team = toggleTeam(team, "geodude")
 	if got := strings.Join(team, ","); got != "pikachu,staryu,geodude" {
 		t.Errorf("re-adding should append, got %q", got)
@@ -61,7 +51,7 @@ func TestToggleTeamStopsAtThree(t *testing.T) {
 	if got := toggleTeam(team, "d"); len(got) != 3 {
 		t.Errorf("a fourth pick was accepted: %v", got)
 	}
-	// But deselecting still works when full, or the UI would be stuck.
+	// Deselecting must still work at full, or the UI would be stuck.
 	if got := toggleTeam(team, "b"); len(got) != 2 {
 		t.Errorf("could not deselect from a full team: %v", got)
 	}
@@ -77,8 +67,7 @@ func TestTeamPositionIsOneBased(t *testing.T) {
 	}
 }
 
-// A server reporting hp above maxHp - a heal, or a bug - must not draw
-// a bar past the end of its track.
+// A server reporting hp>maxHp must not draw a bar past its track.
 func TestHPFractionIsClamped(t *testing.T) {
 	for _, tc := range []struct {
 		hp, max int
@@ -87,9 +76,9 @@ func TestHPFractionIsClamped(t *testing.T) {
 		{20, 20, 1},
 		{10, 20, 0.5},
 		{0, 20, 0},
-		{-5, 20, 0}, // already fainted, reported negative
-		{30, 20, 1}, // healed past full
-		{10, 0, 0},  // no max: avoid dividing by zero
+		{-5, 20, 0},
+		{30, 20, 1},
+		{10, 0, 0},
 	} {
 		if got := hpFraction(mon("x", tc.hp, tc.max, false)); got != tc.want {
 			t.Errorf("hpFraction(%d/%d) = %v, want %v", tc.hp, tc.max, got, tc.want)
@@ -97,8 +86,6 @@ func TestHPFractionIsClamped(t *testing.T) {
 	}
 }
 
-// Status moves have power 0, which reads as a bug rather than a
-// deliberate absence - the other clients show a dash and so must this.
 func TestMoveLabelShowsADashForStatusMoves(t *testing.T) {
 	if got := moveLabel(api.Move{Name: "growl", Power: 0}); !strings.Contains(got, "—") {
 		t.Errorf("status move label = %q, want a dash", got)
@@ -108,10 +95,7 @@ func TestMoveLabelShowsADashForStatusMoves(t *testing.T) {
 	}
 }
 
-// The wording comes from battletext so three clients narrate a battle
-// identically. Asserting the exact string here would duplicate that
-// package's tests and drift from them; asserting that it REACHES the
-// UI is the part this app can get wrong.
+// Asserts battletext reaches the UI without duplicating battletext's own tests.
 func TestSummariseUsesTheSharedWording(t *testing.T) {
 	p := mon("pikachu", 20, 20, false)
 	plain := summarise(p)
@@ -124,8 +108,7 @@ func TestSummariseUsesTheSharedWording(t *testing.T) {
 	}
 }
 
-// The server addresses Pokemon by position, so a fainted one must not
-// renumber the others.
+// The server addresses Pokemon by position; a fainted one must not renumber the others.
 func TestAliveIndexesArePositions(t *testing.T) {
 	side := api.Side{Team: []api.BattlePokemon{
 		mon("a", 0, 20, true),
@@ -151,8 +134,7 @@ func TestDefaultTargetSkipsTheFainted(t *testing.T) {
 	}
 }
 
-// On a phone the banner is the only always-visible place to say whose
-// turn it is, so it must never be empty mid-battle.
+// The banner is the only always-visible place to say whose turn it is; it must never be empty mid-battle.
 func TestTurnBannerAlwaysSaysSomething(t *testing.T) {
 	b := &api.Battle{Status: "active", Turn: api.NewOptString("misty")}
 	if got := turnBanner(b, nil); !strings.Contains(got, "misty") {
@@ -163,17 +145,13 @@ func TestTurnBannerAlwaysSaysSomething(t *testing.T) {
 		t.Errorf("finished banner = %q", got)
 	}
 
-	// The API carries a winner; ending with "Battle over" and leaving
-	// the player to infer it from the HP bars was the worst miss in
-	// the first version.
 	b.Winner = api.NewOptString("misty")
 	if got := turnBanner(b, nil); got != "Misty wins" {
 		t.Errorf("banner with a winner = %q, want the winner named", got)
 	}
 }
 
-// A phone shows fewer lines than a terminal; the log must trim rather
-// than pushing the controls off screen.
+// The log must trim rather than push controls off screen.
 func TestRecentLogTrimsToTheNewest(t *testing.T) {
 	b := &api.Battle{}
 	for i := 0; i < 10; i++ {
@@ -188,8 +166,6 @@ func TestRecentLogTrimsToTheNewest(t *testing.T) {
 	}
 }
 
-// The three taps must be prompted in order, or a narrow screen shows
-// three equally-live columns and the player guesses.
 func TestPickStageNamesTheNextTap(t *testing.T) {
 	var p pick
 	if got := p.stage(); got != "pick a pokemon" {
@@ -212,13 +188,12 @@ func TestPickStageNamesTheNextTap(t *testing.T) {
 	}
 }
 
-// The server accepts almost any name and there is no way to rename a
-// trainer afterwards, so a stray thumb sticks permanently.
+// The server accepts almost any name and there is no rename, so a stray thumb sticks permanently.
 func TestBadTrainerNamesAreRefusedBeforeTheyStick(t *testing.T) {
 	for name, wantBad := range map[string]bool{
 		"":              true,
 		"a":             true,
-		"test2637_74(4": true, // a real one, typed on a phone
+		"test2637_74(4": true,
 		"has space":     true,
 		"ash":           false,
 		"Misty_99":      false,

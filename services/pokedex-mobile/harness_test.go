@@ -1,15 +1,6 @@
 package main
 
-// A headless harness that renders the REAL UI and taps it.
-//
-// Gio can draw to an offscreen buffer (gpu/headless), so a test can
-// run a frame, look at the pixels, and synthesise a tap at a point -
-// no display, no device, no emulator. That makes a playthrough
-// something CI can run, rather than something only a human with a
-// phone can check.
-//
-// What this does NOT cover is how it feels under a thumb. Sizing is
-// asserted instead: every control is at least Android's 48dp floor.
+// Headless harness that renders the real UI to an offscreen buffer and injects taps; playthroughs run on CI without a device.
 
 import (
 	"image"
@@ -30,7 +21,7 @@ import (
 	"gioui.org/widget/material"
 )
 
-// phoneSize is a mid-range Android in density-independent pixels.
+// A mid-range Android in density-independent pixels.
 const phoneW, phoneH = 411, 891
 
 type harness struct {
@@ -53,14 +44,10 @@ func newHarness(t *testing.T) *harness {
 
 	th := material.NewTheme()
 	th.Shaper = text.NewShaper(text.WithCollection(gofont.Collection()))
-	// The app calls this too. Without it the screenshots render in
-	// Gio's stock purple and lie about what ships.
+	// Without applyScheme the screenshots render in Gio's stock purple and lie about what ships.
 	applyScheme(th)
 
-	// newUI, not &ui{}: the constructor allocates the widget slices,
-	// and a harness that skips it renders a battle with no buttons -
-	// which is exactly the bug this harness existed to catch, found
-	// in the harness itself.
+	// newUI, not &ui{}: the constructor allocates the widget slices; skipping it renders a battle with no buttons.
 	return &harness{
 		t: t, th: th, win: w,
 		ui:  newUI(nil),
@@ -68,7 +55,6 @@ func newHarness(t *testing.T) *harness {
 	}
 }
 
-// frame renders one frame of the real UI and returns the pixels.
 func (h *harness) frame() *image.RGBA {
 	h.t.Helper()
 	h.ops.Reset()
@@ -91,8 +77,6 @@ func (h *harness) frame() *image.RGBA {
 	return h.img
 }
 
-// tap sends a press and release at a point, then renders so the click
-// is observed by the widget that owns it.
 func (h *harness) tap(x, y int) {
 	h.t.Helper()
 	pos := f32.Pt(float32(x), float32(y))
@@ -107,11 +91,7 @@ func (h *harness) tap(x, y int) {
 	h.frame()
 }
 
-// drag scrolls a list the way a thumb does: press, move, release.
-//
-// Only Press, Move, Leave and Release can be injected - the router
-// DERIVES Drag from a Move while pressed, and queueing a Drag
-// directly panics with "unsupported pointer event type".
+// drag scrolls by press/move/release; the router derives Drag from Move-while-pressed and panics on a queued Drag.
 func (h *harness) drag(x, y0, y1 int) {
 	h.t.Helper()
 	base := time.Since(time.Time{})
@@ -137,8 +117,7 @@ func (h *harness) drag(x, y0, y1 int) {
 	}
 }
 
-// scroll moves a list by a wheel-style scroll, which is what a
-// material.List consumes directly.
+// scroll delivers a wheel-style scroll, which is what material.List consumes directly.
 func (h *harness) scroll(x, y, dy int) {
 	h.t.Helper()
 	h.rtr.Queue(pointer.Event{
@@ -151,8 +130,7 @@ func (h *harness) scroll(x, y, dy int) {
 	h.frame()
 }
 
-// gtx builds a context for calling layout logic directly, where a
-// test drives a handler rather than a tap.
+// gtx builds a context for calling layout logic directly, when a test drives a handler rather than a tap.
 func (h *harness) gtx() layout.Context {
 	return layout.Context{
 		Ops:         &h.ops,
@@ -163,21 +141,10 @@ func (h *harness) gtx() layout.Context {
 	}
 }
 
-// find returns the on-screen bounds of the widget whose accessibility
-// description matches, so a test can say "tap Pikachu" rather than
-// "tap at 205,208".
-//
-// Coordinates worked out by hand are a liability: they encode the
-// layout into every test, so changing a padding breaks tests that
-// have nothing to do with padding - which is exactly what happened
-// twice while restyling this app. Semantics are what the widget
-// already publishes for TalkBack, so this reuses a thing that has to
-// be right anyway.
+// find returns the on-screen bounds of the widget whose a11y description matches, so tests name what to tap rather than pick coordinates.
 func (h *harness) find(desc string) (image.Point, bool) {
 	h.t.Helper()
-	// SemanticNode carries no public bounds, so this asks the router
-	// what is under each point of a coarse grid and returns the first
-	// hit. A 4px step is finer than any control here is small.
+	// SemanticNode carries no public bounds, so probe a 4px grid via the router and return the first hit.
 	want := map[input.SemanticID]bool{}
 	var walk func([]input.SemanticNode)
 	walk = func(ns []input.SemanticNode) {
@@ -202,7 +169,6 @@ func (h *harness) find(desc string) (image.Point, bool) {
 	return image.Point{}, false
 }
 
-// tapOn taps the centre of the named widget.
 func (h *harness) tapOn(desc string) {
 	h.t.Helper()
 	p, ok := h.find(desc)
@@ -212,8 +178,7 @@ func (h *harness) tapOn(desc string) {
 	h.tap(p.X, p.Y)
 }
 
-// visible lists what a test could have tapped, so a failure names the
-// alternatives instead of just saying no.
+// visible lists what a test could have tapped, so a failure names the alternatives.
 func (h *harness) visible() []string {
 	var out []string
 	var walk func([]input.SemanticNode)
@@ -229,9 +194,7 @@ func (h *harness) visible() []string {
 	return out
 }
 
-// shot writes a screenshot when SHOTS is set, so a failure can be
-// looked at. One helper rather than four copies that discarded the
-// error from os.Create and then used the nil file.
+// shot writes a screenshot when SHOTS is set.
 func (h *harness) shot(name string) {
 	h.t.Helper()
 	if os.Getenv("SHOTS") == "" {
@@ -247,8 +210,7 @@ func (h *harness) shot(name string) {
 	}
 }
 
-// notBlank reports whether anything was drawn, so a test that taps into
-// a void fails rather than passing silently.
+// notBlank reports whether anything was drawn; a test that tapped into a void must fail rather than pass silently.
 func notBlank(img *image.RGBA) bool {
 	first := img.RGBAAt(0, 0)
 	for y := 0; y < img.Bounds().Dy(); y += 7 {

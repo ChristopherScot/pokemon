@@ -1,8 +1,5 @@
 package main
 
-// A live render with real sprites, so the layout is checked against
-// actual images rather than the monogram fallback.
-
 import (
 	"os"
 	"strconv"
@@ -34,9 +31,7 @@ func TestBrowseWithRealSprites(t *testing.T) {
 	h.ui.dexClicks = make([]widget.Clickable, len(h.ui.dex))
 	h.ui.team = []string{"pikachu"}
 
-	// First frame starts the fetches and draws monograms.
 	h.frame()
-	// Give the CDN a moment, then draw again with the images in hand.
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		h.ui.sprites.mu.Lock()
@@ -59,8 +54,6 @@ func TestBrowseWithRealSprites(t *testing.T) {
 	t.Logf("decoded %d/%d sprites", n, len(h.ui.dex))
 }
 
-// The battle screen with real sprites, which is where they matter
-// most - two teams of small images is the whole readout.
 func TestBattleWithRealSprites(t *testing.T) {
 	if os.Getenv("SHOTS") == "" {
 		t.Skip("set SHOTS to render against the live sprite CDN")

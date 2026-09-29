@@ -1,16 +1,5 @@
 package main
 
-// The battle screen.
-//
-// The terminal moves a cursor between three columns - attacker, move,
-// target - because a keyboard has arrow keys. A thumb does not: you tap
-// the thing you mean. So this is three stages of direct tapping, with
-// the banner naming the next one, and the target stage skipped entirely
-// when only one opponent is standing.
-//
-// HP bars rather than numbers, because at a glance on a small screen a
-// bar reads faster than "14/20" - and the number is still there.
-
 import (
 	"image"
 	"strconv"
@@ -47,13 +36,7 @@ func (a *ui) battleScreen(gtx layout.Context, th *material.Theme) layout.Dimensi
 	a.handleBattleTaps(gtx, b, mine, theirs)
 	a.keepWatching(b)
 
-	// Controls are laid out BEFORE the log in flex order, so they get
-	// their space first. The log then flexes into whatever is left.
-	//
-	// The first version made the log Flexed(1) and the controls Rigid
-	// after it, which rendered the buttons at zero height: the log had
-	// already taken the screen. A battle with no move buttons is not a
-	// game, and it looked fine in a screenshot until you tried to tap.
+	// Controls must be laid out before the log in flex order: a Flexed log with Rigid controls after renders the buttons at zero height.
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.banner(gtx, th, b)
@@ -81,9 +64,6 @@ func (a *ui) battleScreen(gtx layout.Context, th *material.Theme) layout.Dimensi
 }
 
 // banner says whose turn it is and, on your turn, what to tap next.
-//
-// On a phone this is the only always-visible instruction, so it carries
-// the stage rather than relying on a highlighted column.
 func (a *ui) banner(gtx layout.Context, th *material.Theme, b *api.Battle) layout.Dimensions {
 	txt := turnBanner(b, a.bc)
 	bg, fg := m3.secondaryContainer, m3.onSecondaryContainer
@@ -127,7 +107,6 @@ func (a *ui) sideRow(gtx layout.Context, th *material.Theme, s api.Side, label s
 	})
 }
 
-// monLine is one Pokemon: name, conditions, and an HP bar.
 func (a *ui) monLine(gtx layout.Context, th *material.Theme, p api.BattlePokemon, selected bool) layout.Dimensions {
 	name := m3.onSurface
 	if p.Fainted {
@@ -176,14 +155,10 @@ func (a *ui) monLine(gtx layout.Context, th *material.Theme, p api.BattlePokemon
 	})
 }
 
-// hpBar draws the health bar. Colour carries the same information as
-// the length, so it reads at a glance and survives a colourblind eye
-// via the length alone.
+// hpBar draws the health bar; colour duplicates the length so it survives a colourblind eye.
 func hpBar(gtx layout.Context, frac float32) layout.Dimensions {
 	h := gtx.Dp(unit.Dp(8))
 	w := gtx.Constraints.Max.X
-	// Rounded ends, M3's own progress-indicator shape - a square bar
-	// is the tell of a UI that was drawn rather than designed.
 	fillRRect(gtx, m3.surfaceVariant, cornerFull, image.Pt(w, h))
 
 	fillW := int(float32(w) * frac)
@@ -203,9 +178,7 @@ func hpBar(gtx layout.Context, frac float32) layout.Dimensions {
 func (a *ui) logPane(gtx layout.Context, th *material.Theme, b *api.Battle) layout.Dimensions {
 	evs := recentLog(b, 30)
 	return material.List(th, &a.logList).Layout(gtx, len(evs), func(gtx layout.Context, i int) layout.Dimensions {
-		// Min.X as well as Max.X: without a minimum the list packs
-		// rows side by side and the whole log reads as one run-on
-		// line, which is exactly what it did the first time.
+		// Min.X needed as well as Max.X: without it the list packs rows side by side.
 		gtx.Constraints.Min.X = gtx.Constraints.Max.X
 		return layout.Inset{Bottom: gapXS}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			l := material.Label(th, unit.Sp(14), eventLine(evs[i]))
@@ -215,18 +188,12 @@ func (a *ui) logPane(gtx layout.Context, th *material.Theme, b *api.Battle) layo
 	})
 }
 
-// controls is the bottom third: whatever the current stage needs.
-//
-// One stage at a time, because three rows of buttons on a phone means
-// each is too small to hit reliably.
+// controls is the bottom third: one stage's options at a time, so buttons stay big enough to hit.
 func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, mine, theirs api.Side) layout.Dimensions {
 	if b.Status == "finished" {
 		return tapBtn(gtx, th, &a.leaveBtn, "Back to lobby")
 	}
-	// A turn already sent: the controls stay visible so the screen
-	// does not jump, but they are dead until the server answers.
-	// Otherwise a laggy connection invites a second tap that becomes
-	// a second turn.
+	// While a turn is in flight the controls stay visible but dead, so a laggy tap cannot fire twice.
 	if a.busy {
 		l := material.Label(th, unit.Sp(14), "Sending…")
 		l.Color = m3.onSurfaceVariant
@@ -244,8 +211,7 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 		)
 	}
 
-	// An undo above the options, so a mis-tap costs one tap to fix
-	// rather than a whole unwanted turn.
+	// Undo above the options, so a mis-tap costs one tap rather than a whole unwanted turn.
 	withBack := func(w layout.Widget) layout.Dimensions {
 		if !a.sel.canGoBack() {
 			return w(gtx)
@@ -264,8 +230,6 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 	case !a.sel.haveAttacker:
 		return a.pickRow(gtx, th, len(mine.Team), a.monBtns, func(i int) (string, bool) {
 			m := mine.Team[i]
-			// CanAct, not !Fainted: whether a button is tappable is
-			// a rule, and the server owns the rules.
 			return title(m.Name), battleclient.CanAct(m)
 		})
 	case !a.sel.haveMove:
@@ -285,12 +249,8 @@ func (a *ui) controls(gtx layout.Context, th *material.Theme, b *api.Battle, min
 	}
 }
 
-// pickRow lays out one stage's options as full-width buttons.
+// pickRow lays out one stage's options; the "choose X" a11y prefix distinguishes buttons from the same names in the team cards above.
 func (a *ui) pickRow(gtx layout.Context, th *material.Theme, n int, btns []widget.Clickable, at func(int) (string, bool)) layout.Dimensions {
-	// The team cards above show the same names, so the control
-	// buttons get their own accessibility prefix: TalkBack then says
-	// "choose Pikachu" for the actionable one and just "Pikachu" for
-	// the status row, and a test can tell them apart.
 	var children []layout.FlexChild
 	for i := 0; i < n && i < len(btns); i++ {
 		i := i
@@ -304,8 +264,7 @@ func (a *ui) pickRow(gtx layout.Context, th *material.Theme, n int, btns []widge
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
 
-// handleBattleTaps advances the three-stage selection and sends the
-// turn once it is complete.
+// handleBattleTaps advances the three-stage selection and sends the turn once it is complete.
 func (a *ui) handleBattleTaps(gtx layout.Context, b *api.Battle, mine, theirs api.Side) {
 	if !a.bc.MyTurn(b) || b.Status == "finished" || a.busy {
 		return
@@ -317,9 +276,7 @@ func (a *ui) handleBattleTaps(gtx layout.Context, b *api.Battle, mine, theirs ap
 	switch {
 	case !a.sel.haveAttacker:
 		for i := range mine.Team {
-			// The button is already disabled for anything the
-			// server says cannot act; this is the same check on the
-			// tap itself, so a stale frame cannot slip one through.
+			// Re-check CanAct on the tap so a stale frame cannot slip one through.
 			if i < len(a.monBtns) && a.monBtns[i].Clicked(gtx) && battleclient.CanAct(mine.Team[i]) {
 				a.sel.attacker = i
 				a.sel.haveAttacker = true
@@ -330,8 +287,6 @@ func (a *ui) handleBattleTaps(gtx layout.Context, b *api.Battle, mine, theirs ap
 			if i < len(a.moveBtns) && a.moveBtns[i].Clicked(gtx) {
 				a.sel.move = i
 				a.sel.haveMove = true
-				// One opponent left means the target is not a choice;
-				// asking for a third tap there is busywork.
 				if onlyOneTarget(theirs) {
 					a.sel.target = defaultTarget(theirs)
 					a.send(b)
@@ -349,15 +304,13 @@ func (a *ui) handleBattleTaps(gtx layout.Context, b *api.Battle, mine, theirs ap
 }
 
 func (a *ui) send(b *api.Battle) {
-	// Recorded before the reset so a test can assert which turn went
-	// out, not merely that something did.
+	// Recorded before reset so a test can assert which turn went out.
 	a.lastSent = a.sel
 	a.attack(b.ID, a.sel.attacker, a.sel.move, a.sel.target)
 	a.sel.reset()
 }
 
-// keepWatching long-polls while it is not our turn, so the opponent's
-// move appears without the player pulling to refresh.
+// keepWatching long-polls while it is not our turn so the opponent's move appears without a manual refresh.
 func (a *ui) keepWatching(b *api.Battle) {
 	if a.watching || b.Status == "finished" || a.bc.MyTurn(b) {
 		return

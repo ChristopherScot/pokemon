@@ -1,12 +1,6 @@
 package main
 
-// The race the review found, in the shape the app can actually reach:
-// loadLobby and useIdentity both run on the UI goroutine, but the
-// goroutine loadLobby SPAWNS must not touch anything the UI owns.
-//
-// Before the fix the spawned closure dereferenced a.bc directly, so a
-// registration landing mid-flight was a genuine race. It now captures
-// the client first, and this test fails if that regresses.
+// Guards the invariant that a background closure captures a.bc before spawning; useIdentity may reassign it mid-flight.
 
 import (
 	"sync"
@@ -21,8 +15,7 @@ func TestBackgroundCallsTouchNothingTheUIOwns(t *testing.T) {
 		Name: "ash", Token: "t", API: "https://example.invalid/api",
 	})
 
-	// The UI goroutine: spawn work, then reassign the client the way
-	// registration does, interleaved as tightly as possible.
+	// Simulate registration reassigning the client mid-flight, interleaved as tightly as possible.
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -36,6 +29,6 @@ func TestBackgroundCallsTouchNothingTheUIOwns(t *testing.T) {
 	}()
 	wg.Wait()
 
-	// Let the spawned requests run against a dead host and report.
+	// Closes the goroutines' select and lets them finish — this is the test signal, not cleanup.
 	close(a.done)
 }

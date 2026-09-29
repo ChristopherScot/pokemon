@@ -6,14 +6,12 @@ import (
 	"gioui.org/io/key"
 )
 
-// Back must go somewhere from every non-root screen. Unhandled, it
-// kills the app mid-battle.
+// Back must go somewhere from every non-root screen or Android closes the app mid-battle.
 func TestBackNavigatesRatherThanExiting(t *testing.T) {
 	h := newHarness(t)
 	h.ui.id.Name = "ash"
 	h.ui.bc = testClient(t)
 
-	// From a sub-screen, back returns to the Pokedex.
 	h.ui.screen = screenLobby
 	if consumed := h.ui.handleBack(h.gtx()); !consumed {
 		t.Error("back from the lobby was not consumed; Android would close the app")
@@ -22,15 +20,13 @@ func TestBackNavigatesRatherThanExiting(t *testing.T) {
 		t.Errorf("back from the lobby went to %v, want browse", h.ui.screen)
 	}
 
-	// From the root it is NOT consumed, so Android closes the app -
-	// an app you cannot back out of is worse than one that exits.
+	// Root must NOT consume back, so Android can close the app.
 	h.ui.screen = screenBrowse
 	if consumed := h.ui.handleBack(h.gtx()); consumed {
 		t.Error("back from the Pokedex was consumed; the app can never be closed")
 	}
 }
 
-// A live battle should not be abandoned by one stray gesture.
 func TestBackConfirmsBeforeLeavingABattle(t *testing.T) {
 	h := newHarness(t)
 	h.ui.id.Name = "ash"
@@ -51,8 +47,7 @@ func TestBackConfirmsBeforeLeavingABattle(t *testing.T) {
 	}
 }
 
-// Mid-turn, back undoes the selection instead of leaving, so the
-// gesture agrees with the on-screen Back button.
+// Mid-turn, back undoes the selection so the gesture agrees with the on-screen Back button.
 func TestBackUndoesASelectionFirst(t *testing.T) {
 	h := newHarness(t)
 	h.ui.id.Name = "ash"
