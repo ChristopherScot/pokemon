@@ -31,14 +31,7 @@ export const checkTurn = (b: Battle, me: string, t: Turn): string => {
   if (!mine.team[t.attacker]) return 'you have no pokemon ' + (t.attacker + 1)
   if (!theirs.team[t.target]) return 'they have no pokemon ' + (t.target + 1)
 
-  // canAct / canBeTargeted / usableMoves are the SERVER's verdict.
-  // fainted and disabledMove are the inputs it used, and deciding from
-  // those here is a second copy of the rule that can disagree with the
-  // one that matters - the server rejects the turn either way, so a
-  // copy that drifts only changes whether the UI says so first.
-  //
-  // Each falls back to the old input when the field is absent, for a
-  // battle served by a version that predates them.
+  // Prefer server-computed fields (canAct/canBeTargeted/usableMoves); fall back to raw inputs (fainted/disabledMove) for older servers.
   const attacker = mine.team[t.attacker]
   const target = theirs.team[t.target]
 

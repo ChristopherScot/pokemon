@@ -28,11 +28,9 @@ test('metrics are exposed in Prometheus format', async () => {
   const res = await app.inject({ method: 'GET', url: '/metrics' })
 
   assert.equal(res.statusCode, 200)
-  // String(), because a header can be absent and strict mode says so.
   assert.match(String(res.headers['content-type']), /text\/plain/)
-  // The counter the deployment's scrape annotation exists to collect.
+  // The k8s scrape annotation depends on this metric name.
   assert.match(res.body, /http_requests_total\{[^}]*route="\/"/)
-  // prom-client's process and heap metrics.
   assert.match(res.body, /nodejs_heap_size_total_bytes/)
 })
 
@@ -124,7 +122,6 @@ test('the web refuses the same turns the Go clients do', async () => {
   assert.match(checkTurn(wBattle(wMon('pikachu', true), wMon('staryu')), 'ash', { attacker: 0, move: 0, target: 0 }), /fainted/)
   assert.match(checkTurn(ok(), 'ash', { attacker: 0, move: 9, target: 0 }), /no move 10/)
   assert.match(checkTurn(wBattle(wMon('pikachu'), wMon('staryu', true)), 'ash', { attacker: 0, move: 0, target: 0 }), /already fainted/)
-  // And a legal turn is legal.
   assert.equal(checkTurn(ok(), 'ash', { attacker: 0, move: 0, target: 0 }), '')
 })
 
@@ -157,7 +154,6 @@ test('a trainer name cannot break out of the boot island', async () => {
   const island = html.slice(start, end)
   expect(island, 'the injected tag must not survive into the island').not.toMatch(/<script>alert/)
 
-  // And it must still parse back to exactly what went in.
   const json = island.slice(island.indexOf('>') + 1)
   assert.equal((JSON.parse(json) as { me: string }).me, evil)
 })
