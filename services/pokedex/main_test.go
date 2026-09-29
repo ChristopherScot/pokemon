@@ -43,7 +43,6 @@ func TestRootIdentifiesTheService(t *testing.T) {
 	}
 }
 
-// A path that is not in the spec is rejected by the generated router.
 func TestUnknownPathIsNotFound(t *testing.T) {
 	if w := get(t, newHandler(t), "/nope"); w.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
@@ -59,10 +58,6 @@ func TestMetricsAreExposed(t *testing.T) {
 		t.Fatalf("metrics status = %d, want %d", w.Code, http.StatusOK)
 	}
 	body := w.Body.String()
-	// Labelled by route and by the REAL status. It used to be keyed
-	// on the operation id with a status inferred from whether the
-	// handler returned a Go error, which made every typed 401 and
-	// 409 look like a 200.
 	if !strings.Contains(body, `http_requests_total{method="GET",route="/",status="200"`) {
 		t.Errorf("no request counter for the root route:\n%s", body)
 	}

@@ -5,12 +5,6 @@ import (
 	"testing"
 )
 
-// battle_sides is written on a join and not on every turn.
-//
-// The upsert loop used to run inside every update, re-writing every
-// side on every turn - write amplification for a table whose only
-// query has no callers yet. This pins the cheaper behaviour without
-// making the table wrong for when reconnect lands.
 func TestSidesAreWrittenOnJoinNotOnEveryTurn(t *testing.T) {
 	pool, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -27,14 +21,13 @@ func TestSidesAreWrittenOnJoinNotOnEveryTurn(t *testing.T) {
 		return n
 	}
 
-	// Two sides after the join.
 	if got := countSides(); got != 2 {
 		t.Fatalf("after a join there are %d side rows, want 2", got)
 	}
 
-	// A turn must not change them. xmin is the transaction that last
-	// wrote each row, so an unchanged xmin proves the row was not
-	// rewritten rather than merely rewritten to the same value.
+	// xmin is the transaction that last wrote the row, so an
+	// unchanged xmin proves the row was not rewritten (rather than
+	// merely rewritten to the same value).
 	var before, after string
 	if err := pool.QueryRow(ctx,
 		"SELECT string_agg(xmin::text, ',' ORDER BY idx) FROM battle_sides WHERE battle_id = $1",

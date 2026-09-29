@@ -9,18 +9,8 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// The cap holds against CONCURRENT creates, not just sequential ones.
-//
-// TestATrainerCannotFillTheLobby loops one create at a time, so it
-// never overlaps the window between counting a trainer's open battles
-// and inserting the next one. That window was the whole bug: two
-// requests both read zero and both insert, because nothing held
-// between the count and the write and no constraint backed it.
-//
-// Reproduced against production before the fix: 12 parallel creates
-// from one token against a cap of 1 gave 8 successes, and that
-// trainer then held the entire lobby - the exact abuse the cap exists
-// to stop, committed in parallel instead of in sequence.
+// Sequential cap tests never overlap the count-then-insert window
+// that races can drive through; this one does.
 func TestTheLobbyCapHoldsUnderConcurrentCreates(t *testing.T) {
 	_, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -36,7 +26,7 @@ func TestTheLobbyCapHoldsUnderConcurrentCreates(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			<-start // released together, so they genuinely overlap
+			<-start
 			res, err := s.CreateBattle(ctx, &api.CreateBattle{},
 				api.CreateBattleParams{XTrainerToken: tok})
 			if err != nil {
@@ -66,7 +56,6 @@ func TestTheLobbyCapHoldsUnderConcurrentCreates(t *testing.T) {
 			"should be refused cleanly, not surfaced as a 500", n)
 	}
 
-	// And the lobby agrees, which is the thing a player actually sees.
 	open, err := store.waiting(ctx)
 	if err != nil {
 		t.Fatalf("listing the lobby: %v", err)
@@ -76,8 +65,6 @@ func TestTheLobbyCapHoldsUnderConcurrentCreates(t *testing.T) {
 	}
 }
 
-// Winning the race must not leave the trainer permanently blocked:
-// the slot frees when someone joins.
 func TestTheSlotStillFreesAfterAContendedCreate(t *testing.T) {
 	_, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}

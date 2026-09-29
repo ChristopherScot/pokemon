@@ -27,7 +27,6 @@ func (s service) RegisterTrainer(ctx context.Context, req *api.RegisterTrainer) 
 	return &api.Trainer{Name: name, Token: token}, nil
 }
 
-// ListWaitingTrainers is the lobby: who is looking for a battle.
 func (s service) ListWaitingTrainers(ctx context.Context) (*api.WaitingList, error) {
 	open, err := s.battles.waiting(ctx)
 	if err != nil {
@@ -44,17 +43,6 @@ func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params
 	if errors.Is(err, errNoTrainer) {
 		return &api.CreateBattleUnauthorized{Message: "unknown trainer token; register first"}, nil
 	}
-	// One waiting battle per trainer.
-	//
-	// Nothing stopped a trainer opening hundreds - measured, 50 in 52ms
-	// from one token - and because the lobby is ORDER BY created_at
-	// DESC LIMIT 100 they do not merely crowd it, they take all of it
-	// and keep it. Every other player becomes invisible, from one
-	// unauthenticated client, on a service reachable from the internet.
-	//
-	// One is the honest limit rather than a generous cap: a trainer can
-	// only play the battle they are in, so a second open battle has no
-	// use even to its owner.
 	open, err := s.battles.openBattlesFor(ctx, params.XTrainerToken)
 	if err != nil {
 		return nil, fmt.Errorf("counting open battles: %w", err)
@@ -74,9 +62,8 @@ func (s service) CreateBattle(ctx context.Context, req *api.CreateBattle, params
 
 	b := newBattle(randomID(s.rng, 6), trainer, params.XTrainerToken, team, time.Now())
 	if err := s.battles.create(ctx, b); err != nil {
-		// The count above is a fast path, not the guarantee: two
-		// creates can both read zero. The database refuses the second,
-		// and it gets the same answer the count would have given.
+		// The count is a fast path; the unique index is the guarantee
+		// against races.
 		if errors.Is(err, errAlreadyWaiting) {
 			return &api.CreateBattleConflict{
 				Message: "you already have a battle waiting for an opponent; " +
@@ -99,7 +86,6 @@ func (s service) GetBattle(ctx context.Context, params api.GetBattleParams) (api
 	return b, nil
 }
 
-// JoinBattle fills the second side and starts play.
 func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api.JoinBattleParams) (api.JoinBattleRes, error) {
 	trainer, err := s.battles.trainerByToken(ctx, params.XTrainerToken)
 	if err != nil && !errors.Is(err, errNoTrainer) {
@@ -134,7 +120,6 @@ func (s service) JoinBattle(ctx context.Context, req *api.JoinBattle, params api
 	}
 }
 
-// TakeTurn resolves one attack.
 func (s service) TakeTurn(ctx context.Context, req *api.TakeTurn, params api.TakeTurnParams) (api.TakeTurnRes, error) {
 	if _, err := s.battles.trainerByToken(ctx, params.XTrainerToken); err != nil {
 		if !errors.Is(err, errNoTrainer) {

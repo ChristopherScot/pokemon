@@ -52,7 +52,6 @@ func activeBattle(t *testing.T, s service) (*battle, string, string) {
 	return stored, a, b
 }
 
-// Type effectiveness is the one rule players will check by hand.
 func TestTypeMultipliers(t *testing.T) {
 	for _, tc := range []struct {
 		move  string
@@ -63,11 +62,11 @@ func TestTypeMultipliers(t *testing.T) {
 		{"water", []string{"grass"}, 0.5},
 		{"electric", []string{"ground"}, 0},
 		{"normal", []string{"ghost"}, 0},
-		// Dual types multiply, which is what makes some matchups brutal.
+		// Dual types multiply.
 		{"electric", []string{"water", "flying"}, 4},
 		{"grass", []string{"fire", "flying"}, 0.25},
 		{"fire", []string{"normal"}, 1},
-		// A type the chart does not list must not panic or zero out.
+		// Unknown type defaults to 1x, must not panic.
 		{"mystery", []string{"fire"}, 1},
 	} {
 		if got := multiplier(tc.move, tc.types); got != tc.want {
@@ -84,8 +83,8 @@ func TestMaxHPFollowsTheRealFormula(t *testing.T) {
 	}{
 		{"bulbasaur", 45, 105},
 		{"charizard", 78, 138},
-		{"wigglytuff", 140, 200}, // the bulkiest in this dataset
-		{"diglett", 10, 70},      // the frailest
+		{"wigglytuff", 140, 200},
+		{"diglett", 10, 70},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := maxHP(tc.base, 0, 0, 50); got != tc.want {
@@ -160,7 +159,7 @@ func TestDamageNeverRoundsToZeroWhenItConnects(t *testing.T) {
 func TestImmuneMatchupDealsNothing(t *testing.T) {
 	s := testService(t)
 	pikachu, _ := s.dex.get("pikachu")
-	geodude, _ := s.dex.get("geodude") // ground: immune to electric
+	geodude, _ := s.dex.get("geodude") // ground is immune to electric
 
 	var electric api.Move
 	for _, mv := range pikachu.Moves {
@@ -181,7 +180,6 @@ func TestImmuneMatchupDealsNothing(t *testing.T) {
 	}
 }
 
-// Turn order alternates, and a player cannot move twice.
 func TestTurnsAlternate(t *testing.T) {
 	s := testService(t)
 	b, ash, gary := activeBattle(t, s)
@@ -227,7 +225,6 @@ func TestFaintedPokemonAreOutOfPlay(t *testing.T) {
 		t.Errorf("attacking a fainted target: %v", err)
 	}
 
-	// And as an attacker, on the other side's turn.
 	if err := b.takeTurn(ash, 0, 0, 1, s.rng); err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +238,6 @@ func TestBattleEndsWhenATeamIsWiped(t *testing.T) {
 	s := testService(t)
 	b, ash, _ := activeBattle(t, s)
 
-	// Leave one opponent standing on 1 HP; anything that connects ends it.
 	b.sides[1].team[1].hp = 0
 	b.sides[1].team[2].hp = 0
 	b.sides[1].team[0].hp = 1
@@ -314,7 +310,6 @@ func TestAPIViewNeverLeaksTokens(t *testing.T) {
 			t.Error("a trainer token appears where a name belongs")
 		}
 	}
-	// And nothing in the rendered log should contain one either.
 	for _, ev := range out.Log {
 		if strings.Contains(ev.Text, ash) || strings.Contains(ev.Text, gary) {
 			t.Errorf("token leaked into the log: %q", ev.Text)
@@ -391,14 +386,9 @@ func TestCreateWithNoTeamPicksOne(t *testing.T) {
 	}
 }
 
-// Tokens come from crypto/rand, not from anything reproducible.
-//
-// This was TestTokensDoNotFollowTheSeed, from when the stores took a
-// seed: two stores built with the SAME seed had to mint different
-// tokens, or a trainer's identity would be guessable by anyone who
-// knew when the process started. The seed is gone - it configured
-// nothing - but the property it guarded is the one that matters, so
-// the test stays and the name now says what it checks.
+// Tokens come from crypto/rand: two stores must mint different
+// tokens even if built the same way, or trainer identity is
+// guessable.
 func TestTokensAreUnpredictableAndUnique(t *testing.T) {
 	a := newMemStore()
 	b := newMemStore()
@@ -415,7 +405,6 @@ func TestTokensAreUnpredictableAndUnique(t *testing.T) {
 		t.Error("two stores minted the same token; identity would be guessable")
 	}
 
-	// And tokens within one store differ from each other.
 	seen := map[string]bool{ta: true}
 	for i := 0; i < 50; i++ {
 		tok, err := a.registerTrainer(context.Background(), fmt.Sprintf("trainer-%d", i))
@@ -494,7 +483,6 @@ func TestClientTurnCheckAgreesWithTheServer(t *testing.T) {
 			c := &battleclient.Client{Name: b.sides[0].trainer}
 			clientErr := c.CheckTurn(before, tc.turn)
 
-			// What the authority says, from the real engine.
 			serverErr := b.takeTurn(tokenA, tc.turn.Attacker, tc.turn.Move, tc.turn.Target, s.rng)
 
 			if tc.legal {

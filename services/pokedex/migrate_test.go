@@ -29,7 +29,6 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-// dropAll clears the schema so each test starts from nothing.
 func dropAll(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	ctx := context.Background()
@@ -49,7 +48,6 @@ func TestMigrateCreatesSchema(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	// Every table the store writes to.
 	for _, table := range []string{
 		"pokemon", "moves", "pokemon_moves", "trainers", "battles", "battle_sides",
 	} {
@@ -78,11 +76,8 @@ func TestMigrateIsIdempotent(t *testing.T) {
 		t.Fatalf("second migrate: %v", err)
 	}
 
-	// Counted against the files on disk rather than a hardcoded 1:
-	// the point is that migrating twice records each migration once,
-	// which should stay true as migrations are added. Hardcoding it
-	// meant the second migration ever written broke this test for
-	// the wrong reason.
+	// Derived from disk, not a hardcoded number: new migrations must
+	// not break this test.
 	files, err := migrationFS.ReadDir("migrations")
 	if err != nil {
 		t.Fatalf("listing migrations: %v", err)
@@ -127,8 +122,6 @@ func TestMigrateConcurrentReplicas(t *testing.T) {
 		"SELECT count(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("counting: %v", err)
 	}
-	// Derived, as above: concurrent starters must each record a
-	// migration exactly once, however many there are.
 	files, err := migrationFS.ReadDir("migrations")
 	if err != nil {
 		t.Fatalf("listing migrations: %v", err)

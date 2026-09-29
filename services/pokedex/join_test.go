@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-// Joining is a battle transition, so it is testable as one.
-//
-// It used to live in a closure inside the HTTP handler, which meant
-// the only way to exercise these rules was through the service - and
-// the rules themselves (status, turn, version, the log line) sat in
-// the transport layer where takeTurn's equivalents do not.
 func TestJoinIsABattleTransition(t *testing.T) {
 	dex, err := loadPokedex()
 	if err != nil {
@@ -37,7 +31,6 @@ func TestJoinIsABattleTransition(t *testing.T) {
 		t.Error("a new battle logged nothing; the lobby shows the opening line")
 	}
 
-	// The same trainer cannot join their own battle.
 	if err := b.join("ash", "tok-ash", teamFor("charmander", "squirtle", "caterpie")); !errors.Is(err, errAlreadyIn) {
 		t.Errorf("self-join = %v, want errAlreadyIn", err)
 	}
@@ -56,7 +49,6 @@ func TestJoinIsABattleTransition(t *testing.T) {
 		t.Errorf("turn = %d, want 0 - the opener moves first", b.turn)
 	}
 
-	// And a third trainer cannot join a full battle.
 	if err := b.join("brock", "tok-brock", teamFor("onix", "pidgey", "rattata")); !errors.Is(err, errBattleFull) {
 		t.Errorf("joining a full battle = %v, want errBattleFull", err)
 	}

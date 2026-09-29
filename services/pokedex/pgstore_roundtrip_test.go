@@ -10,19 +10,9 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// A battle in postgres is stored as JSON, so anything reachable from
-// battleState that encoding/json cannot see is silently dropped: it
-// marshals as {} and comes back zeroed.
-//
-// That is what made every move deal exactly 1 damage. baseStats and
-// stages both had unexported fields, so a reloaded combatant fought with
-// attack and defense of ZERO, the damage formula divided 0 by 0, and
-// every roll landed on the `if d < 1 { d = 1 }` floor. A battle took
-// ~140 turns instead of ~4, in every client.
-//
-// This walks the whole persisted shape rather than naming the two
-// structs that were wrong, so the next struct added to it is covered
-// without anyone remembering to come back here.
+// battleState is persisted as JSON, so anything encoding/json cannot
+// see gets silently dropped and reloaded as zero. Walks the whole
+// persisted shape so new fields are covered automatically.
 func TestEveryPersistedFieldCanRoundTrip(t *testing.T) {
 	// Types the encoder handles itself; do not walk into them.
 	opaque := map[reflect.Type]bool{
@@ -44,7 +34,7 @@ func TestEveryPersistedFieldCanRoundTrip(t *testing.T) {
 		}
 		seen[typ] = true
 
-		// A struct that marshals itself is its own business.
+		// A struct with its own MarshalJSON is opaque.
 		if typ.Implements(reflect.TypeOf((*interface{ MarshalJSON() ([]byte, error) })(nil)).Elem()) ||
 			reflect.PtrTo(typ).Implements(reflect.TypeOf((*interface{ MarshalJSON() ([]byte, error) })(nil)).Elem()) {
 			return
@@ -75,9 +65,8 @@ func TestEveryPersistedFieldCanRoundTrip(t *testing.T) {
 	}
 }
 
-// The symptom the class test above exists to prevent, pinned end to end:
-// a battle that has been through postgres must still hit as hard as one
-// that has not.
+// End-to-end pin of the round-trip: a persisted battle must hit as
+// hard as a fresh one.
 func TestDamageSurvivesPersistence(t *testing.T) {
 	dex, err := loadPokedex()
 	if err != nil {
@@ -105,8 +94,6 @@ func TestDamageSurvivesPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// fromRow is the real load path, so this is exactly what a pod does
-	// when it picks a battle back up out of postgres.
 	now := time.Now()
 	reloaded, err := fromRow(b.id, string(b.status), 1, 0, 1, "", now, now, raw)
 	if err != nil {
@@ -136,24 +123,12 @@ func (fixedRoll) Intn(n int) int {
 }
 func (fixedRoll) Float64() float64 { return 0.5 }
 
-// Every field of an in-memory struct has a home in its persisted form.
-//
-// The test above walks battleState and proves everything IN it
-// survives the round trip. It cannot see a field that was never added
-// to it - so adding one to `combatant` and forgetting `combatantState`
-// compiles, vets, and passes the entire suite, including that test.
-// The field then works perfectly under memStore, which is what the
-// rules tests use, and silently resets on every turn under Postgres,
-// which is what production runs. A reviewer demonstrated exactly that
-// with a synthetic status effect.
-//
-// So: compare the two shapes directly. This is the same class as the
-// 1-damage bug - state the engine keeps that the database does not -
-// caught one struct further out.
+// Round-trip walk above proves everything IN battleState survives,
+// but a field only on `combatant` and not on `combatantState` compiles
+// clean and silently resets every turn under Postgres. Compare the two
+// shapes directly to catch that class.
 func TestEveryEngineFieldHasSomewhereToBePersisted(t *testing.T) {
-	// The persisted counterpart of each in-memory struct. A new pair
-	// belongs here; a pair that is deliberately partial belongs in
-	// `except` below, with the reason.
+	// Deliberately-partial pairs list themselves in `except` with why.
 	pairs := []struct {
 		live, stored any
 		except       map[string]string
@@ -166,8 +141,6 @@ func TestEveryEngineFieldHasSomewhereToBePersisted(t *testing.T) {
 		lt := reflect.TypeOf(p.live)
 		st := reflect.TypeOf(p.stored)
 
-		// Persisted names are the live ones capitalised, which is the
-		// convention every field here already follows.
 		have := map[string]bool{}
 		for i := 0; i < st.NumField(); i++ {
 			have[strings.ToLower(st.Field(i).Name)] = true

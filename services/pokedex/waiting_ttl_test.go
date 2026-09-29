@@ -6,13 +6,8 @@ import (
 	"time"
 )
 
-// A player waiting in the lobby is not abandoned.
-//
-// touched_at only advances on UpdateBattle, and a waiting battle has
-// no updates - a join is its first. Reads do not touch it, so polling
-// does not either. Under one cutoff that meant a battle opened and
-// watched attentively was deleted at exactly battleTTL, and the client
-// saw a bare 404 it could not tell from a wrong id.
+// A waiting battle's touched_at never advances (a join is its first
+// update), so it must use waitingBattleTTL, not battleTTL.
 func TestAWaitingBattleOutlivesTheActiveTTL(t *testing.T) {
 	pool, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -24,8 +19,7 @@ func TestAWaitingBattleOutlivesTheActiveTTL(t *testing.T) {
 		t.Fatalf("creating: %v", err)
 	}
 
-	// Older than the active TTL, younger than the waiting one: the
-	// exact window the single cutoff got wrong.
+	// Between the two TTLs.
 	age := battleTTL + time.Hour
 	if age >= waitingBattleTTL {
 		t.Fatalf("test assumes battleTTL+1h < waitingBattleTTL; got %v vs %v", age, waitingBattleTTL)
@@ -36,7 +30,7 @@ func TestAWaitingBattleOutlivesTheActiveTTL(t *testing.T) {
 		t.Fatalf("ageing the battle: %v", err)
 	}
 
-	// waiting() sweeps before it lists, so this both triggers and checks.
+	// waiting() sweeps before it lists.
 	open, err := store.waiting(ctx)
 	if err != nil {
 		t.Fatalf("listing the lobby: %v", err)
@@ -53,7 +47,6 @@ func TestAWaitingBattleOutlivesTheActiveTTL(t *testing.T) {
 	}
 }
 
-// The longer TTL must not mean waiting battles never expire.
 func TestAWaitingBattleIsStillSweptEventually(t *testing.T) {
 	pool, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -78,14 +71,11 @@ func TestAWaitingBattleIsStillSweptEventually(t *testing.T) {
 	}
 }
 
-// An ACTIVE battle keeps the short TTL: both players having walked away
-// mid-game is what it is there to clean up.
 func TestAnActiveBattleStillExpiresOnTheShortTTL(t *testing.T) {
 	pool, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
 	ctx := context.Background()
 
-	// An active battle: one opened, one joined.
 	host := registerFor(t, s, "host")
 	b := newTestBattle(t, dex, "host", host)
 	if err := store.create(ctx, b); err != nil {

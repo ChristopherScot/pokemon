@@ -8,11 +8,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// A name nobody has used in a long time goes back in the pool.
-//
-// Names are unique and nothing released them, so every name ever typed
-// was spent forever - including by whoever lost their token, who could
-// neither re-register it nor recover it.
 func TestAnAbandonedNameCanBeClaimedAgain(t *testing.T) {
 	ctx := context.Background()
 	m := newMemStore()
@@ -37,10 +32,8 @@ func TestAnAbandonedNameCanBeClaimedAgain(t *testing.T) {
 	}
 }
 
-// The constraint that matters: a trainer IN a battle is never swept,
-// however idle they look. Someone waiting in the lobby for an opponent
-// makes no requests at all, and deleting them cascades their side away
-// and strands whoever eventually joins.
+// A trainer IN a battle is never swept: someone waiting in the lobby
+// makes no requests, and deleting their row cascades their side away.
 func TestASweepNeverStrandsSomeoneInABattle(t *testing.T) {
 	ctx := context.Background()
 	m := newMemStore()
@@ -65,8 +58,8 @@ func TestASweepNeverStrandsSomeoneInABattle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// They have been sitting in the lobby far longer than the TTL,
-	// because sitting in a lobby involves making no requests.
+	// Idle far longer than the TTL: sitting in the lobby makes no
+	// requests.
 	m.mu.Lock()
 	m.lastSeen[waiting] = time.Now().Add(-10 * trainerTTL)
 	m.sweepLocked()
@@ -81,7 +74,6 @@ func TestASweepNeverStrandsSomeoneInABattle(t *testing.T) {
 	}
 }
 
-// Acting refreshes the claim, so a regular player never loses a name.
 func TestUsingATokenKeepsTheName(t *testing.T) {
 	ctx := context.Background()
 	m := newMemStore()
@@ -95,7 +87,6 @@ func TestUsingATokenKeepsTheName(t *testing.T) {
 	m.lastSeen[token] = time.Now().Add(-2 * trainerTTL)
 	m.mu.Unlock()
 
-	// One request - which is what every authenticated call does.
 	if _, err := m.trainerByToken(ctx, token); err != nil {
 		t.Fatalf("token stopped working: %v", err)
 	}
@@ -110,9 +101,8 @@ func TestUsingATokenKeepsTheName(t *testing.T) {
 	}
 }
 
-// The same two rules, against postgres, because the NOT IN guard is SQL
-// and the memory store's is Go - one passing says nothing about the
-// other.
+// Same rules against Postgres, since the NOT IN guard is SQL and the
+// mem-store guard is Go.
 func TestSweepOverPostgres(t *testing.T) {
 	pool := testPool(t)
 	dropAll(t, pool)
@@ -138,20 +128,19 @@ func TestSweepOverPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// mid-game opens a battle and then goes quiet, as anyone waiting
-	// for an opponent does.
+	// mid-game opens a battle then goes quiet, as anyone waiting for
+	// an opponent does.
 	if _, err := s.CreateBattle(ctx,
 		&api.CreateBattle{Team: []string{"pikachu", "onix", "gengar"}},
 		api.CreateBattleParams{XTrainerToken: inGame}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Both look ancient. The battle does not, so it is not swept.
 	if _, err := pool.Exec(ctx, `UPDATE trainers SET last_seen = now() - interval '30 days'`); err != nil {
 		t.Fatal(err)
 	}
 
-	// waiting() is where the sweep runs.
+	// waiting() runs the sweep.
 	s.battles.waiting(ctx)
 
 	if _, err := s.battles.trainerByToken(ctx, inGame); err != nil {

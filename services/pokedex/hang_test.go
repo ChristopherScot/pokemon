@@ -5,10 +5,8 @@ import (
 	"time"
 )
 
-// A roller that always returns 0 is a legal implementation of the
-// interface - fixedRoll in pgstore_roundtrip_test.go is one. The old
-// draw-until-new loops never terminated for it, inside a request
-// handler with no ctx check.
+// A roller returning always 0 is a legal implementation and must not
+// hang team building.
 type alwaysZero struct{}
 
 func (alwaysZero) Intn(int) int     { return 0 }

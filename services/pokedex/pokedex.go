@@ -18,14 +18,13 @@ type dataset struct {
 	Moves   []moveEntry `json:"moves"`
 }
 
-// moveEntry mirrors one record in that catalogue.
 type moveEntry struct {
 	Name        string `json:"name"`
 	Type        string `json:"type"`
 	Power       int    `json:"power"`
 	Description string `json:"description"`
 	Effect      string `json:"effect"`
-	// Nil for a move that cannot miss, which is not the same as 100.
+	// Nil means the move cannot miss, which is not the same as 100.
 	Accuracy    *int   `json:"accuracy"`
 	PP          int    `json:"pp"`
 	DamageClass string `json:"damageClass"`
@@ -65,8 +64,8 @@ type pokedex struct {
 	stats map[int]baseStats
 }
 
-// loadPokedex builds the index from the JSON compiled into the
-// binary, for a run with no database.
+// loadPokedex builds the index from the embedded JSON, for a run
+// with no database.
 func loadPokedex() (*pokedex, error) {
 	var doc dataset
 	if err := json.Unmarshal(pokedexJSON, &doc); err != nil {
@@ -81,19 +80,8 @@ func loadPokedex() (*pokedex, error) {
 	return buildPokedex(doc.Pokemon, doc.Moves)
 }
 
-// buildPokedex turns rows into the index, and is the ONLY place that
-// knows how.
-//
-// There used to be two of these - one over embedded JSON, one over
-// sqlc rows - about ninety duplicated lines apiece. The sources
-// genuinely differ, but only in how a row is obtained: int vs int32,
-// moves inline vs joined through a link table. Everything after that
-// was the same, so adding a field to api.Pokemon meant the same edit
-// in two files.
-//
-// Worse, which one ran was decided by DATABASE_URL at startup, so
-// local development exercised one path and production the other, and
-// a divergence between them was invisible until it shipped.
+// buildPokedex is the only place that turns rows into the index, so
+// the embedded and database sources cannot drift.
 func buildPokedex(mons []entry, moves []moveEntry) (*pokedex, error) {
 	p := &pokedex{
 		ordered: make([]api.Pokemon, 0, len(mons)),
@@ -186,10 +174,8 @@ func (p *pokedex) finish() error {
 	return nil
 }
 
-// allMoves returns the whole catalogue, in name order.
 func (p *pokedex) allMoves() []api.Move { return p.moves }
 
-// move looks up one move by its hyphenated name.
 func (p *pokedex) move(name string) (api.Move, bool) {
 	mv, ok := p.moveByName[strings.ToLower(strings.TrimSpace(name))]
 	return mv, ok
@@ -269,10 +255,9 @@ type baseStats struct {
 	hp, attack, defense, speed int
 }
 
-// A battle is stored in postgres as JSON, and encoding/json cannot see
-// unexported fields: without these, base stats persisted as {} and came
-// back zeroed, so the damage formula divided by a defense of 0 and every
-// move dealt exactly 1.
+// Battles are persisted as JSON and encoding/json ignores unexported
+// fields, so baseStats needs an explicit shape or it round-trips as {}
+// and the damage formula divides by a zero defense.
 type baseStatsJSON struct {
 	HP      int `json:"hp"`
 	Attack  int `json:"attack"`

@@ -5,13 +5,12 @@ import (
 	"math"
 )
 
-// Stat stages are clamped to this range in every generation.
+// Stat stages are clamped to [-6, +6] in every generation.
 const (
 	minStage = -6
 	maxStage = 6
 )
 
-// stages tracks one combatant's stat modifications.
 type stages struct {
 	attack   int
 	defense  int
@@ -19,9 +18,8 @@ type stages struct {
 	accuracy int
 }
 
-// Persisted with the battle, so it needs the same explicit JSON as
-// baseStats: unexported fields marshal as {}, and a reloaded battle
-// would silently forget every buff and debuff.
+// Explicit JSON shape: unexported fields would round-trip as {} and
+// silently forget every buff and debuff.
 type stagesJSON struct {
 	Attack   int `json:"attack"`
 	Defense  int `json:"defense"`
@@ -91,10 +89,7 @@ type effect struct {
 
 	fixedDamage int
 
-	// ohko faints the target outright when it lands.
-	ohko bool
-
-	// confuse and disable are the remaining two shapes.
+	ohko    bool
 	confuse bool
 	disable bool
 }
@@ -112,7 +107,6 @@ var statusMoves = map[string]effect{
 	"supersonic": {confuse: true, accuracy: 55},
 	"disable":    {disable: true, accuracy: 100},
 
-	// Fixed damage, ignoring types and stats entirely.
 	"sonic-boom": {fixedDamage: 20, accuracy: 90},
 
 	"guillotine": {ohko: true, accuracy: 30},

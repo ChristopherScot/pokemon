@@ -1,16 +1,8 @@
 package main
 
-// Concurrency tests that assert something.
-//
-// The previous versions of this file spawned goroutines, discarded
-// every error and every result, and contained no t.Error at all -
-// they passed if every operation failed. Worse, they ran against
-// memStore, so the file named for the riskiest behaviour in the
-// service exercised a sync.Mutex in one process and never touched
-// the SERIALIZABLE transaction, the isolation level or the retry
-// loop that production depends on.
-//
-// These run against Postgres and pin the invariants.
+// Concurrency tests run against Postgres so they exercise the
+// SERIALIZABLE transaction, isolation level and retry loop
+// production depends on; memStore's mutex would not catch those.
 
 import (
 	"context"
@@ -26,11 +18,9 @@ var n atomic.Int64
 
 func name() string { return fmt.Sprintf("t%d", n.Add(1)) }
 
-// Exactly one of N simultaneous turns is accepted.
-//
-// This is the property the whole SERIALIZABLE-plus-retry design
-// exists for. Without it two attacks interleave and a battle either
-// loses a turn or takes two from the same trainer.
+// The property the SERIALIZABLE-plus-retry design exists for: two
+// interleaved attacks would either lose a turn or take two from the
+// same trainer.
 func TestOnlyOneSimultaneousTurnIsAccepted(t *testing.T) {
 	_, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -71,8 +61,8 @@ func TestOnlyOneSimultaneousTurnIsAccepted(t *testing.T) {
 	}
 }
 
-// Concurrent writers must all land. A serialization failure that the
-// retry loop gives up on is a silently lost turn.
+// A serialization failure the retry loop gives up on is a silently
+// lost turn.
 func TestNoWriteIsLostUnderContention(t *testing.T) {
 	_, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -85,7 +75,6 @@ func TestNoWriteIsLostUnderContention(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// Each writer appends one distinguishable line.
 			err := store.update(context.Background(), b.ID, func(bt *battle) error {
 				bt.log = append(bt.log, api.BattleEvent{
 					TurnNumber: i,
@@ -120,8 +109,6 @@ func TestNoWriteIsLostUnderContention(t *testing.T) {
 	}
 }
 
-// Reading a battle while it is being written must not observe a
-// half-applied turn, and must not race.
 func TestReadsSeeWholeTurnsOnly(t *testing.T) {
 	_, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -137,8 +124,6 @@ func TestReadsSeeWholeTurnsOnly(t *testing.T) {
 				t.Errorf("read during a turn failed: %v", err)
 				return
 			}
-			// A half-applied turn would show a side with the wrong
-			// number of Pokemon, or a battle with one side.
 			if len(got.Sides) != 2 {
 				t.Errorf("observed %d sides mid-turn, want 2", len(got.Sides))
 				return
@@ -170,8 +155,6 @@ func TestReadsSeeWholeTurnsOnly(t *testing.T) {
 	wg.Wait()
 }
 
-// activeBattleOn builds a started battle on whatever store the
-// service holds, and returns both trainers' tokens.
 func activeBattleOn(t *testing.T, s service) (*api.Battle, string, string) {
 	t.Helper()
 	ctx := context.Background()
