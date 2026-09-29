@@ -30,14 +30,12 @@ func TestScreensWithoutTheListAreNotRoutedToIt(t *testing.T) {
 func TestEscapeReachesTheListFilterOnThePicker(t *testing.T) {
 	m := newModel(nil, "http://example.invalid")
 	m.screen = screenTeam
-	// Items, so the list has something to filter.
 	m.list.SetItems([]list.Item{
 		item{p: api.Pokemon{Name: "bulbasaur"}},
 		item{p: api.Pokemon{Name: "charizard"}},
 	})
 	m.list.SetSize(80, 20)
 
-	// Open the filter the way a user does.
 	got, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = got.(model)
 	if m.list.FilterState() != list.Filtering {

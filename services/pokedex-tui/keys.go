@@ -102,7 +102,6 @@ func (m model) lobbyKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "n":
-		// Open a new battle: pick a team first.
 		m.screen = screenTeam
 		m.joining = ""
 		m.team = nil
@@ -218,13 +217,7 @@ func (m model) battleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// nextAlive and prevAlive move the cursor to the next Pokemon that can
-// actually be chosen.
-//
-// battleclient.CanAct rather than !Fainted: fainted is the INPUT the
-// server used to decide, and reading it here would be a second copy
-// of the rule. The cursor now skips whatever the server says is
-// unselectable, whether or not this client knows why.
+// Uses server-owned CanAct so the cursor skips whatever the server marks unselectable.
 func nextAlive(team []api.BattlePokemon, i int) int {
 	for step := 1; step <= len(team); step++ {
 		j := (i + step) % len(team)

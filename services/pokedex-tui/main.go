@@ -1,4 +1,3 @@
-// pokedex-tui
 package main
 
 import (

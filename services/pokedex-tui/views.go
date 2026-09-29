@@ -1,7 +1,5 @@
 package main
 
-// The lobby and team-picking screens.
-
 import (
 	"fmt"
 	"strings"
@@ -17,7 +15,6 @@ var (
 	selStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
 )
 
-// lobbyView lists open invitations.
 func (m model) lobbyView() string {
 	var sb strings.Builder
 	sb.WriteString("\n  " + titleStyle.Render("Battle lobby") +

@@ -13,10 +13,8 @@ const frameRate = time.Second / 30
 
 const drainPerFrame = 4
 
-// frameMsg advances animations.
 type frameMsg time.Time
 
-// battleMsg carries new state from a poll.
 type battleMsg struct {
 	battle *api.Battle
 	err    error
@@ -24,7 +22,6 @@ type battleMsg struct {
 	misses int
 }
 
-// lobbyMsg carries the list of open battles.
 type lobbyMsg struct {
 	polled bool
 	list   *api.WaitingList
@@ -48,7 +45,7 @@ type battleState struct {
 	// shown lags battle for the drain animation.
 	shown map[slot]int
 
-	// floats are damage numbers rising off a Pokemon. They expire.
+	// floats are damage numbers rising off a Pokemon; they expire.
 	floats []damageFloat
 
 	// impacts are the shake-and-flash on a row that was just hit.
@@ -56,7 +53,6 @@ type battleState struct {
 
 	bannerPulse int
 
-	// Cursor state for choosing a move.
 	pickAttacker int
 	pickMove     int
 	pickTarget   int
@@ -79,8 +75,7 @@ type damageFloat struct {
 	slot   slot
 	amount int
 	effect float64
-	// frames remaining; the float rises and fades as this counts down.
-	life int
+	life   int
 }
 
 type impact struct {
@@ -96,7 +91,6 @@ const (
 	faintLife = 14
 )
 
-// tick schedules the next animation frame.
 func tick() tea.Cmd {
 	return tea.Tick(frameRate, func(t time.Time) tea.Msg { return frameMsg(t) })
 }
@@ -267,8 +261,6 @@ func clampAlive(team []api.BattlePokemon, i int) int {
 	if len(team) == 0 {
 		return 0
 	}
-	// CanAct rather than !Fainted: this keeps the cursor on something
-	// the player may actually choose, which is a rule the server owns.
 	if i >= 0 && i < len(team) && battleclient.CanAct(team[i]) {
 		return i
 	}
@@ -309,7 +301,6 @@ func (m model) resumeBattle() tea.Cmd {
 	}
 }
 
-// startedMsg is the result of opening or joining.
 type startedMsg struct {
 	battle *api.Battle
 	err    error

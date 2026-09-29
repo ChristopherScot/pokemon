@@ -166,7 +166,6 @@ func TestStyledColumnsArePaddedByTheirStyleNotByFmt(t *testing.T) {
 		faintStyle,
 		pickStyle,
 	} {
-		// What the code does: width on the style.
 		if got := lipgloss.Width(nameCol.Inherit(style).Render("  charmander")); got != 24 {
 			t.Errorf("style-padded column is %d wide, want 24", got)
 		}
@@ -182,7 +181,6 @@ func TestStyledColumnsArePaddedByTheirStyleNotByFmt(t *testing.T) {
 	}
 }
 
-// Every rendered row is the same width, whatever styling it carries.
 func TestRowsAlignWhateverTheStyling(t *testing.T) {
 	bs := testBattleState(t)
 	team := []api.BattlePokemon{
@@ -274,7 +272,6 @@ func TestAnImmuneHitDoesNotFloatAsDamage(t *testing.T) {
 	}
 }
 
-// The ordinary bands still read as they did.
 func TestFloatsKeepTheirEffectivenessMarkers(t *testing.T) {
 	super := renderFloat(damageFloat{slot: slot{0, 0}, amount: 30, effect: 2, life: floatLife})
 	if !strings.Contains(super, "-30") || !strings.Contains(super, "!!") {
@@ -317,7 +314,6 @@ func TestEnterRefusesADisabledMove(t *testing.T) {
 	}
 }
 
-// An allowed move still goes through, or the guard is just a wall.
 func TestEnterStillSendsALegalMove(t *testing.T) {
 	bs := testBattleState(t)
 	b := twoSided(1,

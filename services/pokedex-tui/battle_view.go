@@ -1,7 +1,5 @@
 package main
 
-// Rendering the battle screen.
-
 import (
 	"fmt"
 	"strings"
@@ -160,7 +158,6 @@ func renderFloat(f damageFloat) string {
 	return style.Render(text)
 }
 
-// view renders the whole battle screen.
 func (bs *battleState) view(width, height int) string {
 	if bs.err != nil {
 		return errStyle.Render(fmt.Sprintf("battle error\n\n%v\n\npress esc to go back", bs.err))
@@ -206,7 +203,6 @@ func (bs *battleState) view(width, height int) string {
 	return sb.String()
 }
 
-// banner says whose turn it is, or who won.
 func (bs *battleState) banner(b *api.Battle) string {
 	switch b.Status {
 	case api.BattleStatusFinished:
@@ -261,7 +257,6 @@ func powerText(p int) string {
 	return fmt.Sprintf("(%d)", p)
 }
 
-// logView shows the tail of the battle log, newest last.
 func (bs *battleState) logView(height int) string {
 	const lines = 5
 	log := bs.battle.Log
