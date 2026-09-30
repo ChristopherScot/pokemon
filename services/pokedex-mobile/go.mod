@@ -3,7 +3,7 @@ module github.com/christopherscot/pokemon/services/pokedex-mobile
 go 1.27
 
 require (
-	gioui.org v0.10.2
+	gioui.org v0.10.3
 	github.com/christopherscot/pokemon/services/pokedex v0.0.0
 )
 
@@ -16,6 +16,7 @@ require (
 	github.com/go-faster/jx v1.2.0 // indirect
 	github.com/go-faster/yaml v0.4.6 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect

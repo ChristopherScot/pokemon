@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """Refuse to publish an APK a modern phone will not install.
 
-Both checks here are things that shipped broken. gogio writes every
-zip entry with Deflate and aligns to 4 bytes; Android needs native
-libraries STORED so the loader can mmap them out of the APK, and
-Android 15 needs them on a 16 KB page boundary. When it fails, the
-installer churns and then says "app not installed" with nothing else -
-so this fails the build instead, where the reason is visible.
+Android needs native libraries STORED (mmap) and, since Android 15, on a
+16 KB page boundary. gogio writes them deflated and 4-byte aligned, and
+the installer says only "app not installed" with the reason in logcat.
 """
 import struct
 import sys
@@ -16,7 +13,6 @@ PAGE = 16 * 1024
 
 
 def data_offset(path, info):
-    """Where an entry's bytes actually start, past its local header."""
     with open(path, "rb") as f:
         f.seek(info.header_offset + 26)
         name_len, extra_len = struct.unpack("<HH", f.read(4))
