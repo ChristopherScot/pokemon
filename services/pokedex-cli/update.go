@@ -18,17 +18,22 @@ import (
 
 const (
 	repoOwner = "ChristopherScot"
-	// The monorepo, not the service — releases live at the repo level.
+
+	// A release is per REPOSITORY. In a monorepo that is the PARENT repo,
+	// not the service.
 	repoName = "pokemon"
-	// Per-service prefix so sibling services in the monorepo don't share a tag namespace.
+
+	// Monorepo tags are namespaced so siblings do not share `latest` or
+	// collide on the same version number.
 	tagPrefix = "pokedex-cli/"
-	// A pokedex-cli binary is a few MB; anything near this is not our asset.
+
 	maxBinarySize = 100 * 1024 * 1024
 )
 
 type githubRelease struct {
 	TagName string `json:"tag_name"`
-	// /releases (unlike /releases/latest) includes drafts and prereleases; filter them ourselves.
+
+	// /releases returns drafts and prereleases, unlike /releases/latest.
 	Draft      bool `json:"draft"`
 	Prerelease bool `json:"prerelease"`
 
@@ -55,7 +60,6 @@ func updateCmd() *cobra.Command {
 func runUpdate(checkOnly bool) error {
 	fmt.Printf("current version: %s\n", Version)
 
-	// Dev build has no version to compare; refuse before touching the network.
 	current := ensureV(Version)
 	if Version == "dev" {
 		fmt.Println("running a dev build; not updating")
@@ -95,9 +99,9 @@ func runUpdate(checkOnly bool) error {
 	return nil
 }
 
-// /releases/latest returns the newest release across the whole monorepo, which is
-// often a sibling service; walk the list so we can filter by tagPrefix. Releases
-// come back newest-first, so the first prefixed match wins.
+// latestRelease returns the newest release belonging to THIS tool.
+// Not /releases/latest, which in a monorepo would be whichever sibling
+// released most recently. Releases come back newest-first.
 func latestRelease() (*githubRelease, error) {
 	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", repoOwner, repoName))
 	if err != nil {
@@ -118,8 +122,8 @@ func latestRelease() (*githubRelease, error) {
 	return rel, nil
 }
 
-// Prefer any prefixed release; fall back to unprefixed releases that still ship
-// this tool's asset, for tags cut before the namespacing convention.
+// pickRelease prefers a prefixed tag, then falls back to any release with
+// this tool's asset so pre-namespace releases stay installable.
 func pickRelease(rels []githubRelease) *githubRelease {
 	want := assetName()
 	var fallback *githubRelease
@@ -158,7 +162,7 @@ func releaseVersion(tag string) string {
 	return ensureV(strings.TrimPrefix(tag, tagPrefix))
 }
 
-// ensureV adds the leading "v" that golang.org/x/mod/semver requires.
+// ensureV normalises toward the leading "v" that x/mod/semver requires.
 func ensureV(v string) string {
 	if strings.HasPrefix(v, "v") {
 		return v
@@ -166,17 +170,21 @@ func ensureV(v string) string {
 	return "v" + v
 }
 
-// Uses x/mod/semver so double-digit components (v1.10 vs v1.2) compare correctly.
+// isNewer uses x/mod/semver rather than a hand-rolled comparison: a
+// pairwise compare reads "10" as older than "2" and goes silent the
+// moment any component reaches double digits. An unparseable version
+// returns false, leaving the caller on a working binary.
 func isNewer(latest, current string) bool {
-	// Unparseable version: return false so we don't talk someone into replacing a working binary.
 	if !semver.IsValid(latest) || !semver.IsValid(current) {
 		return false
 	}
 	return semver.Compare(latest, current) > 0
 }
 
-// A running executable can't be overwritten in place on every platform, so write
-// beside it and rename-swap; keep the old file until the swap succeeds.
+// installFrom replaces the running binary via a rename dance: a running
+// executable cannot be overwritten in place on every platform, but it can
+// be renamed out of the way. The old binary is kept until the swap
+// succeeds so a failure is recoverable.
 func installFrom(url string) error {
 	resp, err := http.Get(url)
 	if err != nil {
@@ -191,7 +199,6 @@ func installFrom(url string) error {
 	if err != nil {
 		return fmt.Errorf("locate executable: %w", err)
 	}
-	// Resolve symlinks so we replace the real file, not a link to it.
 	binPath, err = filepath.EvalSymlinks(binPath)
 	if err != nil {
 		return fmt.Errorf("resolve executable: %w", err)
@@ -241,7 +248,7 @@ func installFrom(url string) error {
 			return fmt.Errorf("move current binary aside: %w", err)
 		}
 		if err := os.Rename(tmp, binPath); err != nil {
-			os.Rename(old, binPath)
+			os.Rename(old, binPath) // put it back
 			os.Remove(tmp)
 			return fmt.Errorf("install new binary: %w", err)
 		}
