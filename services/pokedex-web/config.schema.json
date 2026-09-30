@@ -153,7 +153,10 @@
     "probes": {
       "type": "object",
       "additionalProperties": false,
-      "properties": { "path": { "type": "string", "default": "/healthz" } }
+      "properties": {
+        "path": { "type": "string", "default": "/healthz", "description": "Path the LIVENESS probe hits, and the readiness probe too unless readyPath overrides it. Liveness asks whether to restart this pod." },
+        "readyPath": { "type": "string", "description": "Path the READINESS probe hits, when it differs from path. Readiness asks whether to send this pod traffic - a service with a database can be alive and unable to serve. Omit to use path, which is what a service with only one health endpoint wants." }
+      }
     },
     "resources": {
       "type": "object",
