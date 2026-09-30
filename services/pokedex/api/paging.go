@@ -5,9 +5,9 @@ import (
 	"iter"
 )
 
-// Paged iterates every item across pages of a cursor-based operation.
-// The caller closes over the generated client method so one
-// implementation covers every paged operation.
+// Paging. A cursor loop written by hand is easy to get subtly wrong:
+// forgetting to update the cursor is an infinite loop against a real
+// service, and missing an error check silently truncates.
 //
 //	for user, err := range Paged(ctx, func(ctx context.Context, cursor string) (Page[User], error) {
 //	    res, err := c.ListUsers(ctx, ListUsersParams{After: cursor})
@@ -22,8 +22,7 @@ import (
 //	    // use user
 //	}
 
-// Page is one response from a paged operation. An empty Next ends
-// iteration.
+// Page is one response from a paged operation. An empty Next ends the iteration.
 type Page[T any] struct {
 	Items []T
 	Next  string
@@ -32,9 +31,9 @@ type Page[T any] struct {
 // Fetch requests one page. cursor is empty on the first call.
 type Fetch[T any] func(ctx context.Context, cursor string) (Page[T], error)
 
-// Paged yields an error exactly once (as its final element) and
-// stops, so a range loop that checks err and returns cannot silently
-// process a truncated list. Breaking the loop stops fetching.
+// Paged yields an error exactly once, as its final element, and stops -
+// so a `range` loop that checks err and returns cannot silently process
+// a truncated list. Breaking out of the loop stops fetching.
 func Paged[T any](ctx context.Context, fetch Fetch[T]) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		var cursor string
@@ -60,8 +59,7 @@ func Paged[T any](ctx context.Context, fetch Fetch[T]) iter.Seq2[T, error] {
 				}
 			}
 
-			// Stop on a repeated cursor: a server that loops one would
-			// otherwise spin forever.
+			// A server that repeats a cursor would spin forever.
 			if page.Next == "" || seen[page.Next] {
 				return
 			}

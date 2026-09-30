@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"io"
 	"math/rand/v2"
 	"net/http"
 	"strconv"
@@ -12,34 +13,36 @@ import (
 	ht "github.com/ogen-go/ogen/http"
 )
 
-// Package api is the generated ogen client plus the transport
-// wrapper - retry, timeout, breaker - that ogen deliberately omits.
-// Consumers get the whole set by importing this package rather than
-// only the generated code.
+// The typed client for this service. api/ is committed, so a Go consumer
+// installs it with `go get github.com/<owner>/pokedex@<tag>`.
+//
+// ogen ships no retries, timeout or breaker. Its only extension point is
+// WithClient, so those live here - defaults chosen for effect on the
+// SYSTEM (one retry, not five: five can mean five times the traffic to
+// something already struggling).
 //
 //	c, err := api.NewClient(url, api.WithClient(api.NewHTTPClient(api.HTTPOptions{})))
 
 // ClientVersion tracks the spec's info.version and is sent on every
-// request so a server can see which callers are still on old
-// versions.
+// request so a server can see which client versions still call it.
 const ClientVersion = "0.8.0"
 
-// ClientVersionHeader has no X- prefix per RFC 6648.
+// No X- prefix: RFC 6648 deprecated it in 2012.
 const ClientVersionHeader = "Client-Version"
 
-// ClientNameHeader identifies WHICH caller is making the request, so
-// two services built from the same spec are separable in logs.
+// ClientNameHeader carries HTTPOptions.Name - WHICH service is calling,
+// where Client-Version says which version of the spec it was built
+// against. Without both, a runaway client cannot be attributed.
 const ClientNameHeader = "Client-Name"
 
-// RetryPolicy decides whether to repeat a failed request. len(Backoffs)
-// is the retry count.
+// RetryPolicy decides whether a failed request is worth repeating and
+// how long to wait. The length of Backoffs is the retry count.
 type RetryPolicy interface {
 	Backoffs() []time.Duration
 	Retry(req *http.Request, resp *http.Response, err error) bool
 }
 
-// SingleRetry retries once after a second. It is the default so a
-// struggling dependency does not see many callers multiply its traffic.
+// SingleRetry retries once, a second later. The default.
 type SingleRetry struct{}
 
 func (SingleRetry) Backoffs() []time.Duration { return []time.Duration{time.Second} }
@@ -47,14 +50,17 @@ func (SingleRetry) Retry(req *http.Request, resp *http.Response, err error) bool
 	return retryable(req, resp, err)
 }
 
-// ExponentialRetry backs off with jitter across five attempts.
+// ExponentialRetry backs off with jitter for a slow-but-not-broken
+// dependency. Reach for it deliberately: five attempts can still mean
+// five times the load.
 type ExponentialRetry struct{}
 
 func (ExponentialRetry) Backoffs() []time.Duration {
 	out := make([]time.Duration, 5)
 	next := 100 * time.Millisecond
 	for i := range out {
-		// Jitter so a caller fleet does not retry in lockstep.
+		// Jitter, so a fleet of callers does not retry in lockstep and
+		// arrive as one synchronised wave.
 		out[i] = next + time.Duration((rand.Float64()*2-1)*0.25*float64(next))
 		next *= 2
 	}
@@ -70,8 +76,8 @@ type NoRetry struct{}
 func (NoRetry) Backoffs() []time.Duration                       { return nil }
 func (NoRetry) Retry(*http.Request, *http.Response, error) bool { return false }
 
-// retryable repeats only idempotent methods on failures that say the
-// request did not take effect. POST may already have applied.
+// retryable repeats only what is safe to repeat: a POST may already have
+// applied, so retrying it can create a second thing.
 func retryable(req *http.Request, resp *http.Response, err error) bool {
 	switch req.Method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodPut, http.MethodDelete:
@@ -84,12 +90,12 @@ func retryable(req *http.Request, resp *http.Response, err error) bool {
 	return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
 }
 
-// ErrCircuitOpen is returned instead of calling a failing dependency,
-// so callers fail immediately rather than queueing behind a timeout.
+// ErrCircuitOpen fails a caller immediately rather than queueing it
+// behind a timeout it is going to hit anyway.
 var ErrCircuitOpen = errors.New("circuit open")
 
 // Breaker trips after Threshold consecutive failures and lets one
-// probe through every Cooldown.
+// request through every Cooldown to probe recovery.
 type Breaker struct {
 	Threshold int
 	Cooldown  time.Duration
@@ -127,18 +133,21 @@ func (b *Breaker) record(failed bool) {
 
 // HTTPOptions configure the client. The zero value is the default set.
 type HTTPOptions struct {
-	// Timeout bounds a single attempt. Zero means 5s.
+	// Timeout bounds one attempt; zero means 5s and a retry gets its own.
 	Timeout time.Duration
 	// Policy defaults to SingleRetry.
 	Policy RetryPolicy
 	// Breaker is optional; nil disables circuit breaking.
 	Breaker *Breaker
 
-	// MaxRetryAfter caps a server's Retry-After. Zero means 30s.
+	// MaxRetryAfter caps how long a server's Retry-After can park this
+	// client. Zero means 30s. A server may answer with an hour, and
+	// sleeping that long inside a request looks exactly like a hang.
 	MaxRetryAfter time.Duration
 
-	// Name is the CALLER's service name, sent as Client-Name. Empty
-	// sends nothing rather than guessing from the user agent.
+	// Name is the CALLER's own service name, sent as Client-Name. Empty
+	// records the caller as unknown, which is honest; guessing from the
+	// user agent would put a confident wrong answer in the logs.
 	Name string
 }
 
@@ -153,7 +162,6 @@ type HTTPClient struct {
 
 var _ ht.Client = (*HTTPClient)(nil)
 
-// NewHTTPClient builds a client with the defaults filled in.
 func NewHTTPClient(o HTTPOptions) *HTTPClient {
 	if o.Timeout == 0 {
 		o.Timeout = 5 * time.Second
@@ -173,8 +181,9 @@ func NewHTTPClient(o HTTPOptions) *HTTPClient {
 	}
 }
 
-// retryAfter reads the server's Retry-After (RFC 9110: seconds or
-// HTTP-date), or reports it as absent if it exceeds max.
+// retryAfter reads the server's own answer. RFC 9110 allows either a
+// delay in seconds or an HTTP-date, and servers send both in the wild.
+// Capped so an hour-long value cannot masquerade as a hang.
 func retryAfter(resp *http.Response, max time.Duration) (time.Duration, bool) {
 	if resp == nil {
 		return 0, false
@@ -196,11 +205,11 @@ func retryAfter(resp *http.Response, max time.Duration) (time.Duration, bool) {
 			d = 0
 		}
 	} else {
-		return 0, false // unparseable; fall back to the policy's backoff
+		return 0, false
 	}
 
 	if d > max {
-		return 0, false // too long to wait inside a request
+		return 0, false
 	}
 	return d, true
 }
@@ -225,15 +234,15 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 			break
 		}
 
-		// Retry-After wins over the policy: the server knows when
-		// capacity returns.
+		// The server's Retry-After wins: it knows when capacity returns.
 		wait := backoffs[attempt]
 		if d, ok := retryAfter(resp, c.maxRetryAfter); ok {
 			wait = d
 		}
 
-		// Close the body or the connection returns to the pool unusable.
+		// Drain and close so the connection returns to the pool reusable.
 		if resp != nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 		}
 		time.Sleep(wait)

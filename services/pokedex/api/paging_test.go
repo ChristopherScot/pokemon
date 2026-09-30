@@ -37,6 +37,7 @@ func TestPagedWalksEveryPage(t *testing.T) {
 	}
 }
 
+// An early break must stop fetching.
 func TestPagedStopsFetchingOnBreak(t *testing.T) {
 	fetch, calls := pages(t)
 	for item := range Paged(context.Background(), fetch) {
@@ -72,6 +73,7 @@ func TestPagedReportsAnError(t *testing.T) {
 	}
 }
 
+// A server that repeats a cursor would otherwise spin forever.
 func TestPagedStopsOnARepeatedCursor(t *testing.T) {
 	calls := 0
 	fetch := func(context.Context, string) (Page[string], error) {

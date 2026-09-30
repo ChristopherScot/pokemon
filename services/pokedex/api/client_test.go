@@ -51,6 +51,7 @@ func TestRetryIsBoundedAndBreakerOpens(t *testing.T) {
 	}
 }
 
+// A POST may already have applied.
 func TestPostIsNeverRetried(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -81,6 +82,7 @@ func TestIdempotentRequestIsRetriedOnce(t *testing.T) {
 	}
 }
 
+// The server knows when capacity returns; the client does not.
 func TestRetryAfterBeatsThePolicyBackoff(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -110,6 +112,7 @@ func TestRetryAfterBeatsThePolicyBackoff(t *testing.T) {
 	}
 }
 
+// Sleeping an hour inside a request is indistinguishable from a hang.
 func TestRetryAfterIsCapped(t *testing.T) {
 	resp := &http.Response{Header: http.Header{"Retry-After": []string{"3600"}}}
 	if _, ok := retryAfter(resp, 30*time.Second); ok {
