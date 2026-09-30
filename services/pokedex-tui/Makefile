@@ -1,12 +1,6 @@
-# pokedex-tui — the same commands locally and in CI.
+# pokedex-tui
 #
-#   make          what you can do
-#   make test     what CI runs, so green here means green there
-#   make run      start it
-#
-# Include Makefile.local for anything specific to this service - a
-# database, a seed step, extra env - and it will not be overwritten when
-# this file is regenerated.
+# Include Makefile.local for service-specific setup; it survives regenerate.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -18,21 +12,19 @@ help:
 	@echo "  make build      compile"
 	@echo "  make test       vet and tests (what CI runs)"
 	@echo "  make run        run it (make run ARGS='--help')"
+	@echo "  make regen      regenerate code derived from the spec"
 	@echo "  make clean      remove build output"
 ifneq (,$(wildcard Makefile.local))
 	@$(MAKE) --no-print-directory help-local 2>/dev/null || true
 endif
 
-# -o, and the package rather than ./... - `go build ./...` compiles
-# every package and THROWS THE BINARY AWAY, so `make build` looked like
-# it worked and left nothing to run. It writes ./pokedex-tui,
-# which is what `make clean` removes and what you type to run it.
+# `go build ./...` compiles every package and throws the binary away, so
+# -o and the package are load-bearing.
 .PHONY: build
 build:
 	go build -o pokedex-tui .
 
-# -race because CI runs it that way, and a data race that only appears
-# under load is the kind of thing you want to find here instead.
+# -race matches CI.
 .PHONY: test
 test:
 	go vet ./...
@@ -41,6 +33,12 @@ test:
 .PHONY: run
 run:
 	go run . $(ARGS)
+
+.PHONY: regen
+regen:
+	@command -v homelabctl >/dev/null || { \
+		echo "homelabctl not found - https://github.com/ChristopherScot/homelabctl"; exit 1; }
+	@homelabctl regen
 
 .PHONY: clean
 clean:
