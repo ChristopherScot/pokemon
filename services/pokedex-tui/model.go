@@ -70,7 +70,6 @@ type model struct {
 	status string
 }
 
-// newDelegate builds the row renderer for a light or dark terminal.
 func newDelegate(isDark bool) list.DefaultDelegate {
 	d := list.NewDefaultDelegate()
 	d.Styles = list.NewDefaultItemStyles(isDark)

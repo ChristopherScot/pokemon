@@ -47,7 +47,6 @@ func typeBadgePadded(t string, width int) string {
 	return b
 }
 
-// detail renders the right-hand pane for the highlighted Pokemon.
 func (m model) detail() string {
 	sel, ok := m.list.SelectedItem().(item)
 	if !ok {
@@ -84,7 +83,6 @@ func (m model) detail() string {
 	return detailStyle.Render(b.String())
 }
 
-// browseView is the original two-pane Pokedex.
 func (m model) browseView() string {
 	var body string
 	switch {

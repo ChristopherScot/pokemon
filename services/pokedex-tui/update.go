@@ -19,32 +19,21 @@ import (
 const (
 	repoOwner = "ChristopherScot"
 
-	// The repo that holds this service, which is where its releases
-	// land. In a monorepo that is the PARENT repo, not the service - a
-	// release is per repository, so naming the service here asks
-	// api.github.com for a repository that does not exist.
+	// A release is per REPOSITORY. In a monorepo that is the PARENT repo,
+	// not the service.
 	repoName = "pokemon"
-	// Releases are per REPOSITORY, and a monorepo holds several
-	// services that each cut their own. Without a prefix they share one
-	// tag namespace: `latest` is then whichever service released most
-	// recently, and two services reaching the same version number
-	// attach their assets to ONE release, where the second
-	// checksums.txt overwrites the first.
-	//
-	// So a tag here is "pokedex-tui/v1.2.3", and this binary considers
-	// only the releases carrying that prefix.
+
+	// Monorepo tags are namespaced so siblings do not share `latest` or
+	// collide on the same version number.
 	tagPrefix = "pokedex-tui/"
-	// A pokedex-tui binary is a few MB; anything near this is not our asset.
+
 	maxBinarySize = 100 * 1024 * 1024
 )
 
 type githubRelease struct {
 	TagName string `json:"tag_name"`
 
-	// /releases returns drafts and prereleases, unlike
-	// /releases/latest which filters them out. Walking the list
-	// ourselves means filtering them ourselves, or `update` offers to
-	// install something not yet released.
+	// /releases returns drafts and prereleases, unlike /releases/latest.
 	Draft      bool `json:"draft"`
 	Prerelease bool `json:"prerelease"`
 
@@ -71,12 +60,6 @@ func updateCmd() *cobra.Command {
 func runUpdate(checkOnly bool) error {
 	fmt.Printf("current version: %s\n", Version)
 
-	// A dev build has no meaningful version, and overwriting someone's
-	// working-tree build with a release is never what they want. Checked
-	// before the network call so the message is the real reason rather
-	// than whatever the API happens to say.
-	// semver wants the leading v, so normalise toward it rather than
-	// stripping it off and putting it back.
 	current := ensureV(Version)
 	if Version == "dev" {
 		fmt.Println("running a dev build; not updating")
@@ -116,15 +99,9 @@ func runUpdate(checkOnly bool) error {
 	return nil
 }
 
-// latestRelease is the newest release belonging to THIS tool.
-//
-// Not /releases/latest: that endpoint answers "the newest release in
-// this repository", which in a monorepo is whichever sibling released
-// most recently. Asking it here meant a tool offering to install an
-// APK, and failing with "no asset for darwin/arm64" - a message that
-// blames the release rather than the question.
-//
-// Releases come back newest-first, so the first match wins.
+// latestRelease returns the newest release belonging to THIS tool.
+// Not /releases/latest, which in a monorepo would be whichever sibling
+// released most recently. Releases come back newest-first.
 func latestRelease() (*githubRelease, error) {
 	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", repoOwner, repoName))
 	if err != nil {
@@ -145,12 +122,8 @@ func latestRelease() (*githubRelease, error) {
 	return rel, nil
 }
 
-// pickRelease is the newest release this tool can actually install.
-//
-// A prefixed tag is the answer whenever there is one. Falling back to
-// "carries an asset for this tool" covers releases cut before tags were
-// namespaced, which are still perfectly installable - dropping them
-// would strand anyone running one.
+// pickRelease prefers a prefixed tag, then falls back to any release with
+// this tool's asset so pre-namespace releases stay installable.
 func pickRelease(rels []githubRelease) *githubRelease {
 	want := assetName()
 	var fallback *githubRelease
@@ -185,15 +158,11 @@ func assetName() string {
 	return fmt.Sprintf("pokedex-tui_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 }
 
-// releaseVersion is the semver part of a tag, with any prefix removed,
-// so "pokedex-tui/v1.2.3" and "v1.2.3" compare the same.
 func releaseVersion(tag string) string {
 	return ensureV(strings.TrimPrefix(tag, tagPrefix))
 }
 
-// ensureV normalises a version toward the leading "v" that
-// golang.org/x/mod/semver requires. Release tags carry it and ldflags
-// may not, so accept either spelling.
+// ensureV normalises toward the leading "v" that x/mod/semver requires.
 func ensureV(v string) string {
 	if strings.HasPrefix(v, "v") {
 		return v
@@ -201,20 +170,10 @@ func ensureV(v string) string {
 	return "v" + v
 }
 
-// isNewer reports whether latest supersedes current.
-//
-// x/mod/semver rather than a hand-rolled comparison: comparing dotted
-// components pairwise reads "10" as older than "2" unless every
-// component parses as an integer, so a hand-rolled version goes quiet
-// the moment any component reaches double digits - it reports "already
-// up to date" forever, which is the failure mode you never notice.
-//
-// semver.Compare is the same comparison the go command uses, including
-// the rule that a prerelease sorts BEFORE its release.
-//
-// An unparseable version returns false: better to leave someone on a
-// working binary than to talk them into replacing it based on a
-// comparison that did not mean anything.
+// isNewer uses x/mod/semver rather than a hand-rolled comparison: a
+// pairwise compare reads "10" as older than "2" and goes silent the
+// moment any component reaches double digits. An unparseable version
+// returns false, leaving the caller on a working binary.
 func isNewer(latest, current string) bool {
 	if !semver.IsValid(latest) || !semver.IsValid(current) {
 		return false
@@ -222,10 +181,10 @@ func isNewer(latest, current string) bool {
 	return semver.Compare(latest, current) > 0
 }
 
-// installFrom replaces the running binary. The rename dance matters: a
-// running executable cannot be overwritten in place on every platform, but
-// it can be renamed out of the way, so write beside it and swap. The old
-// binary is kept until the swap succeeds so a failure is recoverable.
+// installFrom replaces the running binary via a rename dance: a running
+// executable cannot be overwritten in place on every platform, but it can
+// be renamed out of the way. The old binary is kept until the swap
+// succeeds so a failure is recoverable.
 func installFrom(url string) error {
 	resp, err := http.Get(url)
 	if err != nil {
@@ -240,7 +199,6 @@ func installFrom(url string) error {
 	if err != nil {
 		return fmt.Errorf("locate executable: %w", err)
 	}
-	// Resolve symlinks so we replace the real file, not a link to it.
 	binPath, err = filepath.EvalSymlinks(binPath)
 	if err != nil {
 		return fmt.Errorf("resolve executable: %w", err)

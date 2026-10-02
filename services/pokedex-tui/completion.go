@@ -9,12 +9,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// completionInstallCmd appends the completion hook to a shell rc file.
+// Idempotent: it looks for the line before appending.
 func completionInstallCmd(binary string) *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
 		Use:       "install [bash|zsh|fish]",
 		Short:     "add shell completion to your shell config",
-		Args:      cobra.ExactArgs(1),
+		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 		ValidArgs: []string{"bash", "zsh", "fish"},
 		RunE: func(_ *cobra.Command, args []string) error {
 			return installCompletion(binary, args[0], file)
