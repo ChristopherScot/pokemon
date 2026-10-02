@@ -36,9 +36,6 @@ test('an empty slot offers a random pick', () => {
   assert.equal(html.match(/slot-empty/g)?.length, 3)
 })
 
-// A third pick disables every card that is not already on the team, so
-// the whole grid changes - which is why /team swaps the grid out of band
-// rather than just the toggled card.
 test('a full team disables the cards that are not on it', () => {
   const full = ctx({ team: ['pikachu', 'onix', 'gengar'] })
   assert.match(card(mon('mew', 151), full), / disabled/)
@@ -51,8 +48,6 @@ test('a picked card says so, for a screen reader too', () => {
   assert.match(html, /aria-pressed="true"/)
 })
 
-// Dropping either of these turns a join into an open, or loses the picks
-// the filter was meant to preserve.
 test('a filter link carries the join id and the team', () => {
   const link = url({ active: 'water', join: 'abc', team: ['pikachu', 'onix'] })
   assert.match(link, /type=water/)
@@ -69,7 +64,6 @@ test('the page posts to join when joining, and to open otherwise', () => {
 
 test('a battle in progress offers a way back to it', () => {
   assert.match(page(ctx({ resume: 'xyz' })), /href="\/battle\/xyz"/)
-  // Not while you are already looking at that battle's join page.
   assert.doesNotMatch(page(ctx({ resume: 'xyz', join: 'xyz' })), /back to it/)
 })
 
@@ -89,8 +83,6 @@ const battle = (over: Record<string, unknown> = {}) => ({
 
 const ZERO = { attacker: 0, move: 0, target: 0 }
 
-// Everything that animates or holds state has to be matchable across a
-// morph, or the HP bar renders already-drained and the selection is lost.
 test('every element morph must match carries a stable id', () => {
   const html = board({ b: battle(), me: 'ash', sel: ZERO, rejected: '' })
   for (const id of ['id="board"', 'id="banner"', 'id="hp-me-0"', 'id="hp-them-0"',
@@ -106,23 +98,18 @@ test('the board polls with the morph swap, and pauses on a hidden tab', () => {
   assert.match(html, /hx-sync="this:replace"/)
 })
 
-// The control is what stops the poll. A finished battle whose fragment
-// still carried hx-trigger would poll a settled battle forever.
 test('a finished battle stops polling by not rendering the trigger', () => {
   const html = board({ b: battle({ status: 'finished', winner: 'ash' }), me: 'ash', sel: ZERO, rejected: '' })
   assert.doesNotMatch(html, /hx-trigger/)
   assert.match(html, /you win/)
 })
 
-// HATEOAS: the server does not render a control you may not use, so
-// there is no client-side copy of the turn rules to drift from them.
 test('a move disabled this turn is omitted, and the reason stated', () => {
   const b = battle()
   b.sides[0].team[0].disabledMove = 0
   const html = board({ b, me: 'ash', sel: ZERO, rejected: '' })
   assert.match(html, /disabled this turn/)
   assert.doesNotMatch(html, /<input type="radio" name="move" value="0"/)
-  // The move that IS usable is still offered.
   assert.match(html, /<input type="radio" name="move" value="1"/)
 })
 
@@ -150,14 +137,11 @@ test('the selection the server rendered is the one that is checked', () => {
   assert.match(html, /value="1"[^>]*checked/)
 })
 
-// The banner is a live region: replacing the node announces nothing.
 test('the banner keeps one identity so a screen reader is told', () => {
   const html = board({ b: battle(), me: 'ash', sel: ZERO, rejected: '' })
   assert.match(html, /id="banner"[^>]*role="status"[^>]*aria-live="polite"/)
 })
 
-// The radios live inside the swapped board; the form must not, or a
-// half-made choice would be rebuilt every second.
 test('the turn form sits outside the polled region', () => {
   const html = battlePage({ id: 'b1', trainer: 'ash', first: '<div id="board"></div>' })
   assert.ok(html.indexOf('id="turn"') < html.indexOf('id="board"'))
@@ -176,8 +160,6 @@ test('the waiting list keys its rows so unchanged ones are left alone', () => {
 })
 
 test('the lobby always offers a way to re-register', () => {
-  // A deploy invalidates tokens while the cookie survives, so the form
-  // has to be reachable even when the page thinks it knows you.
   assert.match(lobbyPage({ me: { name: 'ash', token: 't' }, waiting: [] }), /not you\?/)
   assert.match(lobbyPage({ me: null, waiting: [] }), /id="reg-row"/)
 })
@@ -190,7 +172,6 @@ test('downloads pick the newest release carrying an asset for this platform', ()
   ]
   const links = pickLinks(releases, 'darwin', 'arm64')
   assert.deepEqual(links.map((l) => l.url), ['https://gh/u2', 'https://gh/u1'])
-  // Each tool carries its own tag, because they are not released together.
   assert.deepEqual(links.map((l) => l.tag), ['v2', 'v1'])
 })
 
@@ -225,20 +206,12 @@ test('a download url that is not https never reaches an href', () => {
   assert.equal(pickLinks(good, 'darwin', 'arm64').length, 1)
 })
 
-// Every page load fires this once, so a GitHub blackhole must not park
-// the handler until the OS gives up.
-//
-// What is checked is that a deadline was ASKED FOR - an aborting signal
-// reaches fetch, and aborting it degrades to no footer - not that a real
-// timer fires. Waiting on the actual 3s AbortSignal.timeout left a
-// promise pending when the runner drained the event loop, and node
-// cancelled the nine tests after this one: `fail 0`, nine never run.
+// Asserts a deadline is ASKED FOR (an AbortSignal reaches fetch), not that a
+// real 3s timer fires — waiting the real timeout hangs node --test.
 test('a github fetch that never answers gives up rather than hanging', async () => {
   let deadlineRequested = false
   const slow = ((_u: string, opts: { signal?: AbortSignal }) => {
     deadlineRequested = opts?.signal !== undefined
-    // Abort immediately rather than waiting out the real deadline. The
-    // handler cannot tell the difference: both are the signal firing.
     return new Promise<Response>((_resolve, reject) => {
       opts?.signal?.addEventListener('abort', () =>
         reject(new Error('aborted')), { once: true })
@@ -250,9 +223,6 @@ test('a github fetch that never answers gives up rather than hanging', async () 
   assert.ok(deadlineRequested, 'fetch was given a signal, so it has a deadline')
 })
 
-// Pick pikachu, then filter to water: the grid no longer contains
-// pikachu, so the slot has a name and nowhere to read a sprite from.
-// pokedex-web kept the sprite beside the name in sessionStorage.
 test('a picked pokemon keeps its sprite after filtering it out of the grid', () => {
   const filtered = ctx({
     pokemon: [mon('squirtle', 7)],
@@ -264,41 +234,25 @@ test('a picked pokemon keeps its sprite after filtering it out of the grid', () 
   assert.doesNotMatch(teamSlots(filtered), /src=""/)
 })
 
-// A pick swaps the slots and the grid; the filter nav has to come with
-// them, because every filter link carries the team and a stale one
-// silently drops the picks on the next click.
 test('the filter links are re-rendered with the team after a pick', () => {
   const picked = ctx({ team: ['pikachu'], types: [{ name: 'water', count: 18 }] })
   const nav = filters(picked, true)
   assert.match(nav, /hx-swap-oob="morph:outerHTML"/)
   assert.match(nav, /href="\/\?type=water&team=pikachu"/)
-  // and the grid names itself for the same swap
   assert.match(grid(picked, true), /id="grid" hx-swap-oob="morph:outerHTML"/)
   assert.doesNotMatch(grid(picked), /hx-swap-oob/)
 })
 
-// Ready was a native form submit (formaction), so the browser navigated
-// to /battle/open and rendered the name dialog AS THE WHOLE DOCUMENT -
-// HX-Redirect means nothing to a native submit, so registering dumped
-// you on the lobby with no team and no trainer. It has to be an htmx
-// request.
 test('committing a team is an htmx request, not a native submit', () => {
   const html = page(ctx({ team: ['pikachu'] }))
   assert.match(html, /<form id="team-form" hx-post="\/battle\/open"/)
   assert.match(html, /hx-target="#dialog"/)
-  // and a slot for the dialog to land in
   assert.match(html, /id="dialog"/)
-  // no formaction anywhere: that is what made it navigate
   assert.doesNotMatch(html, /formaction=/)
   assert.equal(readyAction(ctx({ join: 'abc' })), '/battle/abc/join')
   assert.equal(readyAction(ctx()), '/battle/open')
 })
 
-// The poll morphs the board every second. Without an id on each wrapper
-// morph has nothing to match, rebuilds the subtree and DETACHES the
-// attack button - a player who clicked as a poll landed lost the click
-// and their turn. Playwright reported "element was detached from the
-// DOM".
 test('the move picker keeps ids so a poll cannot detach the attack button', () => {
   const html = board({ b: battle(), me: 'ash', sel: ZERO, rejected: '' })
   for (const id of ['id="pick"', 'id="moves"', 'id="commit"', 'id="go"', 'id="pick-who"']) {
@@ -306,10 +260,8 @@ test('the move picker keeps ids so a poll cannot detach the attack button', () =
   }
 })
 
-// htmx only swaps a response it considers successful, so a 4xx body is
-// fetched and thrown away. Returning 409 for a taken name meant the
-// page did not move at all: no error, no hint, and every retry did
-// nothing either.
+// htmx discards a 4xx body, so a rejected name must come back 200 or the page
+// does not move at all.
 test('a rejected name comes back as something htmx will actually swap', async () => {
   const res = await app.inject({
     method: 'POST', url: '/battle/register',
@@ -321,9 +273,6 @@ test('a rejected name comes back as something htmx will actually swap', async ()
   assert.match(res.body, /name is required/)
 })
 
-// The same endpoint serves the lobby row and the pokedex dialog, which
-// have different swap targets. Sending the lobby row into the dialog
-// would delete the dialog and the team it carries.
 test('a rejected name keeps the shape its caller asked for', async () => {
   const fromDialog = await app.inject({
     method: 'POST', url: '/battle/register',
@@ -343,23 +292,16 @@ test('a rejected name keeps the shape its caller asked for', async () => {
   assert.doesNotMatch(fromLobby.body, /id="name-dialog"/)
 })
 
-// Every pick posts the team the form holds at click time, so two clicks
-// in flight carry two different teams and the slower one wins. Clicking
-// three cards quickly left ONE pokemon picked.
 test('picking cards in a hurry cannot lose a pick', () => {
   const html = page(ctx({ team: ['pikachu'] }))
   const syncs = html.match(/hx-sync="#team-form:queue all"/g) ?? []
   assert.ok(syncs.length >= 2,
     'every control that posts the team needs to queue against the form')
-  // the remove button too, not just the cards
   assert.match(html, /class="remove"[^>]*hx-sync="#team-form:queue all"|hx-sync="#team-form:queue all"[^>]*class="remove"/s)
 })
 
-// An out-of-band swap REPLACES its target, which threw away every card
-// in the grid - including the one just clicked, and any click queued
-// behind it. Clicking three cards quickly sent one request and silently
-// dropped the other two, so you could never get a team picked. Morphing
-// mutates the cards in place, so they survive their own swap.
+// A plain oob swap REPLACES its target and destroys queued clicks against
+// the elements it removed; morph mutates in place instead.
 test('an out-of-band grid swap does not destroy the cards it swaps', () => {
   const html = grid(ctx({ team: ['pikachu'] }), true)
   assert.match(html, /hx-swap-oob="morph:outerHTML"/)

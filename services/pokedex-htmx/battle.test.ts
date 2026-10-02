@@ -33,11 +33,6 @@ test('effectBand names the bands the CSS styles', () => {
   assert.equal(effectBand(1), 'normal')
 })
 
-// The float's whole reason for existing server-side is that morph
-// preserves a node whose id and attributes have not changed. If the id
-// were derived from anything that moves - a counter, a timestamp - the
-// animation would restart on every poll, which is the bug this port was
-// specifically warned about.
 test('a float keeps the same id across polls, so morph leaves it alone', () => {
   const b = battle({ log: [damage('staryu', 4)] })
   observe(b, 1000)
@@ -55,14 +50,9 @@ test('a float expires exactly at its CSS lifetime', () => {
   assert.equal(floatsFor(b, 0, 1000 + LIFE_MS).length, 0)
 })
 
-// Two browsers poll the same battle, and a spectator may arrive at any
-// moment. If observing a version were not write-once, one poll would cut
-// another viewer's float short.
 test('polling repeatedly does not restart a float\'s clock', () => {
   const b = battle({ log: [damage('staryu', 4)] })
   observe(b, 1000)
-  // Later polls of the SAME log must not re-stamp its birth time: if
-  // they did, the float would be reborn on every tick and never expire.
   for (let t = 1050; t < 3000; t += 50) observe(b, t)
   assert.equal(floatsFor(b, 0, 1000 + LIFE_MS - 1).length, 1, 'alive just before its lifetime')
   assert.equal(floatsFor(b, 0, 1000 + LIFE_MS).length, 0, 'expired on schedule, not restarted')
@@ -80,7 +70,6 @@ test('a float lands on the side it belongs to', () => {
   const b = battle({ log: [damage('pikachu', 3)] })
   observe(b, 1000)
   assert.equal(floatsFor(b, 0, 1000)[0].slot, 'me-0')
-  // The same event seen by the OTHER trainer is on their opponent.
   assert.equal(floatsFor(b, 1, 1000)[0].slot, 'them-0')
 })
 
@@ -91,25 +80,17 @@ test('sideFor finds both sides, and nothing for an onlooker', () => {
   assert.equal(sideFor(b, 'brock'), null)
 })
 
-// A turn appends two or three log entries, so a fixed-count history was
-// about six turns - and dropping an entry still inside a float's life
-// pushes its birth time FORWARD, leaving it on screen after its CSS
-// animation has already finished.
 test('a float still expires when the log is busy', () => {
   const b = battle({ log: [damage('staryu', 4)] })
   observe(b, 1000)
-  // Twenty more entries arrive quickly, as two fast players would.
   for (let i = 1; i <= 20; i++) {
     b.log.push(damage('staryu', 1))
     observe(b, 1000 + i * 80)
   }
-  // The first entry was born at t=1000, so it must be gone by 3400.
   const alive = floatsFor(b, 0, 1000 + LIFE_MS + 10).some((f) => f.id === 'f-0-them-0')
   assert.equal(alive, false, 'the first float outlived its animation')
 })
 
-// Battles live in the API's memory, so a restart - or a reused id -
-// gives this service a shorter log under a id it has already seen.
 test('a battle that starts over still shows floats', () => {
   const b = battle({ log: [damage('staryu', 4), damage('staryu', 4), damage('staryu', 4)] })
   observe(b, 1000)

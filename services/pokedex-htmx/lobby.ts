@@ -7,11 +7,8 @@ import { esc } from './types.ts'
 type WaitingBattle = components['schemas']['WaitingBattle']
 export type Trainer = { name: string; token: string }
 
-// The waiting list, swapped on its own every 3s. This is the case htmx
-// is straightforwardly best at: a list with no local state. Each row
-// carries a stable id so morph leaves an unchanged row alone and its
-// fadeIn does not re-run on every poll - pokedex-web got that from
-// React's keying.
+// Stable row id per battle so morph leaves an unchanged row alone and its
+// fadeIn does not re-run each poll.
 export function waitingRows(waiting: WaitingBattle[]): string {
   return waiting.length === 0
     ? `<p class="sub">nobody is waiting. open one below and share the link.</p>`
@@ -23,8 +20,7 @@ export function waitingRows(waiting: WaitingBattle[]): string {
         `</div>`).join('')
 }
 
-// The rows and their container are separate so the poll route can send
-// the rows alone without stripping this wrapper back off with a regex.
+// Rows and container are separate so the poll route can send the rows alone.
 export function waitingList(waiting: WaitingBattle[]): string {
   return `<div id="waiting" hx-get="/battle/waiting" hx-trigger="every 3s [!document.hidden]"` +
     ` hx-sync="this:replace" hx-target="this" hx-swap="morph:innerHTML">` +
@@ -44,11 +40,8 @@ export function lobbyPage(
   { me, waiting, error = '', renaming = false }:
   { me: Trainer | null; waiting: WaitingBattle[]; error?: string; renaming?: boolean },
 ): string {
-  // Always reachable, not only when there is no cookie. Trainers live in
-  // the API's memory, so a deploy invalidates every token while the
-  // cookie survives - the page then said "you are <name>" and every
-  // action answered "register first", with the only form that could fix
-  // it hidden BECAUSE a cookie was present.
+  // Always reachable: a deploy invalidates API-side trainer tokens while the
+  // cookie survives, so "not you?" must be available even with a cookie.
   const who = me
     ? `you are <strong>${esc(me.name)}</strong> · <a href="/">back to the pokedex</a> · ` +
       `<button type="button" class="linkish" hx-get="/battle/rename" ` +

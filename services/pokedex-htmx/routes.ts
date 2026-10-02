@@ -11,10 +11,8 @@ import { esc, TEAM_SIZE } from './types.ts'
 
 type Pokemon = components['schemas']['Pokemon']
 
-// Anything but a trainer is no trainer. JSON.parse happily returns 5 or
-// "hi", both of which are truthy, so a junk cookie sailed past the
-// `if (!me)` guards and rendered "you are undefined" - then sent
-// `X-Trainer-Token: undefined` to the API.
+// Shape-check: JSON.parse returns truthy junk (5, "hi") that would sail past
+// `if (!me)` and send `X-Trainer-Token: undefined` to the API.
 export const readTrainer = (request: FastifyRequest): Trainer | null => {
   const m = /(?:^|;\s*)trainer=([^;]+)/.exec(request.headers.cookie || '')
   if (!m) return null
@@ -29,9 +27,8 @@ export const readTrainer = (request: FastifyRequest): Trainer | null => {
   }
 }
 
-// decodeURIComponent throws on a bad escape, and a cookie is sent with
-// EVERY request - so an unguarded decode here was a 500 on the pokedex
-// that a user could only clear by deleting cookies by hand.
+// decodeURIComponent throws on a bad escape; a cookie ships every request, so
+// an unguarded decode would be a permanent 500 until the user clears cookies.
 const readResume = (request: FastifyRequest): string => {
   const m = /(?:^|;\s*)battle=([^;]+)/.exec(request.headers.cookie || '')
   if (!m) return ''
@@ -42,15 +39,9 @@ const readResume = (request: FastifyRequest): string => {
   }
 }
 
-// The team arrives as repeated `team` fields - from the querystring on a
-// full page load, or from the form's hidden inputs on a toggle.
-// Deduped BEFORE the cap, so a,a,b,c keeps c rather than stopping at b.
-//
-// The API does not refuse a team of three identical pokemon - it looks
-// each name up on its own - so `?team=pikachu&team=pikachu&team=pikachu`
-// was a legal battle with three of the best mon. It also broke this
-// service's own rendering, because a float is placed by finding the
-// first team member with that name.
+// Repeated `team` fields, deduped before the cap so a,a,b,c keeps c. The API
+// accepts three-of-a-kind, and float placement matches on the first slot with
+// that name, so dedupe is enforced here.
 export const readTeam = (v: unknown): string[] => {
   const all = v === undefined ? [] : Array.isArray(v) ? v : [v]
   return [...new Set(all.map(String).filter(Boolean))].slice(0, TEAM_SIZE)
@@ -58,19 +49,13 @@ export const readTeam = (v: unknown): string[] => {
 
 const one = (v: unknown): string => (typeof v === 'string' ? v : '')
 
-// HttpOnly because the trainer cookie holds the API token this service
-// authenticates with, and nothing in the browser reads either cookie -
-// readTrainer and readResume both run here.
-//
-// Secure is conditional: the ingress terminates TLS so it costs nothing
-// in the cluster, but a Secure cookie is dropped over plain HTTP, which
-// is how this runs locally. INSECURE_COOKIES is set for that case only.
+// HttpOnly because the trainer cookie holds an API token; both cookies are
+// server-read only. Secure is dropped for local HTTP via INSECURE_COOKIES.
 const COOKIE_FLAGS = 'Path=/; HttpOnly; SameSite=Lax'
   + (process.env.INSECURE_COOKIES ? '' : '; Secure')
 
-// Sprites for the picked names. The grid's list is filtered, so a pick
-// made before filtering has no entry there to read a sprite from - the
-// slot rendered a broken image. Asked for by name, unfiltered.
+// Unfiltered lookup: a pick made before filtering has no entry in ctx.pokemon
+// to read a sprite from.
 async function spritesFor(names: string[]): Promise<Record<string, string>> {
   if (names.length === 0) return {}
   const out: Record<string, string> = {}
@@ -83,10 +68,8 @@ async function spritesFor(names: string[]): Promise<Record<string, string>> {
 }
 
 export function register(app: FastifyInstance) {
-  // The asset URLs, one per line. It exists for CI: the bundle is run
-  // from an empty directory and each URL fetched, which is what proves
-  // the browser scripts are compiled INTO the bundle rather than read
-  // from a disk the image does not have.
+  // Asset URLs one per line, so CI can fetch each and prove browser scripts
+  // are bundled in rather than read from a disk the image does not have.
   app.get('/assets', async (_request, reply) =>
     reply.type('text/plain').send([...byURL.keys()].join('\n') + '\n'))
 
@@ -99,8 +82,8 @@ export function register(app: FastifyInstance) {
       .send(hit.body)
   })
 
-  // The pokedex. Everything the page needs is in the URL, so a filter
-  // link, a bookmark and a reload all restore the same state.
+  // Everything the page needs is in the URL, so a link and a reload restore
+  // the same state.
   app.get('/', async (request, reply) => {
     const q = request.query as Record<string, unknown>
     const active = one(q.type)
@@ -135,9 +118,8 @@ export function register(app: FastifyInstance) {
     }, one(q.error)))
   })
 
-  // Toggling a pick. STATELESS: the current team comes in on the form,
-  // the new team goes back out as the same hidden inputs. Nothing is
-  // stored - a team only becomes server state at open or join.
+  // Stateless: the current team comes in on the form, the new team goes back
+  // out as hidden inputs. A team only becomes server state at open/join.
   app.post('/team', async (request, reply) => {
     const q = request.query as Record<string, unknown>
     const body = (request.body ?? {}) as Record<string, unknown>
@@ -157,8 +139,8 @@ export function register(app: FastifyInstance) {
     const active = one(body.active)
     const join = one(body.join)
 
-    // The types come back too, because the filter nav is re-rendered:
-    // its links carry the team, and a stale link drops the picks.
+    // Types are fetched too because the filter nav is re-rendered, and its
+    // links carry the team.
     let list, typeList
     try {
       ;[list, typeList] = await Promise.all([
@@ -177,17 +159,10 @@ export function register(app: FastifyInstance) {
       resume: readResume(request),
     }
 
-    // Three fragments come back, because a pick changes three things:
-    //   the slots      - the swap target
-    //   the grid       - a third pick disables every card NOT picked, so
-    //                    the whole grid changes, not the one clicked
-    //   the filters    - each link carries the team, and a stale link
-    //                    would drop the picks on the next filter click
-    //
-    // The new grid arrives WITHOUT the client-side search filter applied;
-    // client/page.js re-applies it on htmx:afterSwap.
-    // hx-push-url keeps the team in the address bar, which is what makes
-    // a reload restore it.
+    // Three fragments (slots, grid, filters) because a pick changes all three:
+    // a third pick disables every non-picked card, and every filter link
+    // carries the team. Client/page.js re-applies its search filter on the
+    // new grid via htmx:afterSettle. hx-push-url keeps the team in the URL.
     return reply
       .type('text/html')
       .header('HX-Push-Url', url({ active, join, team: next }))
@@ -210,7 +185,6 @@ export function register(app: FastifyInstance) {
     try {
       const { data, error } = await api.GET('/trainers/waiting')
       if (error) return reply.code(502).send('')
-      // Only the rows: the poll targets this div's contents.
       return reply.type('text/html').send(waitingRows(data.waiting))
     } catch {
       return reply.code(502).send('')
@@ -220,28 +194,14 @@ export function register(app: FastifyInstance) {
   app.get('/battle/rename', async (_request, reply) =>
     reply.type('text/html').send(registerRow()))
 
-  // Registering, and then doing what the trainer was trying to do.
-  //
-  // pokedex-web posted the name, then RE-POSTED the original request
-  // from the browser after a 401. Here the pending team and join id ride
-  // along with the name, so one exchange registers and commits.
-  // A rejected name comes back 200 with the form again and the reason
-  // beside it.
-  //
-  // Not 409: htmx only swaps a response it considers successful, so a
-  // 4xx body is fetched, discarded, and the page does not move. Typing
-  // a name that was already taken did NOTHING - no error, no hint - and
-  // every retry did nothing too. The status is the wrong place to carry
-  // this: the request reached the server and the server has something
-  // to say back, which is a 200 whose body happens to be a complaint.
+  // Registers and, if the pending team/join rode along, commits in one shot.
+  // A rejected name comes back 200 with the form and reason; htmx discards
+  // 4xx bodies, so a 409 would leave the page silent.
   app.post('/battle/register', async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>
     const name = one(body.name).trim()
-    // The same POST serves two forms with two different targets: the
-    // lobby's row, and the dialog the pokedex shows when you hit Ready
-    // without a name. Each has to get its own shape back or the swap
-    // replaces the wrong thing - sending the lobby row into the dialog
-    // deletes the dialog and the team it was carrying.
+    // Same POST serves two forms (lobby row, pokedex dialog); each has to get
+    // its own shape back or the swap would replace the wrong element.
     const fromDialog = one(body.commit) !== '' || one(body.join) !== '' ||
       readTeam(body.team).length > 0
     const again = (why: string) =>
@@ -298,8 +258,7 @@ export function register(app: FastifyInstance) {
     }
   }
 
-  // A committed team becomes a battle, and the battle id goes in a
-  // cookie so the pokedex can offer a way back to it.
+  // Battle id in a cookie so the pokedex can offer a way back to it.
   const toBattle = (reply: FastifyReply, id: string) =>
     reply
       .header('set-cookie', `battle=${encodeURIComponent(id)}; ${COOKIE_FLAGS}; Max-Age=86400`)
@@ -307,11 +266,8 @@ export function register(app: FastifyInstance) {
       .code(204)
       .send()
 
-  // A 401 means there is no trainer yet: send back the name form,
-  // carrying the team so registering can finish the job.
-  // `active` rides along for the same reason the filter links carry it:
-  // landing back on the UNFILTERED pokedex after a failure throws away
-  // the filter the trainer was picking from.
+  // 401 means no trainer yet: return the name dialog carrying the pending
+  // team, join and active filter so registering finishes the original intent.
   const rejected = (
     reply: FastifyReply, status: number, team: string[], join: string, active: string,
   ) => {
@@ -344,9 +300,8 @@ export function register(app: FastifyInstance) {
     return reply.type('text/html').send(await downloadsFooter(one(q.os), one(q.arch)))
   })
 
-  // The battle page. The first board is rendered INTO the page, so it
-  // does not flash empty before the first poll - the same reason
-  // pokedex-web shipped a boot island.
+  // First board is rendered into the page so it does not flash empty before
+  // the first poll.
   app.get<{ Params: { id: string } }>('/battle/:id', async (request, reply) => {
     const me = readTrainer(request)
     if (!me) return reply.redirect('/battle')
@@ -359,9 +314,8 @@ export function register(app: FastifyInstance) {
       .send(battlePage({ id: request.params.id, trainer: me.name, first }))
   })
 
-  // A reader with no cookie is a SPECTATOR, not an error: board()
-  // renders the watching view for anyone who is not a participant, so
-  // an empty name simply never matches a side.
+  // No cookie means spectator, not an error: an empty name never matches a
+  // side, so board() renders the watching view.
   app.get<{ Params: { id: string } }>('/battle/:id/board', async (request, reply) => {
     const me = readTrainer(request)
     const q = request.query as Record<string, unknown>
@@ -392,8 +346,6 @@ export function register(app: FastifyInstance) {
       await boardFor(request, request.params.id, me.name, sel, why))
   })
 
-  // One place that turns a battle id into a board, so the page, the poll
-  // and a submitted turn all render the same thing.
   async function boardFor(
     request: FastifyRequest, id: string, me: string, sel: Turn, rejected: string,
   ): Promise<string> {
@@ -412,6 +364,8 @@ export function register(app: FastifyInstance) {
 
 const ZERO: Turn = { attacker: 0, move: 0, target: 0 }
 
+// 0 is the only index the API is guaranteed to accept, so garbage clamps to a
+// legal move rather than an API error.
 export const readTurn = (v: Record<string, unknown>): Turn => {
   const n = (x: unknown, fallback = 0) => {
     const i = Number(x)
@@ -420,9 +374,7 @@ export const readTurn = (v: Record<string, unknown>): Turn => {
   return { attacker: n(v.attacker), move: n(v.move), target: n(v.target) }
 }
 
-// The name dialog, returned in place of the action that needed a name.
-// It carries the pending team so registering completes the original
-// intent rather than dropping it.
+// Carries the pending team and join so registering completes the original intent.
 function nameDialog(team: string[], join: string, active = '', why = ''): string {
   const carried = team.map((t) => `<input type="hidden" name="team" value="${esc(t)}">`).join('')
   return `<div class="modal-backdrop" id="name-dialog" role="dialog" aria-modal="true"
@@ -437,8 +389,6 @@ function nameDialog(team: string[], join: string, active = '', why = ''): string
            placeholder="e.g. Ash" autocomplete="off" autofocus required>
     ${why ? `<p class="modal-error" role="alert">${esc(why)}</p>` : ''}
     <div class="modal-actions">
-      <!-- Dismissing a dialog changes no server data, so it is not a
-           hypermedia exchange: removing the node is the whole action. -->
       <button type="button" class="ghost"
               onclick="this.closest('#name-dialog').remove()">cancel</button>
       <button type="submit">start</button>
