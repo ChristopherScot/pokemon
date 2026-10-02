@@ -1,15 +1,6 @@
 package main
 
-// Everything that talks to the server.
-//
-// Gio's loop must never block: a frame that waits on a request freezes
-// the UI mid-gesture. So every call runs on its own goroutine and
-// delivers a result through a channel the loop drains between frames,
-// then invalidates the window to draw it.
-//
-// The protocol itself is battleclient's, shared with the CLI and TUI.
-// Nothing here reimplements a request - it only decides when to make
-// one and what to do with the answer.
+// Every server call runs on its own goroutine and delivers via a channel; Gio's frame loop must never block.
 
 import (
 	"context"
@@ -22,13 +13,7 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
-// apiBase is the server to talk to.
-//
-// The default differs by platform and is chosen at compile time, in
-// api_android.go and api_desktop.go: the packaged app must reach the
-// public API with no setup, and a desktop build is a development build,
-// so it should find a server started by `make run` rather than talk to
-// the cluster. POKEDEX_URL overrides either.
+// apiBase is the server to talk to; default is chosen at compile time per platform, POKEDEX_URL overrides either.
 func apiBase() string {
 	if v := strings.TrimSpace(os.Getenv("POKEDEX_URL")); v != "" {
 		return v
@@ -36,20 +21,15 @@ func apiBase() string {
 	return defaultAPI
 }
 
-// requestTimeout bounds every call. A phone changes networks mid-tap -
-// wifi to cellular, or a tunnel dropping - and without this the UI
-// shows a spinner until the OS gives up, which can be minutes.
+// requestTimeout bounds every call so a network change mid-tap does not hang the UI on the OS's own retry timeout.
 const requestTimeout = 15 * time.Second
 
-// watchTimeout bounds a long poll. Longer than a request because it
-// deliberately waits for the opponent.
+// watchTimeout bounds a long poll that deliberately waits for the opponent.
 const watchTimeout = 2 * time.Minute
 
-// dexPageSize is the spec's maximum for ListPokemon. Asking for more
-// is a 400, not a clamp.
+// dexPageSize is the spec's maximum for ListPokemon; asking for more is a 400.
 const dexPageSize = 100
 
-// result is what a background call hands back to the UI loop.
 type result struct {
 	kind   resultKind
 	dex    []api.Pokemon
@@ -66,33 +46,18 @@ const (
 	resBattle
 	resLobby
 	resRegistered
-	// resWatchIdle means a long poll expired with nothing to report.
-	// Distinct from an error so apply can re-arm the watch without
-	// showing the player anything.
+	// resWatchIdle: a long poll expired empty; distinct from an error so apply can re-arm silently.
 	resWatchIdle
 )
 
-// go1 runs fn off the UI goroutine and posts its result.
-//
-// Named for what it guards: every network call goes through here, so
-// there is one place that owns the timeout, the delivery and the
-// window invalidation.
-//
-// THE RULE for anything passed here: capture what you need BEFORE the
-// call. A closure that reaches back into the ui struct is reading
-// fields the UI goroutine owns and may be writing - that was a real
-// race on a.bc, which useIdentity reassigns while a lobby load is in
-// flight.
+// go1 runs fn off the UI goroutine and posts its result; every network call goes through here.
+// Callers MUST capture what they need before the call - a closure reaching back into ui races useIdentity's reassignment of a.bc.
 func (u *ui) go1(timeout time.Duration, fn func(context.Context) result) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		r := fn(ctx)
-		// done rather than a timer: a full channel means the UI is
-		// BUSY, not gone - on Android it stops draining whenever the
-		// activity is backgrounded. Dropping the result there leaves
-		// busy stuck true and the app looking frozen, so this blocks
-		// until the UI catches up and exits only when the window does.
+		// Block on done rather than dropping: Android stops draining while backgrounded, and dropping leaves busy stuck true.
 		select {
 		case u.results <- r:
 		case <-u.done:
@@ -110,9 +75,6 @@ func (u *ui) loadDex() {
 	}
 	u.busy = true
 	u.go1(requestTimeout, func(ctx context.Context) result {
-		// 100 is the spec's maximum. Asking for 200 made every
-		// request a 400, so the Pokedex was empty on a real phone
-		// while the tests - which never call the API - passed.
 		res, err := client.ListPokemon(ctx, api.ListPokemonParams{
 			Limit: api.NewOptInt(dexPageSize),
 		})
@@ -179,11 +141,7 @@ func (u *ui) attack(id string, attacker, move, target int) {
 	})
 }
 
-// watch long-polls for the opponent's move.
-//
-// A longer deadline than the rest, and no busy flag: it is EXPECTED to
-// take a while - it returns when something happens - so a spinner for
-// the whole of the opponent's turn would be wrong.
+// watch long-polls for the opponent's move; longer deadline than the rest, and no busy flag since it is expected to wait.
 func (u *ui) watch(id string, seen int) {
 	bc := u.bc
 	if bc == nil {
@@ -191,11 +149,7 @@ func (u *ui) watch(id string, seen int) {
 	}
 	u.go1(watchTimeout, func(ctx context.Context) result {
 		b, err := bc.Watch(ctx, id, seen)
-		// A watch hitting its own deadline is normal: nothing
-		// happened and the caller polls again. Checked with
-		// errors.Is rather than ctx.Err() != nil, which also
-		// swallows a genuine server error that happened to land
-		// after the deadline.
+		// errors.Is, not ctx.Err() != nil, so a server error landing after the deadline is not swallowed as idle.
 		if errors.Is(err, context.DeadlineExceeded) {
 			return result{kind: resWatchIdle}
 		}

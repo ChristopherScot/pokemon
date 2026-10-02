@@ -1,15 +1,10 @@
 #!/usr/bin/env python3
 """Rewrite an APK so its native libraries are STORED and page-aligned.
 
-gogio writes every zip entry with Deflate. Android mmaps native
-libraries straight out of the APK, so a compressed one cannot be
-loaded and the install is refused - with no reason the user can see.
-
-`zipalign -p` is not enough on its own: it aligns entries that are
-already uncompressed and silently leaves compressed ones alone. The
-entry has to be rewritten as STORED first, which is what this does.
-The caller re-signs afterwards, because rewriting the zip invalidates
-whatever signature was there.
+Android mmaps native libraries out of the APK, so a compressed one
+cannot be loaded. `zipalign -p` alone is not enough: it leaves
+compressed entries alone. The entry has to be rewritten as STORED first.
+The caller re-signs afterwards.
 """
 import shutil
 import struct
@@ -25,8 +20,7 @@ def repack(src_path, dst_path):
     with zipfile.ZipFile(dst_path, "w") as out:
         for info in src.infolist():
             base = info.filename.rsplit("/", 1)[-1]
-            # Signatures are invalidated by rewriting; the caller signs
-            # again. Carrying them over would leave a broken v1 block.
+            # Signatures are invalidated by rewriting; the caller signs again.
             if info.filename.startswith("META-INF/") and (
                 base == "MANIFEST.MF"
                 or base.endswith(".SF")
@@ -43,8 +37,7 @@ def repack(src_path, dst_path):
 
             if info.filename.endswith(".so"):
                 zi.compress_type = zipfile.ZIP_STORED
-                # Pad the extra field so the DATA - not the header -
-                # lands on a page boundary.
+                # Pad so the DATA - not the header - lands on a page boundary.
                 header = out.fp.tell() + 30 + len(zi.filename.encode())
                 zi.extra = b"\0" * ((-header) % PAGE)
                 stored += 1

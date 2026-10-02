@@ -1,15 +1,6 @@
 package main
 
-// Sprite loading.
-//
-// Gio is immediate mode: layout runs every frame, so an image has to
-// be ready before it can be drawn - there is no "load then re-render"
-// callback. The cache below is what bridges that. A miss starts a
-// fetch and draws a placeholder; the fetch invalidates the window when
-// it lands, and the next frame finds the image ready.
-//
-// Sprites come from the API as absolute URLs to PokeAPI's CDN, so
-// nothing here knows how to build one.
+// Gio is immediate mode; a cache miss starts a fetch, draws a placeholder, and invalidates the window when the image lands.
 
 import (
 	"context"
@@ -28,14 +19,10 @@ import (
 	"gioui.org/widget/material"
 )
 
-// spriteTimeout bounds one image fetch. Short: a sprite is decoration,
-// and a phone that has wandered off wifi should fall back to the
-// monogram rather than hold a slot open.
+// spriteTimeout bounds one image fetch; a sprite is decoration, so a phone off wifi falls back to the monogram.
 const spriteTimeout = 10 * time.Second
 
-// maxSprites caps the cache. A full Pokedex of 96px PNGs is a few MB
-// decoded, which is fine, but an unbounded map on a phone is not a
-// thing to leave lying around.
+// maxSprites caps the cache; an unbounded map on a phone is not a thing to leave lying around.
 const maxSprites = 400
 
 type spriteCache struct {
@@ -44,8 +31,6 @@ type spriteCache struct {
 	pending map[string]bool
 	failed  map[string]bool
 
-	// invalidate is the window redraw, so a sprite that arrives after
-	// its frame still gets drawn.
 	invalidate func()
 }
 
@@ -58,11 +43,7 @@ func newSpriteCache(invalidate func()) *spriteCache {
 	}
 }
 
-// get returns a decoded sprite, starting a fetch on the first miss.
-//
-// Returns nil while loading or after a failure, which the caller draws
-// as a monogram - a Pokedex that shows a gap where a picture should be
-// looks broken, where a letter looks deliberate.
+// get returns a decoded sprite, starting a fetch on the first miss; returns nil while loading or after failure.
 func (c *spriteCache) get(url string) *image.RGBA {
 	if url == "" {
 		return nil
@@ -92,13 +73,10 @@ func (c *spriteCache) fetch(url string) {
 	c.mu.Lock()
 	delete(c.pending, url)
 	if err != nil {
-		// Remembered as failed so a broken URL is attempted once
-		// rather than on every frame forever.
+		// Remembered as failed so a broken URL is fetched once rather than every frame.
 		c.failed[url] = true
 	} else {
 		if len(c.imgs) >= maxSprites {
-			// Crude, but a Pokedex is browsed in order: whatever is
-			// oldest is furthest from the viewport.
 			for k := range c.imgs {
 				delete(c.imgs, k)
 				break
@@ -130,8 +108,7 @@ func loadImage(ctx context.Context, url string) (*image.RGBA, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Converted to RGBA once here rather than per frame: paint.NewImageOp
-	// re-uploads whatever it is given, and decoding formats vary.
+	// Convert to RGBA once here, not per frame: paint.NewImageOp re-uploads whatever it is given.
 	b := src.Bounds()
 	dst := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
 	for y := b.Min.Y; y < b.Max.Y; y++ {
@@ -146,16 +123,14 @@ type errSprite string
 
 func (e errSprite) Error() string { return "sprite: " + string(e) }
 
-// spriteOrMonogram draws the sprite at size, falling back to the
-// lettered circle while it loads or if it never does.
+// spriteOrMonogram draws the sprite at size, falling back to the lettered circle while it loads or if it never does.
 func (a *ui) spriteOrMonogram(gtx layout.Context, th *material.Theme, url, fallback string, size unit.Dp, selected bool) layout.Dimensions {
 	img := a.sprites.get(url)
 	if img == nil {
 		return avatarSized(gtx, th, fallback, size, selected)
 	}
 	d := gtx.Dp(size)
-	// Circular, matching the monogram it replaces, so a list does not
-	// reflow as sprites arrive.
+	// Circular to match the monogram it replaces, so a list does not reflow as sprites arrive.
 	defer clipCircle(gtx, d).Pop()
 	paint.FillShape(gtx.Ops, m3.surfaceVariant, clipRectOp(d))
 
@@ -165,7 +140,6 @@ func (a *ui) spriteOrMonogram(gtx layout.Context, th *material.Theme, url, fallb
 	return layout.Dimensions{Size: image.Pt(d, d)}
 }
 
-// clipCircle clips to a circle of diameter d.
 func clipCircle(gtx layout.Context, d int) clip.Stack {
 	return clip.RRect{
 		Rect: image.Rectangle{Max: image.Pt(d, d)},
@@ -177,11 +151,7 @@ func clipRectOp(d int) clip.Op {
 	return clip.Rect(image.Rectangle{Max: image.Pt(d, d)}).Op()
 }
 
-// scaleTo fits a sprite into a d-by-d box.
-//
-// Sprites are 96px squares and the slots here are smaller, so this is
-// nearly always a shrink. Uniform, because a stretched Pokemon is
-// immediately wrong to anyone who knows them.
+// scaleTo fits a sprite into a d-by-d box uniformly; a stretched Pokemon is immediately wrong to anyone who knows them.
 func scaleTo(b image.Rectangle, d int) f32.Affine2D {
 	w, h := float32(b.Dx()), float32(b.Dy())
 	if w == 0 || h == 0 {
@@ -191,7 +161,6 @@ func scaleTo(b image.Rectangle, d int) f32.Affine2D {
 	if sh := float32(d) / h; sh < s {
 		s = sh
 	}
-	// Centred in the box after scaling.
 	dx := (float32(d) - w*s) / 2
 	dy := (float32(d) - h*s) / 2
 	return f32.Affine2D{}.Scale(f32.Pt(0, 0), f32.Pt(s, s)).Offset(f32.Pt(dx, dy))

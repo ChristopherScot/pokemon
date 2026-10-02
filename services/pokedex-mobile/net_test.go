@@ -1,13 +1,5 @@
 package main
 
-// Tests for the network layer, which had none - and that is exactly
-// why the Pokedex shipped empty.
-//
-// Every UI test sets ui.dex directly, so loadDex was never called and
-// nothing noticed it asked for limit=200 against a spec that caps at
-// 100. The API answered 400 every time. A fake server here is enough
-// to catch that class of bug without depending on the real one.
-
 import (
 	"encoding/json"
 	"net/http"
@@ -19,7 +11,7 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// The spec's own ceiling. Asking for more is a 400, not a clamp.
+// The spec's own ceiling; asking for more is a 400.
 const specMaxLimit = 100
 
 func TestLoadDexAsksForALimitTheAPIAccepts(t *testing.T) {
@@ -27,8 +19,7 @@ func TestLoadDexAsksForALimitTheAPIAccepts(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotLimit = r.URL.Query().Get("limit")
 		w.Header().Set("Content-Type", "application/json")
-		// Reject exactly as the real server does, so a bad limit
-		// fails this test rather than passing quietly.
+		// Reject as the real server does, so a bad limit fails loudly.
 		if n, err := strconv.Atoi(gotLimit); err == nil && n > specMaxLimit {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{
@@ -70,13 +61,10 @@ func TestLoadDexAsksForALimitTheAPIAccepts(t *testing.T) {
 	}
 }
 
-// A 400 must reach the player as something readable, not as ogen's
-// decode failure - which is what a phone actually showed.
+// A 400 must reach the player as something readable, not as ogen's decode failure.
 func TestServerErrorsAreReadable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// ogen's own validation answers with error_message where the
-		// spec declares message, so the generated client cannot
-		// decode it at all.
+		// ogen validation answers with error_message where the spec declares message, so the generated client cannot decode it.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{

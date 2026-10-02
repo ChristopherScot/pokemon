@@ -1,10 +1,6 @@
 package main
 
-// The four screens, plus the nav bar that moves between them.
-//
-// Every tappable thing is at least tapTarget high. That is Android's
-// 48dp accessibility floor, and on the battle screen a missed tap costs
-// a turn - the terminal can afford a one-line row, a thumb cannot.
+// Every tappable thing is at least tapTarget high (Android's 48dp accessibility floor); on the battle screen a missed tap costs a turn.
 
 import (
 	"image"
@@ -25,24 +21,15 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// tapBtn is a button sized for a thumb.
 func tapBtn(gtx layout.Context, th *material.Theme, c *widget.Clickable, label string) layout.Dimensions {
 	return m3Button(gtx, th, c, label, btnFilled, true)
 }
 
-// tonalBtn is a secondary action: prominent, but not the one thing
-// the screen wants you to do.
 func tonalBtn(gtx layout.Context, th *material.Theme, c *widget.Clickable, label string) layout.Dimensions {
 	return m3Button(gtx, th, c, label, btnTonal, true)
 }
 
-// rigid wraps a flex child so it sizes to its CONTENT.
-//
-// A vertical Flex hands each child the full remaining height as a
-// minimum, and anything built from another Flex honours that minimum -
-// so the first thing in the column claims the whole screen and
-// everything after it draws off the bottom. Clearing Min.Y is what
-// makes "as tall as it needs to be" mean that.
+// rigid wraps a flex child so it sizes to its content; without clearing Min.Y a nested Flex claims the whole column.
 func rigid(w layout.Widget) layout.FlexChild {
 	return layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 		gtx.Constraints.Min.Y = 0
@@ -54,11 +41,7 @@ func spacer(h int) layout.FlexChild {
 	return layout.Rigid(layout.Spacer{Height: unit.Dp(h)}.Layout)
 }
 
-// --- register -------------------------------------------------------
-
-// A phone has no `pokedex-cli register`, so the app has to be able to
-// create a trainer itself. This screen is the one thing the terminal
-// clients do not need.
+// registerScreen creates a trainer; a phone has no `pokedex-cli register`.
 func (a *ui) registerScreen(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	submit := func() {
 		name := strings.TrimSpace(a.nameInput.Text())
@@ -71,8 +54,7 @@ func (a *ui) registerScreen(gtx layout.Context, th *material.Theme) layout.Dimen
 	if a.regBtn.Clicked(gtx) {
 		submit()
 	}
-	// Enter submits too - a phone keyboard shows a Go key and people
-	// press it rather than dismissing the keyboard to find a button.
+	// Enter submits: a phone keyboard's Go key is pressed rather than dismissed to reach a button.
 	for {
 		ev, ok := a.nameInput.Update(gtx)
 		if !ok {
@@ -97,11 +79,6 @@ func (a *ui) registerScreen(gtx layout.Context, th *material.Theme) layout.Dimen
 	)
 }
 
-// --- browse ---------------------------------------------------------
-
-// The Pokedex, and where a team is picked. The terminal has a separate
-// team screen because a list and a cursor cannot show both; here a row
-// shows its own pick order, so one screen does both jobs.
 func (a *ui) browseScreen(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	rows := a.filteredDex()
 
@@ -129,8 +106,6 @@ func (a *ui) browseScreen(gtx layout.Context, th *material.Theme) layout.Dimensi
 	)
 }
 
-// searchField is an M3 filled text field: a rounded surfaceVariant
-// container, not a bare line of text.
 func searchField(gtx layout.Context, th *material.Theme, e *widget.Editor, hint string) layout.Dimensions {
 	gtx.Constraints.Min.X = gtx.Constraints.Max.X
 	macro := op.Record(gtx.Ops)
@@ -148,8 +123,6 @@ func searchField(gtx layout.Context, th *material.Theme, e *widget.Editor, hint 
 	return dims
 }
 
-// teamChip shows the picked team as an M3 assist chip, coloured once
-// the team is complete so "ready" is visible without reading.
 func (a *ui) teamChip(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	txt := "No team picked — tap three"
 	bg, fg := m3.surfaceVariant, m3.onSurfaceVariant
@@ -197,8 +170,7 @@ func (a *ui) dexRow(gtx layout.Context, th *material.Theme, p api.Pokemon, i int
 	})
 }
 
-// title capitalises a name for display. The API returns lowercase
-// ids; a list of lowercase names reads as data, not as a Pokedex.
+// title capitalises a name for display; the API returns lowercase ids.
 func title(s string) string {
 	if s == "" {
 		return s
@@ -206,10 +178,7 @@ func title(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// --- team -----------------------------------------------------------
-
-// Confirms the picked team and starts or joins. Separate from browse
-// so the Start button is never off the bottom of a long list.
+// teamScreen confirms the picked team and starts or joins; separate from browse so Start is never off a long list.
 func (a *ui) teamScreen(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	if a.startBtn.Clicked(gtx) && teamReady(a.team) {
 		if a.joining != "" {
@@ -264,8 +233,6 @@ func (a *ui) teamScreen(gtx layout.Context, th *material.Theme) layout.Dimension
 	)
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
 }
-
-// --- lobby ----------------------------------------------------------
 
 func (a *ui) lobbyScreen(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	if a.refreshBtn.Clicked(gtx) {
@@ -332,19 +299,10 @@ func (a *ui) lobbyScreen(gtx layout.Context, th *material.Theme) layout.Dimensio
 
 type waitingItem struct {
 	ID, Trainer string
-	// Who they are bringing. The terminal shows this on a second line;
-	// a phone has the width for it inline, and it is what a player
-	// needs to pick a counter before tapping Join.
-	Team []string
+	Team        []string
 }
 
-// --- nav ------------------------------------------------------------
-
-// navBar is the bottom tab bar: the phone convention, and the only
-// navigation that stays reachable by a thumb on a tall screen.
-//
-// Battle is only offered when one exists, so the tab does not lead to
-// an empty screen.
+// navBar is the bottom tab bar; Battle is only offered when one exists so the tab never leads to an empty screen.
 func (a *ui) navBar(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	tabs := []struct {
 		label string
@@ -369,17 +327,12 @@ func (a *ui) navBar(gtx layout.Context, th *material.Theme) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, children...)
 	})
 	call := macro.Stop()
-	// The bar sits on surfaceContainer, which is what separates it
-	// from the content above without needing a divider line.
 	paint.FillShape(gtx.Ops, m3.surfaceContainer,
 		clip.Rect(image.Rectangle{Max: dims.Size}).Op())
 	call.Add(gtx.Ops)
 	return dims
 }
 
-// navItem is one destination. M3 marks the active one with a filled
-// pill behind the label rather than by colouring the others grey -
-// grey reads as disabled, which is what the first version looked like.
 func (a *ui) navItem(gtx layout.Context, th *material.Theme, c *widget.Clickable, label string, active, enabled bool) layout.Dimensions {
 	fg := m3.onSurfaceVariant
 	if active {
@@ -415,8 +368,7 @@ func (a *ui) navItem(gtx layout.Context, th *material.Theme, c *widget.Clickable
 	})
 }
 
-// handleNav switches screens, and refreshes the lobby on arrival so it
-// is never showing a stale list.
+// handleNav switches screens and refreshes the lobby on arrival so it is never showing a stale list.
 func (a *ui) handleNav(gtx layout.Context) {
 	dest := []screen{screenBrowse, screenTeam, screenLobby, screenBattle}
 	for i := range a.navBtns {
@@ -429,20 +381,7 @@ func (a *ui) handleNav(gtx layout.Context) {
 	}
 }
 
-// --- back navigation ------------------------------------------------
-
-// handleBack implements the Android back button.
-//
-// Unhandled, back kills the app - mid-battle, with no warning. That is
-// a hard Android expectation rather than a nicety: every screen that
-// is not the root must go somewhere, and the root exits.
-//
-// Returning false lets the platform close the app, which is correct
-// only from the Pokedex.
 func (a *ui) handleBack(gtx layout.Context) bool {
-	// Inside a turn, back undoes the selection rather than leaving
-	// the screen - the same thing the on-screen Back does, so the two
-	// gestures agree.
 	if a.screen == screenBattle && a.sel.canGoBack() {
 		a.sel.back()
 		return true
@@ -451,8 +390,7 @@ func (a *ui) handleBack(gtx layout.Context) bool {
 	case screenBrowse, screenRegister:
 		return false // root: let Android close the app
 	case screenBattle:
-		// A live battle is not something to leave by accident. One
-		// back arms it, a second within the window leaves.
+		// A live battle needs one back to arm and a second to leave.
 		if a.battle != nil && a.battle.Status != "finished" && !a.confirmLeave {
 			a.confirmLeave = true
 			a.status = "Press back again to leave the battle"
@@ -470,7 +408,6 @@ func (a *ui) handleBack(gtx layout.Context) bool {
 	}
 }
 
-// readKeys drains key events, which is how the back button arrives.
 func (a *ui) readKeys(gtx layout.Context) {
 	for {
 		ev, ok := gtx.Event(key.Filter{Name: key.NameBack})

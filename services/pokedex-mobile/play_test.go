@@ -1,7 +1,5 @@
 package main
 
-// Playthroughs: the real UI, rendered headless, driven by taps.
-
 import (
 	"strconv"
 	"strings"
@@ -12,9 +10,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// The register screen is what a new phone shows, and it must actually
-// draw - a blank first screen is the worst possible first impression
-// and the easiest thing to ship by accident.
 func TestRegisterScreenRenders(t *testing.T) {
 	h := newHarness(t)
 	h.ui.screen = screenRegister
@@ -26,8 +21,6 @@ func TestRegisterScreenRenders(t *testing.T) {
 	h.shot("register")
 }
 
-// A battle in progress: the screen a player spends the most time on,
-// and the one where a layout mistake costs a turn.
 func TestBattleScreenRenders(t *testing.T) {
 	h := newHarness(t)
 	h.ui.id.Name = "ash"
@@ -43,10 +36,6 @@ func TestBattleScreenRenders(t *testing.T) {
 	h.shot("battle")
 }
 
-// A turn, played by tapping: pokemon, then move, then target.
-//
-// This is the flow that makes it a game rather than a screenshot, and
-// the stages have to advance in order or a player is stuck.
 func TestPlayATurnByTapping(t *testing.T) {
 	h := newHarness(t)
 	h.ui.id.Name = "ash"
@@ -67,13 +56,8 @@ func TestPlayATurnByTapping(t *testing.T) {
 		t.Fatalf("after picking a pokemon, stage = %q", h.ui.sel.stage())
 	}
 
-	// The fixture has one living opponent, so tapping a move sends
-	// the turn. Assert WHAT was sent: the previous version checked
-	// only that the selection had cleared, which a send carrying
-	// garbage indices would also satisfy.
+	// Fixture leaves one living opponent, so tapping a move sends the turn; assert what was sent, not just that something was.
 	h.tapOn("choose Thunderbolt  ·  90")
-	// staryu is index 0 and the only one standing; psyduck at index 1
-	// is fainted. defaultTarget must pick the living one.
 	want := pick{attacker: 0, move: 0, target: 0, haveAttacker: true, haveMove: true}
 	if h.ui.lastSent != want {
 		t.Errorf("sent turn = %+v, want %+v", h.ui.lastSent, want)
@@ -83,15 +67,12 @@ func TestPlayATurnByTapping(t *testing.T) {
 	}
 }
 
-// One living opponent means the target is not a choice, and asking for
-// a third tap there is busywork the terminal does not impose either.
 func TestOneTargetSkipsTheThirdTap(t *testing.T) {
 	h := newHarness(t)
 	h.ui.id.Name = "ash"
 	h.ui.bc = testClient(t)
 	h.ui.screen = screenBattle
 	b := testBattle("ash", "misty")
-	// psyduck is already fainted in the fixture, so staryu is alone.
 	h.ui.battle = b
 	h.frame()
 
@@ -100,18 +81,15 @@ func TestOneTargetSkipsTheThirdTap(t *testing.T) {
 		t.Fatal("fixture should leave exactly one living opponent")
 	}
 
-	h.tapOn("choose Pikachu")            // attacker
-	h.tapOn("choose Thunderbolt  ·  90") // move -> should send immediately
+	h.tapOn("choose Pikachu")
+	h.tapOn("choose Thunderbolt  ·  90")
 
-	// Sending clears the selection, which is how we know it fired
-	// rather than waiting for a target tap.
 	if h.ui.sel.haveAttacker || h.ui.sel.haveMove {
 		t.Error("the turn was not sent; it is still waiting for a target tap")
 	}
 }
 
-// The Pokedex list, where a team gets picked. A long list on a phone
-// must scroll by dragging, and picking must survive the scroll.
+// A long list on a phone must scroll by dragging, and picking must survive the scroll.
 func TestBrowseScrollsAndPicks(t *testing.T) {
 	h := newHarness(t)
 	h.ui.id.Name = "ash"
@@ -124,14 +102,12 @@ func TestBrowseScrollsAndPicks(t *testing.T) {
 	h.ui.dexClicks = make([]widget.Clickable, len(h.ui.dex))
 	h.frame()
 
-	// Tap the first row to pick it.
 	h.tapOn("Mon0")
 	if len(h.ui.team) == 0 {
 		t.Fatal("tapping a row picked nothing")
 	}
 	picked := h.ui.team[0]
 
-	// Drag upward to scroll down the list, the way a thumb does.
 	before := h.ui.dexList.Position.First
 	h.drag(phoneW/2, 600, 250)
 	if h.ui.dexList.Position.First <= before {
@@ -139,19 +115,13 @@ func TestBrowseScrollsAndPicks(t *testing.T) {
 			before, h.ui.dexList.Position.First)
 	}
 
-	// The pick survives scrolling - it is state, not a screen position.
 	if teamPosition(h.ui.team, picked) != 1 {
 		t.Errorf("after scrolling, %q is no longer the lead pick", picked)
 	}
 	h.shot("browse")
 }
 
-// Every screen state, asserted on the controls it must offer.
-//
-// The previous version only checked "not all one colour", which the
-// always-drawn app bar satisfies - so a screen whose body rendered
-// nothing would have passed. Asserting the semantics catches a dead
-// screen and survives a padding change.
+// Every screen asserted on the controls it must offer; a bare "not all one colour" check passes for a screen whose body drew nothing.
 func TestEveryScreenRenders(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -189,7 +159,6 @@ func TestEveryScreenRenders(t *testing.T) {
 			h.ui.lobbyBtns = make([]widget.Clickable, 1)
 		}, []string{"Misty", "Open a new battle"}},
 
-		// Not our turn: no move buttons, and a way out.
 		{"battle-waiting", func(t *testing.T, h *harness) {
 			h.ui.bc = testClient(t)
 			h.ui.screen = screenBattle
@@ -198,7 +167,6 @@ func TestEveryScreenRenders(t *testing.T) {
 			h.ui.battle = b
 		}, []string{"Leave"}},
 
-		// Finished: only the way out.
 		{"battle-finished", func(t *testing.T, h *harness) {
 			h.ui.bc = testClient(t)
 			h.ui.screen = screenBattle
@@ -226,9 +194,7 @@ func TestEveryScreenRenders(t *testing.T) {
 	}
 }
 
-// A player on the other trainer's turn must not be offered moves -
-// the server answers one with a 409, so a live button is a tap that
-// can only fail.
+// A player on the other trainer's turn must not be offered moves; the server answers one with a 409.
 func TestWaitingOffersNoMoves(t *testing.T) {
 	h := newHarness(t)
 	h.ui.id.Name = "ash"
@@ -246,8 +212,6 @@ func TestWaitingOffersNoMoves(t *testing.T) {
 	}
 }
 
-// A mis-tap must be recoverable. Without Back, a wrong attacker means
-// finishing a turn you did not want.
 func TestBackUndoesAStage(t *testing.T) {
 	h := newHarness(t)
 	h.ui.id.Name = "ash"
