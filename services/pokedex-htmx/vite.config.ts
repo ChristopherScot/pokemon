@@ -8,6 +8,14 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
+  // The pokedex client is a file: dependency, so node_modules holds a
+  // symlink to ../pokedex/clients/ts. Without this, Rollup resolves the
+  // client's own imports from the real path, walks up looking for
+  // node_modules, finds none, and fails on "openapi-fetch". Node needs
+  // the same via --preserve-symlinks in package.json's scripts.
+  resolve: {
+    preserveSymlinks: true,
+  },
   build: {
     ssr: true,
     // Matches the distroless runtime so Vite does not downlevel syntax.
