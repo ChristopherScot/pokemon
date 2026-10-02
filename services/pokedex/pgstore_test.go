@@ -13,7 +13,6 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// freshPG returns a migrated, seeded database and a store on it.
 func freshPG(t *testing.T) (*pgxpool.Pool, *pgStore, *pokedex) {
 	t.Helper()
 	pool := testPool(t)
@@ -44,7 +43,7 @@ func TestPGRegisterTrainer(t *testing.T) {
 		t.Fatalf("trainerByToken = %q, %v; want Ash, nil", name, lookupErr)
 	}
 
-	// Case-insensitive, matching the in-memory store.
+	// Case-insensitive, matching memStore.
 	if _, err := store.registerTrainer(context.Background(), "ash"); !errors.Is(err, errNameTaken) {
 		t.Errorf("registering ash after Ash = %v, want errNameTaken", err)
 	}
@@ -116,7 +115,6 @@ func TestPGBattleSurvivesANewStore(t *testing.T) {
 	if len(got.Sides[0].Team) != len(b.sides[0].team) {
 		t.Errorf("team of %d, want %d", len(got.Sides[0].Team), len(b.sides[0].team))
 	}
-	// HP round-trips through JSONB rather than being recomputed.
 	if got.Sides[0].Team[0].Hp != b.sides[0].team[0].hp {
 		t.Errorf("hp %d, want %d", got.Sides[0].Team[0].Hp, b.sides[0].team[0].hp)
 	}
@@ -218,7 +216,6 @@ func TestPGWaitingLists(t *testing.T) {
 		t.Fatalf("waiting() returned %d battles, want the one just created", len(waiting))
 	}
 
-	// Once it is active it leaves the lobby.
 	if err := store.update(context.Background(), b.id, func(cur *battle) error {
 		cur.status = "active"
 		return nil

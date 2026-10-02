@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// The status label used to be inferred as "200, or 500 if err != nil",
-// so every typed 401/404/409 was counted as a success.
 func TestStatusLabelIsTheRealStatus(t *testing.T) {
 	for _, code := range []int{200, 401, 404, 409, 500} {
 		rec := httptest.NewRecorder()
@@ -21,7 +19,6 @@ func TestStatusLabelIsTheRealStatus(t *testing.T) {
 	}
 }
 
-// Battle ids in the path would give one metric series per battle.
 func TestRouteLabelHasBoundedCardinality(t *testing.T) {
 	for path, want := range map[string]string{
 		"/api/battles/abc123":      "/api/battles/{id}",

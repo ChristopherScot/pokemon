@@ -10,14 +10,9 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// A readiness probe only fails on a non-2xx status. If a failing
-// readiness check returns 200 with an error body, kubelet sees a
-// healthy pod and keeps sending it traffic - which is the exact bug
-// /readyz exists to fix, reintroduced one layer down.
-//
-// So this asserts the STATUS CODE, not the body. The handler returns
-// api.Error, and whether that renders as 503 is a property of the
-// generated server, not of the handler.
+// Kubelet only fails a readiness probe on a non-2xx, so this asserts
+// the status code, not the body: how api.Error renders is a property
+// of the generated server.
 func TestReadyzReturns503WhenTheDatabaseIsUnreachable(t *testing.T) {
 	s := service{
 		dex:     &pokedex{},
@@ -42,7 +37,6 @@ func TestReadyzReturns503WhenTheDatabaseIsUnreachable(t *testing.T) {
 	}
 }
 
-// And a healthy one is 200, or the pod never joins its Service.
 func TestReadyzReturns200WhenTheDatabaseAnswers(t *testing.T) {
 	s := service{
 		dex:     &pokedex{},

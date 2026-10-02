@@ -21,7 +21,6 @@ func TestStatMultiplierMatchesTheGames(t *testing.T) {
 			t.Errorf("statMultiplier(%+d) = %v, want %v", tc.stage, got, tc.want)
 		}
 	}
-	// Beyond the cap is the cap, not more.
 	if statMultiplier(99) != statMultiplier(6) {
 		t.Error("stages are not clamped at +6")
 	}
@@ -40,7 +39,6 @@ func TestAccuracyMultiplierUsesItsOwnTable(t *testing.T) {
 			t.Errorf("accuracyMultiplier(%+d) = %v, want %v", tc.stage, got, tc.want)
 		}
 	}
-	// And it is NOT the same table, or there would be no reason for two.
 	if accuracyMultiplier(-1) == statMultiplier(-1) {
 		t.Error("accuracy and the other stats share a table")
 	}
@@ -77,13 +75,12 @@ func TestSwordsDanceIncreasesDamage(t *testing.T) {
 	if after <= before {
 		t.Fatalf("swords-dance did not help: %d damage before, %d after", before, after)
 	}
-	// +2 stages is exactly 2x attack, so roughly double.
+	// +2 stages is exactly 2x attack.
 	if ratio := float64(after) / float64(before); ratio < 1.8 || ratio > 2.2 {
 		t.Errorf("attack ratio %.2f, want about 2x for +2 stages", ratio)
 	}
 }
 
-// harden raises defense, so the same attack hurts less.
 func TestHardenReducesIncomingDamage(t *testing.T) {
 	s := testService(t)
 	att, _ := s.dex.get("charizard")
@@ -166,7 +163,6 @@ func TestStatAtTheCapReportsIt(t *testing.T) {
 	me := b.sides[0].team[0]
 	me.stages.attack = maxStage
 
-	// Find a swords-dance on this team, or skip.
 	var idx = -1
 	for i, m := range me.mon.Moves {
 		if m.Name == "swords-dance" {
@@ -195,13 +191,12 @@ func TestSonicBoomDealsExactlyTwenty(t *testing.T) {
 	s := testService(t)
 	b, ash, _ := activeBattle(t, s)
 
-	// Give the attacker the move directly, since the team is random.
 	me := b.sides[0].team[0]
 	me.mon.Moves = []api.Move{{Name: "sonic-boom", Type: "normal", Power: 0}}
 	target := b.sides[1].team[0]
 	target.hp = 100
 
-	// 90% accuracy, so try until it lands rather than depending on one roll.
+	// 90% accuracy: retry until it lands.
 	for i := 0; i < 20 && target.hp == 100; i++ {
 		b.turn = 0
 		_ = b.takeTurn(ash, 0, 0, 0, s.rng)

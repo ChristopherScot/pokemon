@@ -1,13 +1,6 @@
-// Package battletext is the wording Go clients show for a battle, so
-// that a terminal, a phone and a web page narrate it the same way.
-//
-// The doc used to say "terminal clients", which stopped being true
-// when the Android app imported it - and the phone then rendered
-// terminal emoji, because emoji was what the package offered.
-//
-// The split this package now keeps: CLASSIFYING an event is general
-// and lives here; choosing a glyph for it is presentation and lives
-// in the client. EventKind is the seam.
+// Package battletext is the wording every Go client narrates a battle with.
+// Classifying an event lives here; rendering it (glyph, drawable, CSS class)
+// lives in the client. EventKind is the seam.
 package battletext
 
 import (
@@ -51,15 +44,9 @@ func Conditions(p api.BattlePokemon) []string {
 }
 
 // EventKind is what happened, without saying how to show it.
-//
-// A terminal wants an emoji, an Android app wants a drawable and a
-// web page wants a CSS class. The classification is the same for all
-// three; only the rendering differs, so only the rendering belongs
-// in a client.
 type EventKind int
 
 const (
-	// EventPlain is an event with nothing to mark - a log line.
 	EventPlain EventKind = iota
 	EventFainted
 	EventNoEffect
@@ -69,7 +56,6 @@ const (
 	EventStatus
 )
 
-// Classify reports what kind of event this is.
 func Classify(ev api.BattleEvent) EventKind {
 	if f, ok := ev.Fainted.Get(); ok && f {
 		return EventFainted
@@ -93,12 +79,8 @@ func Classify(ev api.BattleEvent) EventKind {
 	return EventPlain
 }
 
-// EventIcon is the terminal rendering of an event kind.
-//
-// Kept here because the CLI and the TUI both want exactly this table
-// and neither is a better home than the other. A client that wants
-// something else - a drawable, a CSS class - calls Classify and maps
-// the kind itself, which is what the phone now does.
+// EventIcon is the terminal rendering; non-terminal clients call Classify
+// and map the kind themselves.
 func EventIcon(ev api.BattleEvent) string {
 	switch Classify(ev) {
 	case EventFainted:

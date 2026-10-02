@@ -8,13 +8,8 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// One trainer cannot fill the lobby.
-//
-// Without a cap this is not merely crowding: ListWaitingBattles is
-// ORDER BY created_at DESC LIMIT 100, so whoever opened the newest 100
-// battles owns the entire lobby and keeps owning it. Measured against
-// the live API before the fix, one unauthenticated client opened 50 in
-// 52ms and took 50 of the 51 visible slots.
+// The lobby is ORDER BY created_at DESC LIMIT 100, so an uncapped
+// opener can push everyone else out.
 func TestATrainerCannotFillTheLobby(t *testing.T) {
 	_, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -49,9 +44,7 @@ func TestATrainerCannotFillTheLobby(t *testing.T) {
 	}
 }
 
-// The cap is per trainer, not global: a second trainer must still be
-// able to open one. A cap that blocked everyone would pass the test
-// above while breaking the game.
+// A global cap would pass the previous test while breaking the game.
 func TestTheCapIsPerTrainerNotGlobal(t *testing.T) {
 	_, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -77,8 +70,7 @@ func TestTheCapIsPerTrainerNotGlobal(t *testing.T) {
 	}
 }
 
-// Finishing with the old battle frees the slot, or the cap turns into
-// "one battle per trainer, ever".
+// The cap counts WAITING battles, not battles ever opened.
 func TestTheSlotIsFreedWhenTheBattleIsJoined(t *testing.T) {
 	_, store, dex := freshPG(t)
 	s := service{dex: dex, battles: store, rng: rngFor(1)}
@@ -94,7 +86,6 @@ func TestTheSlotIsFreedWhenTheBattleIsJoined(t *testing.T) {
 		t.Fatalf("first battle got %T", first)
 	}
 
-	// Someone joins, so it is no longer waiting.
 	joiner := registerFor(t, s, "joiner")
 	if _, err := s.JoinBattle(ctx, &api.JoinBattle{},
 		api.JoinBattleParams{ID: b.ID, XTrainerToken: joiner}); err != nil {
@@ -111,7 +102,6 @@ func TestTheSlotIsFreedWhenTheBattleIsJoined(t *testing.T) {
 	}
 }
 
-// registerFor is a trainer token, or the test's failure.
 func registerFor(t *testing.T, s service, name string) string {
 	t.Helper()
 	tok, err := s.battles.registerTrainer(context.Background(), name)

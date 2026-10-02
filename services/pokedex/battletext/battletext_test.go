@@ -45,10 +45,6 @@ func TestEventIconIsEmptyForNarration(t *testing.T) {
 	}
 }
 
-// Classify is the shared part; the glyph is the client's. A client
-// that wants a drawable or a CSS class maps the kind itself, which
-// is what the phone does - it used to render these emoji because
-// EventIcon was the only thing on offer.
 func TestClassifyNamesWhatHappenedWithoutChoosingAGlyph(t *testing.T) {
 	for name, tc := range map[string]struct {
 		ev   api.BattleEvent
@@ -68,8 +64,8 @@ func TestClassifyNamesWhatHappenedWithoutChoosingAGlyph(t *testing.T) {
 	}
 }
 
-// EventIcon must keep agreeing with Classify, or the terminals and
-// the phone would narrate the same event differently.
+// EventIcon must keep agreeing with Classify, or terminals and phone
+// narrate the same event differently.
 func TestEventIconFollowsClassify(t *testing.T) {
 	fainted := api.BattleEvent{Fainted: api.NewOptBool(true)}
 	if Classify(fainted) != EventFainted {

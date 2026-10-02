@@ -140,7 +140,6 @@ func TestSideForRefusesANonParticipant(t *testing.T) {
 	}
 }
 
-// Both participants still resolve, in the right order.
 func TestSideForOrientsEachParticipant(t *testing.T) {
 	b := &api.Battle{Sides: []api.Side{
 		{Trainer: "ash"}, {Trainer: "misty"},
@@ -170,7 +169,6 @@ func TestSideForOrientsEachParticipant(t *testing.T) {
 	}
 }
 
-// mon builds a battle Pokemon with the given moves, none disabled.
 func testMon(name string, fainted bool, moves ...string) api.BattlePokemon {
 	p := api.BattlePokemon{Name: name, Hp: 10, MaxHp: 10, Fainted: fainted}
 	if fainted {
@@ -194,7 +192,6 @@ func activeBattleFor(mine, theirs []api.BattlePokemon, turn string) *api.Battle 
 	}
 }
 
-// A legal turn is legal.
 func TestCheckTurnAllowsALegalTurn(t *testing.T) {
 	b := activeBattleFor(
 		[]api.BattlePokemon{testMon("pikachu", false, "thunderbolt")},
@@ -207,7 +204,6 @@ func TestCheckTurnAllowsALegalTurn(t *testing.T) {
 	}
 }
 
-// Each rule, in isolation.
 func TestCheckTurnCatchesEachIllegalCase(t *testing.T) {
 	alive := func() []api.BattlePokemon {
 		return []api.BattlePokemon{testMon("pikachu", false, "thunderbolt", "quick-attack")}
@@ -246,7 +242,6 @@ func TestCheckTurnCatchesEachIllegalCase(t *testing.T) {
 	}
 }
 
-// A spectator gets the same answer the server gives them.
 func TestCheckTurnRefusesASpectator(t *testing.T) {
 	b := activeBattleFor(
 		[]api.BattlePokemon{testMon("pikachu", false, "thunderbolt")},
@@ -272,7 +267,6 @@ func TestCheckTurnReportsTheSameFirstReasonAsTheServer(t *testing.T) {
 		t.Errorf("everything wrong at once = %v, want ErrBattleOver first", err)
 	}
 
-	// Not your turn outranks a bad index, as it does on the server.
 	notYours := activeBattleFor(
 		[]api.BattlePokemon{testMon("pikachu", false, "thunderbolt")},
 		[]api.BattlePokemon{testMon("staryu", false, "bubble")},
@@ -292,8 +286,6 @@ func TestCheckTurnReportsTheSameFirstReasonAsTheServer(t *testing.T) {
 	}
 }
 
-// Moved here with IdentityAdvice: it tests the mapping of THESE
-// errors, so it belongs beside them.
 func TestIdentityAdviceOnlyAnswersIdentityErrors(t *testing.T) {
 	if IdentityAdvice(ErrStaleIdentity) == "" {
 		t.Error("no advice for a stale identity")

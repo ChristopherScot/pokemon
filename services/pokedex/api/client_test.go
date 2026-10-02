@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// The header a server uses to see which client versions still call it.
 func TestClientSendsVersionHeader(t *testing.T) {
 	var got string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -52,8 +51,7 @@ func TestRetryIsBoundedAndBreakerOpens(t *testing.T) {
 	}
 }
 
-// A POST may already have applied, so repeating it can create a second
-// thing.
+// A POST may already have applied.
 func TestPostIsNeverRetried(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -109,14 +107,12 @@ func TestRetryAfterBeatsThePolicyBackoff(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200 after the retry", resp.StatusCode)
 	}
-	// SingleRetry would have waited 1s; the server said 2.
 	if elapsed < 2*time.Second {
 		t.Errorf("waited %v, want >= 2s - the server's Retry-After was ignored", elapsed)
 	}
 }
 
-// A server can say 3600; sleeping that long inside a request is
-// indistinguishable from a hang.
+// Sleeping an hour inside a request is indistinguishable from a hang.
 func TestRetryAfterIsCapped(t *testing.T) {
 	resp := &http.Response{Header: http.Header{"Retry-After": []string{"3600"}}}
 	if _, ok := retryAfter(resp, 30*time.Second); ok {

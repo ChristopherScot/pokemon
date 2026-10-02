@@ -6,27 +6,18 @@ import (
 	"testing"
 )
 
-// Both loaders must produce the same index.
-//
-// They could not be compared before: each built the index itself, in
-// about ninety duplicated lines, and which one ran was decided by
-// DATABASE_URL at startup - so local development exercised one path
-// and production the other, and a divergence was invisible until it
-// shipped. They now share buildPokedex, and this pins that.
+// The embedded and DB loaders share buildPokedex; this pins that.
 func TestBothSourcesBuildTheSameIndex(t *testing.T) {
 	var doc dataset
 	mustUnmarshalEmbedded(t, &doc)
 
-	// The embedded path.
 	a, err := buildPokedex(doc.Pokemon, doc.Moves)
 	if err != nil {
 		t.Fatalf("building from embedded rows: %v", err)
 	}
 
-	// Now the same data pushed through the DB path's row shapes:
-	// int32 everywhere, accuracy as a pointer, moves arriving from a
-	// join table rather than inline. If the adapter loses or
-	// reshapes a field, the two indexes stop matching.
+	// Same data reshaped as the DB path delivers it (int32, pointer
+	// accuracy, moves via a join table).
 	mons := make([]entry, 0, len(doc.Pokemon))
 	for _, e := range doc.Pokemon {
 		mons = append(mons, entry{

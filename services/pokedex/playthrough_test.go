@@ -8,19 +8,9 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// Plays a battle from registration to a winner against POSTGRES, which
-// is what production runs.
-//
-// Every other battle test uses the in-memory store, where a combatant is
-// passed around by value and never serialised. That is exactly why
-// `baseStats` and `stages` marshalling to {} went unnoticed: the bug
-// only exists on the path where state round-trips through the database,
-// and no test walked that path far enough to swing at anything.
-//
-// The assertions are about the SHAPE of a game - somebody wins, moves
-// land for sensible damage, it does not take hundreds of turns - rather
-// than exact numbers, so a balance change does not break it but a
-// battle that stops working does.
+// End-to-end game against Postgres: without it, JSON round-trip bugs
+// (baseStats, stages) never surface because every other battle test
+// keeps combatants in memory.
 func TestAWholeGameOverPostgres(t *testing.T) {
 	pool := testPool(t)
 	dropAll(t, pool)
@@ -71,9 +61,8 @@ func TestAWholeGameOverPostgres(t *testing.T) {
 
 	tokens := map[string]string{"ash": ash, "misty": misty}
 
-	// A real game takes well under twenty turns. Sixty is not a timeout
-	// to be nudged upwards when it trips - it is the point past which
-	// the battle is broken, so reaching it is a failure outright.
+	// A real game takes under twenty turns. Sixty is a broken-battle
+	// signal, not a timeout to nudge.
 	const maxTurns = 60
 	var turns int
 	var winner string
@@ -99,11 +88,8 @@ func TestAWholeGameOverPostgres(t *testing.T) {
 			t.Fatalf("turn %d: nobody's turn (%q)", turns, turn)
 		}
 		me := sideOf(b, turn)
-		// Varied, but seeded: a fixed seed means a failure is
-		// reproducible, while picking among the LEGAL choices rather
-		// than always the strongest move on the first target exercises
-		// switching pokemon, status moves and fainted targets - none of
-		// which a always-attack-with-the-best script ever reaches.
+		// Seeded but varied so the game exercises status moves,
+		// switching and fainted targets - not just attack-with-best.
 		attacker := chooseStanding(me, pick)
 		target := chooseStanding(other(b, turn), pick)
 		if attacker < 0 || target < 0 {
@@ -148,7 +134,6 @@ func other(b *api.Battle, trainer string) api.Side {
 	return api.Side{}
 }
 
-// One of the pokemon still standing, not always the first.
 func chooseStanding(s api.Side, pick *rand.Rand) int {
 	var up []int
 	for i, m := range s.Team {
@@ -162,9 +147,8 @@ func chooseStanding(s api.Side, pick *rand.Rand) int {
 	return up[pick.Intn(len(up))]
 }
 
-// One of the moves this pokemon may actually use this turn. A move the
-// server has disabled is skipped rather than sent and rejected, because
-// the point is to play a legal game, not to probe validation.
+// chooseMove picks a legal move so a game plays out rather than the
+// test probing validation.
 func chooseMove(m api.BattlePokemon, pick *rand.Rand) int {
 	disabled, hasDisabled := m.DisabledMove.Get()
 	var usable []int

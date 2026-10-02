@@ -87,8 +87,7 @@ func seed(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 	}
 
-	// One statement for every link. This was one round trip per row -
-	// about 9,000 of them - which took minutes against a real database.
+	// Batched: one round trip for ~9,000 rows.
 	if err := q.UpsertPokemonMoves(ctx, links.params()); err != nil {
 		return fmt.Errorf("linking moves: %w", err)
 	}
@@ -99,13 +98,9 @@ func seed(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-// loadPokedexFromDB reads the reference data and hands it to
-// buildPokedex.
-//
-// Everything here is row-shape translation - int32 to int, moves
-// joined through a link table rather than inline. The index itself is
-// built by the same function the embedded path uses, so the two
-// cannot drift, which they could when this file had its own copy.
+// loadPokedexFromDB reads the reference data, reshapes rows for
+// buildPokedex, and shares the same index builder as the embedded
+// path.
 func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error) {
 	q := dbgen.New(pool)
 
@@ -186,22 +181,16 @@ func loadPokedexFromDB(ctx context.Context, pool *pgxpool.Pool) (*pokedex, error
 	return buildPokedex(mons, moves)
 }
 
-// runSeed loads the embedded reference data into the database and
-// returns. It is what `pokedex seed` runs.
-//
-// Deliberately not part of startup: the data changes when the binary
-// changes, so a pod restart has nothing to do. Doing it on every boot
-// rewrote ~9,000 rows that were already correct and shared one 30s
-// budget with connect, migrate and load - which crashlooped the pod
-// whenever the cluster was slow enough to miss it.
+// runSeed loads the embedded reference data into the database. It is
+// what `pokedex seed` runs, and lives outside startup so a pod restart
+// does not rewrite ~9,000 rows that are already correct.
 func runSeed() error {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		return errors.New("DATABASE_URL is not set")
 	}
 
-	// Its own generous budget: this writes thousands of rows and is a
-	// job, not a request.
+	// Generous budget: this is a job, not a request.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
@@ -221,8 +210,7 @@ func runSeed() error {
 	return nil
 }
 
-// moveLinks collects every pokemon-to-move link so they can be written
-// in one statement rather than one per row.
+// moveLinks batches every pokemon-to-move link into one insert.
 type moveLinks struct {
 	pokemonIDs []int32
 	names      []string

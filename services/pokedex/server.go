@@ -20,11 +20,11 @@ import (
 )
 
 var (
+	// Labelled by route, not operation: the real status is only known
+	// below ogen, where the operation id is not. Latency below keeps
+	// operation because it can see it.
 	requests = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "http_requests_total",
-		// route rather than operation: the status is only known at
-		// the http layer, below ogen, where the operation id is not.
-		// Latency keeps the operation label, which it can see.
 		Help: "Requests by route, method and status.",
 	}, []string{"route", "method", "status"})
 
@@ -36,25 +36,18 @@ var (
 )
 
 type service struct {
-	dex *pokedex
-
+	dex     *pokedex
 	battles store
-
-	rng *lockedRand
+	rng     *lockedRand
 
 	// ready backs the readiness probe. Nil without a database.
 	ready func(context.Context) error
 }
 
-// GetReadyz is readiness, and unlike /healthz it does touch the
-// database.
-//
-// Both probes pointed at a static OK, so a pod that had lost its
-// database still reported itself Ready and kept taking traffic -
-// every battle request 500ing while Kubernetes saw nothing wrong.
+// GetReadyz is readiness and pings the database, so a pod that has
+// lost its database is taken out of the Service.
 func (s service) GetReadyz(ctx context.Context) (api.GetReadyzRes, error) {
 	if s.ready == nil {
-		// No database: the in-memory store is always ready.
 		return &api.Health{Status: api.HealthStatusOk}, nil
 	}
 	// Shorter than the probe's own 3s timeout, so a hung check fails
@@ -68,9 +61,8 @@ func (s service) GetReadyz(ctx context.Context) (api.GetReadyzRes, error) {
 	return &api.Health{Status: api.HealthStatusOk}, nil
 }
 
-// GetHealthz is liveness, and is static on purpose: a liveness probe
-// that fails on a database blip kills a pod that would have
-// recovered, turning a brief outage into a crash loop.
+// GetHealthz is liveness: static on purpose, so a database blip does
+// not turn into a crash loop.
 func (service) GetHealthz(context.Context) (*api.Health, error) {
 	return &api.Health{Status: api.HealthStatusOk}, nil
 }
@@ -104,13 +96,11 @@ func (s service) ListPokemonMoves(_ context.Context, params api.ListPokemonMoves
 	return &api.MoveList{Count: len(moves), Moves: moves}, nil
 }
 
-// ListMoves returns the whole move catalogue.
 func (s service) ListMoves(context.Context) (*api.MoveList, error) {
 	moves := s.dex.allMoves()
 	return &api.MoveList{Count: len(moves), Moves: moves}, nil
 }
 
-// GetMove returns one move by its hyphenated name, or the spec's 404.
 func (s service) GetMove(_ context.Context, params api.GetMoveParams) (api.GetMoveRes, error) {
 	mv, ok := s.dex.move(params.Name)
 	if !ok {
@@ -123,19 +113,10 @@ func (s service) ListTypes(context.Context) (*api.TypeList, error) {
 	return &api.TypeList{Types: s.dex.types()}, nil
 }
 
-// NewError is the last resort: anything a handler returns as a real
-// error, rather than as a typed response, arrives here.
-//
-// The message is deliberately generic. Errors are wrapped with
-// operation context on the way up - "inserting battle %s", "writing
-// battle %s" - and a wrapped *pgconn.PgError stringifies with
-// SQLSTATE, the constraint name and often the table and column. That
-// was going straight into the 500 body of an internet-reachable
-// service, which is free schema reconnaissance.
-//
-// The id is what keeps this debuggable: it appears in the response
-// and in the log line, so a player can quote it and the real error is
-// one Loki query away.
+// NewError renders any non-typed handler error as a 500 with a
+// generic message. Real error text can leak SQLSTATE, constraint and
+// column names, so it only reaches Loki, keyed on the correlation id
+// echoed to the client.
 func (service) NewError(_ context.Context, err error) *api.ErrorStatusCode {
 	id := newToken()[:8]
 	slog.Error("handler failed", "err", err, "error_id", id)
@@ -146,7 +127,6 @@ func (service) NewError(_ context.Context, err error) *api.ErrorStatusCode {
 	}
 }
 
-// statusWriter remembers the code the handler wrote.
 type statusWriter struct {
 	http.ResponseWriter
 	code int
@@ -157,44 +137,26 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// countStatus records the status a request ACTUALLY returned.
-//
-// This has to live at the http layer rather than in ogen middleware.
-// ogen hands middleware a typed response, and a handler returning a
-// 401 returns it as a value with a nil error - so the previous
-// version, which inferred `200, or 500 if err != nil`, labelled every
-// 401, 404 and 409 as a 200. The metric could not show an auth bug, a
-// flood of conflicts, or the mobile client's limit=200 requests that
-// 400'd on every launch for days, and an alert on 5xx was silent
-// through all of it.
-//
-// Deriving it from the response type's name would work but is a
-// second copy of the generator's own switch, and it would drift. The
-// ResponseWriter knows the real answer.
+// countStatus records the real status code. It lives below ogen
+// because ogen hands middleware a typed response with nil error even
+// for a 401/404/409, which is not distinguishable from a 200 above
+// the ResponseWriter.
 func countStatus(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 200 by default: a handler that writes a body without
-		// calling WriteHeader has implicitly sent one.
 		sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
 		next.ServeHTTP(sw, r)
 		if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
-			// Probes run every few seconds and would swamp the
-			// counters without saying anything about the service.
+			// Probes would swamp the counters.
 			return
 		}
 		requests.WithLabelValues(routeOf(r), r.Method, strconv.Itoa(sw.code)).Inc()
 	})
 }
 
-// routeOf is a low-cardinality label for the path.
-//
-// Raw paths carry battle ids, which would give the metric one series
-// per battle - a textbook cardinality explosion.
+// routeOf replaces ids with {id} to bound metric cardinality.
 func routeOf(r *http.Request) string {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	for i, p := range parts {
-		// Ids are the only variable segments here, and they are the
-		// only lowercase-alphanumeric runs that are not a known noun.
 		switch p {
 		case "api", "battles", "trainers", "pokemon", "moves", "types",
 			"waiting", "join", "turn", "healthz", "readyz", "":
@@ -235,8 +197,7 @@ func handler() (http.Handler, error) {
 	)
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
 		var pool *pgxpool.Pool
-		// Connect, migrate and load. NOT seed - that is `pokedex seed`,
-		// run when the data changes rather than when a pod restarts.
+		// Connect, migrate and load. NOT seed - that is `pokedex seed`.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 

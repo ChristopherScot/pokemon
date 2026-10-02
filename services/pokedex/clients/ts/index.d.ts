@@ -1,14 +1,7 @@
 import type { Client } from 'openapi-fetch'
 import type { paths } from './schema.js'
 
-// The generated schema, re-exported so consumers can name the types the
-// API is made of: `components['schemas']['Thing']` for a response body,
-// `paths` for a route.
-//
-// Without this they are in the package but unreachable - a consumer has
-// to restate every shape it handles, which is the thing generating a
-// client was supposed to prevent, and the restatement drifts silently
-// when the spec moves.
+// Re-exported so consumers can name the types the API is made of.
 export type { paths, components, operations } from './schema.js'
 
 /** The installed package version, which tracks the spec. */
@@ -35,8 +28,8 @@ export declare class Breaker {
   record(failed: boolean): void
 }
 
-/** Reads a Retry-After header, in milliseconds. Undefined when absent,
- *  unparseable, or further away than maxMs. */
+/** Reads Retry-After in milliseconds; undefined when absent, unparseable
+ *  or further away than maxMs. */
 export declare function retryAfterMs(res: Response | undefined, maxMs: number): number | undefined
 
 export interface ClientOptions {
@@ -47,11 +40,10 @@ export interface ClientOptions {
   policy?: RetryPolicy
   /** Omit to disable circuit breaking. */
   breaker?: Breaker
-  /** Bounds how long a server's Retry-After can park this client.
-   *  Default 30000. */
+  /** Bounds Retry-After. Default 30000. */
   maxRetryAfterMs?: number
 }
 
-/** The typed client. Paths and response shapes come from openapi.yml, so
- *  calling an endpoint the spec does not describe is a compile error. */
+/** Typed client; calling an endpoint the spec does not describe is a
+ *  compile error. */
 export default function createClient(options: ClientOptions): Client<paths>

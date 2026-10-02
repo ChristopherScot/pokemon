@@ -13,56 +13,28 @@ import (
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 )
 
-// Tunables. Named rather than inline so the balance is in one place.
 const (
 	teamSize = 3
 
-	// How long a battle in progress survives without a turn. Two hours
-	// is far longer than a game takes, so reaching it means both
-	// players have gone.
+	// A battle in progress with no turn taken for this long is
+	// abandoned by both players.
 	battleTTL = 2 * time.Hour
 
-	// A battle nobody has joined yet gets much longer, because nothing
-	// refreshes it.
-	//
-	// touched_at only advances on UpdateBattle, and a waiting battle
-	// has no updates by definition - a join is its first. Reads do not
-	// touch it, so polling the lobby does not either. That meant a
-	// player who opened a battle and waited for an opponent had it
-	// deleted out from under them at exactly two hours, however
-	// attentively they were watching, and the client saw a bare 404
-	// indistinguishable from a wrong id.
-	//
-	// Touching on read would fix it by putting a write on the path of
-	// every poll from every client. A longer TTL costs one comparison
-	// in the sweep. SweepTrainers already reasons that "a trainer
-	// waiting in the lobby may sit for hours" and spares them; this is
-	// the same allowance for the battle they are waiting in, which
-	// otherwise expires first and unprotects the trainer anyway.
+	// A waiting battle's touched_at never advances (a join is its
+	// first update), so this must exceed however long a player will
+	// sit in the lobby - otherwise polling clients get 404'd out from
+	// under them.
 	waitingBattleTTL = 24 * time.Hour
 
-	// How long a name is held for someone who never comes back.
-	//
-	// Names are unique and nothing released them, so every name ever
-	// typed was spent forever - including by anyone who lost their
-	// token, who could not re-register it and could not recover it
-	// either. A week is long enough that a real player keeps their
-	// name across a fortnight of not playing (any request refreshes
-	// it), and short enough that the namespace is not landfill.
-	//
 	// A trainer in a battle is never swept, whatever this says.
 	trainerTTL = 7 * 24 * time.Hour
 
-	// maxOpenBattlesPerTrainer caps how many battles one trainer can
-	// have waiting at once. One, because a trainer can only play the
-	// battle they are in - a second open battle is useless to its own
-	// owner and, since the lobby is the newest 100, crowds everyone
-	// else out of the only discovery mechanism the clients have.
+	// One waiting battle per trainer: the lobby is the newest 100
+	// created_at DESC, so any higher cap lets one token push everyone
+	// else out.
 	maxOpenBattlesPerTrainer = 1
 
-	// sweepBatchSize bounds one sweep. The sweep runs inside a user's
-	// request, so an unbounded DELETE makes a backlog their problem -
-	// 992ms at 193k expired battles, versus 37ms for a batch.
+	// The sweep runs inside a user's request, so it must be bounded.
 	sweepBatchSize = 1000
 
 	damageSpread = 0.15
@@ -72,10 +44,8 @@ const (
 
 var (
 	errNoBattle = errors.New("no such battle")
-	// errAlreadyWaiting is the unique index refusing a trainer's
-	// second open battle. The handler checks the count first, so this
-	// only surfaces when two creates raced - which is exactly the case
-	// the count cannot catch.
+	// errAlreadyWaiting comes from the unique index and only surfaces
+	// when two creates raced past the handler's count check.
 	errAlreadyWaiting = errors.New("already have a battle waiting")
 	errNoTrainer      = errors.New("unknown trainer token")
 	errNotYourTurn    = errors.New("not your turn")
@@ -104,11 +74,8 @@ func maxHP(base, iv, ev, level int) int {
 
 type battle struct {
 	id string
-	// The generated enum, not a string. Nine raw literals encoded
-	// this state machine across two files, and a typo compiled: the
-	// unchecked api.BattleStatus(b.status) cast in toAPI would pass
-	// it straight through, producing a battle that is neither active
-	// nor finished and that takeTurn rejects with the wrong error.
+	// status is the generated enum, not a string; an unchecked cast in
+	// fromRow will happily produce a state neither active nor finished.
 	status  api.BattleStatus
 	version int
 	sides   []*side
@@ -131,13 +98,10 @@ type side struct {
 }
 
 type combatant struct {
-	mon   api.Pokemon
-	hp    int
-	maxHP int
-
-	// The game's base stats, which the damage formula needs.
-	base baseStats
-
+	mon    api.Pokemon
+	hp     int
+	maxHP  int
+	base   baseStats
 	stages stages
 
 	confused bool
@@ -192,13 +156,8 @@ func fillTeam(dex *pokedex, chosen []string, rng roller) []string {
 
 	out := append([]string(nil), chosen...)
 	all := dex.list("", 0)
-	// Walk a shuffled order rather than drawing until something new
-	// comes up. Rejection sampling here was an unbounded loop on a
-	// request path: `continue` without consuming an attempt, so a
-	// roller that keeps returning the same index spins forever inside
-	// CreateBattle with no ctx check. That is one roller
-	// implementation away from a wedged pod, and fixedRoll in the
-	// test files is already such an implementation.
+	// Shuffle rather than reject-sample: rejection could spin forever
+	// for a roller that keeps returning the same index.
 	for _, i := range shuffledIndexes(len(all), rng) {
 		if len(out) >= teamSize {
 			break
@@ -212,18 +171,14 @@ func fillTeam(dex *pokedex, chosen []string, rng roller) []string {
 	return out
 }
 
-// shuffledIndexes returns 0..n-1 in a random order.
-//
-// One pass, no rejection, so every caller terminates in exactly n
-// steps whatever the roller does.
+// shuffledIndexes returns 0..n-1 in a random order. Terminates in n
+// steps whatever the roller does; a misbehaving roller just shuffles
+// badly.
 func shuffledIndexes(n int, rng roller) []int {
 	idx := make([]int, n)
 	for i := range idx {
 		idx[i] = i
 	}
-	// Fisher-Yates. rng.Intn(i+1) is in range for any roller that
-	// honours its contract, and a roller that does not still
-	// terminates - it just shuffles badly.
 	for i := n - 1; i > 0; i-- {
 		j := rng.Intn(i + 1)
 		if j < 0 || j > i {
@@ -244,8 +199,6 @@ func randomTeam(dex *pokedex, rng roller) []string {
 		return names
 	}
 
-	// Same shuffle as fillTeam, for the same reason: the previous
-	// draw-until-new loop could not terminate for some rollers.
 	team := make([]string, 0, teamSize)
 	for _, i := range shuffledIndexes(len(all), rng) {
 		if len(team) >= teamSize {
@@ -284,19 +237,15 @@ func damage(attacker, defender *combatant, move api.Move, rng roller) (int, floa
 
 type store interface {
 	create(ctx context.Context, b *battle) error
-	// get returns errNoBattle when there is no such battle, and any
-	// other error when the store itself failed. A bool cannot tell
-	// those apart, and the version that returned one reported a dead
-	// database to the client as "no such battle".
+	// get returns errNoBattle only for a missing row; any other error
+	// is a real store failure, so callers can distinguish "not found"
+	// from "database is down".
 	get(ctx context.Context, id string) (*api.Battle, error)
 	waiting(ctx context.Context) ([]api.WaitingBattle, error)
-	// trainerByToken returns errNoTrainer for an unknown token. Same
-	// reason: a store failure used to surface as a 401, which looks
-	// like an auth bug to whoever debugs it.
+	// trainerByToken returns errNoTrainer only for an unknown token;
+	// other errors must not surface as 401.
 	trainerByToken(ctx context.Context, token string) (string, error)
 	registerTrainer(ctx context.Context, name string) (string, error)
-	// openBattlesFor counts the waiting battles a trainer already has,
-	// so one trainer cannot fill the lobby.
 	openBattlesFor(ctx context.Context, token string) (int, error)
 
 	update(ctx context.Context, id string, fn func(*battle) error) error
@@ -356,9 +305,8 @@ func (m *memStore) registerTrainer(_ context.Context, name string) (string, erro
 	return token, nil
 }
 
-// Reading a token is also how we learn the trainer is still around -
-// the same rule the postgres store follows, so a name expires the same
-// way whichever store is behind it.
+// Reading a token also touches lastSeen: any authenticated call keeps
+// the name alive, matching the postgres store.
 func (m *memStore) trainerByToken(_ context.Context, token string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -375,7 +323,6 @@ func (m *memStore) create(_ context.Context, b *battle) error {
 	defer m.mu.Unlock()
 	m.sweepLocked()
 	m.battles[b.id] = b
-	// Cannot fail: the error exists for the Postgres implementation.
 	return nil
 }
 
@@ -424,7 +371,6 @@ func (m *memStore) waiting(_ context.Context) ([]api.WaitingBattle, error) {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].CreatedAt.After(out[j].CreatedAt)
 	})
-	// Cannot fail: the error exists for the Postgres implementation.
 	return out, nil
 }
 
@@ -439,7 +385,6 @@ func (m *memStore) openBattlesFor(_ context.Context, token string) (int, error) 
 			n++
 		}
 	}
-	// Cannot fail: the error exists for the Postgres implementation.
 	return n, nil
 }
 
@@ -456,10 +401,9 @@ func (b *battle) toWaiting() api.WaitingBattle {
 }
 
 func (m *memStore) sweepLocked() {
-	// Two cutoffs, matching the SQL: a waiting battle is never touched
-	// (a join is its first update), so its touched_at is really its
-	// creation time and the active cutoff would evict a player who is
-	// sitting in the lobby exactly as intended.
+	// Two cutoffs, matching the SQL: a waiting battle's touched_at is
+	// its creation time, so applying battleTTL to it would evict
+	// players still sitting in the lobby.
 	now := time.Now()
 	active := now.Add(-battleTTL)
 	openCutoff := now.Add(-waitingBattleTTL)
@@ -473,11 +417,9 @@ func (m *memStore) sweepLocked() {
 		}
 	}
 
-	// Trainers after battles, so the ones whose games just expired are
-	// released in the same pass. A trainer still in a battle is kept
-	// however long they have been idle: someone waiting in the lobby
-	// for an opponent makes no requests, and deleting them would strand
-	// whoever eventually joins.
+	// Trainers after battles, so games that just expired release their
+	// trainers in the same pass. A trainer in a battle is kept whatever
+	// their idle time.
 	inBattle := map[string]bool{}
 	for _, b := range m.battles {
 		for _, side := range b.sides {
@@ -507,13 +449,9 @@ func randomID(rng roller, n int) string {
 	return string(b)
 }
 
-// newBattle opens a battle waiting for an opponent.
-//
-// Here rather than in the handler: status, version, the timestamps
-// and the opening log line are battle invariants, and the HTTP layer
-// was setting them field by field. takeTurn and finishTurn maintain
-// exactly the same invariants in this file, so a transition living
-// anywhere else is a second place to forget one.
+// newBattle opens a battle waiting for an opponent. Every transition
+// - open, join, takeTurn, finishTurn - maintains its invariants in
+// this file so they cannot be forgotten elsewhere.
 func newBattle(id, trainer, token string, team []*combatant, now time.Time) *battle {
 	b := &battle{
 		id:      id,
@@ -534,12 +472,9 @@ func newBattle(id, trainer, token string, team []*combatant, now time.Time) *bat
 	return b
 }
 
-// join adds the second side and starts the battle.
-//
-// Returns errBattleFull if it is not waiting and errAlreadyIn if the
-// same trainer tries to join their own battle. The bookkeeping -
-// status, turn, version, touched, the log line - is the engine's, the
-// way it is for every other transition.
+// join adds the second side and starts the battle. Returns
+// errBattleFull if not waiting and errAlreadyIn if the same trainer
+// tries to join their own battle.
 func (b *battle) join(trainer, token string, team []*combatant) error {
 	if b.status != api.BattleStatusWaiting {
 		return errBattleFull
@@ -582,8 +517,8 @@ func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng
 		return fmt.Errorf("%w: no target %d", errIllegalMove, targetIdx)
 	}
 
-	// The same predicates toAPI projects, so what a client is told is
-	// legal and what the server accepts cannot drift apart.
+	// Same predicates toAPI projects, and in the same order battleclient.CheckTurn
+	// walks, so client and server agree on the first reason a turn is illegal.
 	attacker := me.team[attackerIdx]
 	if !attacker.canAct() {
 		return fmt.Errorf("%w: %s has fainted", errIllegalMove, attacker.mon.Name)
@@ -603,6 +538,8 @@ func (b *battle) takeTurn(token string, attackerIdx, moveIdx, targetIdx int, rng
 
 	b.turnNumber++
 
+	// 33% self-hit while confused; damage is move.Power/2 floored at 1, and a
+	// confused attacker can KO itself and lose the battle.
 	if attacker.confused {
 		if rng.Float64() < 0.33 {
 			self := move.Power / 2
@@ -677,16 +614,8 @@ func (b *battle) finishTurn(me, opponent *side, hurt *combatant) {
 		b.turn = 1 - b.turn
 	}
 
-	// Bumped here AND by `version = version + 1` in UpdateBattle,
-	// which reads as a double increment and is not one: pgStore.update
-	// re-reads the row inside its transaction, so this value is
-	// overwritten before it is ever written back. The SQL owns the
-	// number for the Postgres path.
-	//
-	// It cannot simply be deleted, though - memStore has no SQL, so
-	// this line is the only thing that moves the version there.
-	// Removing it fails TestVersionAdvancesOnEveryChange, which is
-	// how I found out.
+	// Under Postgres this is overwritten by UpdateBattle's own
+	// increment. Under memStore this is the only place version moves.
 	b.version++
 	b.touched = time.Now()
 }
@@ -713,7 +642,7 @@ func (b *battle) appendEvent(attacker, target *combatant, move api.Move, dealt i
 	b.log = append(b.log, ev)
 }
 
-// title renders a dataset name for display: "razor-wind" -> "Razor Wind".
+// title renders "razor-wind" as "Razor Wind".
 func title(s string) string {
 	parts := strings.Split(s, "-")
 	for i, p := range parts {
@@ -725,20 +654,12 @@ func title(s string) string {
 	return strings.Join(parts, " ")
 }
 
-// canAct reports whether this Pokemon could be chosen as the
-// attacker, ignoring whose turn it is.
-//
-// These three predicates are the rules takeTurn enforces, named so
-// that the projection and the enforcement cannot disagree: toAPI
-// calls them, takeTurn calls them, and there is nowhere else to put
-// a fourth opinion.
-func (c *combatant) canAct() bool { return !c.fainted() }
-
-// canBeTargeted reports whether this Pokemon is a legal target.
+// canAct, canBeTargeted, moveUsable and usableMoves are the single
+// definition of legality: toAPI projects them and takeTurn enforces
+// them, so a client sees exactly what the server accepts.
+func (c *combatant) canAct() bool        { return !c.fainted() }
 func (c *combatant) canBeTargeted() bool { return !c.fainted() }
 
-// usableMoves answers, per move and in order, whether it can be
-// selected. The clients used to derive this from disabledMove.
 func (c *combatant) usableMoves() []bool {
 	out := make([]bool, len(c.mon.Moves))
 	for i := range c.mon.Moves {
@@ -747,7 +668,6 @@ func (c *combatant) usableMoves() []bool {
 	return out
 }
 
-// moveUsable is the single definition of "this move can be selected".
 func (c *combatant) moveUsable(i int) bool {
 	if i < 0 || i >= len(c.mon.Moves) {
 		return false
@@ -770,23 +690,16 @@ func (b *battle) toAPI() *api.Battle {
 	}
 	for i, s := range b.sides {
 		side := api.Side{Trainer: s.trainer}
-		// Whose side may act at all. Computed once here rather than
-		// per Pokemon, and the clients no longer compute it at all.
 		sideActive := b.status == api.BattleStatusActive && b.turn == i
 		for _, c := range s.team {
 			bp := api.BattlePokemon{
-				Name:    c.mon.Name,
-				Types:   c.mon.Types,
-				Hp:      c.hp,
-				MaxHp:   c.maxHP,
-				Fainted: c.fainted(),
-				Sprite:  c.mon.Sprite,
-				Moves:   c.mon.Moves,
-
-				// The rules, answered by the only thing that gets to
-				// decide them. A client that recomputes these has a
-				// second copy that drifts - which is exactly what
-				// CheckTurn and MoveUsable were.
+				Name:          c.mon.Name,
+				Types:         c.mon.Types,
+				Hp:            c.hp,
+				MaxHp:         c.maxHP,
+				Fainted:       c.fainted(),
+				Sprite:        c.mon.Sprite,
+				Moves:         c.mon.Moves,
 				CanAct:        api.NewOptBool(sideActive && c.canAct()),
 				CanBeTargeted: api.NewOptBool(!sideActive && c.canBeTargeted()),
 				UsableMoves:   c.usableMoves(),
@@ -828,7 +741,6 @@ func (b *battle) resolveStatus(attacker, target *combatant, move api.Move, rng r
 		return
 	}
 
-	// Accuracy first: a move that misses does nothing at all.
 	if !lands(eff.accuracy, attacker.stages.accuracy, rng.Float64()) {
 		say("%s used %s, but it missed!", title(attacker.mon.Name), title(move.Name))
 		return
@@ -848,7 +760,7 @@ func (b *battle) resolveStatus(attacker, target *combatant, move api.Move, rng r
 		})
 
 	case eff.fixedDamage > 0:
-		// Ignores types and stats entirely, which is the point of it.
+		// Ignores types and stats by design.
 		dealt := eff.fixedDamage
 		if dealt > target.hp {
 			dealt = target.hp
@@ -870,7 +782,7 @@ func (b *battle) resolveStatus(attacker, target *combatant, move api.Move, rng r
 			title(attacker.mon.Name), title(move.Name), title(target.mon.Name))
 
 	case eff.disable:
-		// The move it would most likely use again: its strongest.
+		// Disables the strongest move.
 		best, power := -1, 0
 		for i, m := range target.mon.Moves {
 			if m.Power > power {
