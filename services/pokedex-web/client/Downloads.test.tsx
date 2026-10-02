@@ -52,7 +52,6 @@ test('an unrecognised platform shows nothing', async () => {
   await waitFor(() => expect(container.querySelector('#downloads')).toBeNull())
 })
 
-// And the happy path actually renders a link you can click.
 test('a matching build is offered for this machine', async () => {
   vi.stubGlobal('navigator', {
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
@@ -69,6 +68,5 @@ test('a matching build is offered for this machine', async () => {
   const link = await screen.findByRole('link', { name: /Pokedex CLI/ })
   expect(link).toHaveAttribute('href', 'https://x/pokedex-cli_darwin_amd64.tar.gz')
   expect(screen.getByText(/for macOS/)).toBeTruthy()
-  // The escape hatch for everyone else.
   expect(screen.getByRole('link', { name: /other platforms/i })).toBeTruthy()
 })

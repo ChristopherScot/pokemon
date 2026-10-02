@@ -1,14 +1,8 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  // The pokedex client is a file: dependency, so node_modules holds a
-  // SYMLINK to ../pokedex/clients/ts. Without this, Rollup resolves the
-  // client's own imports from that real path, walks up looking for
-  // node_modules, finds none, and fails on "openapi-fetch".
-  //
-  // Node resolves the same way for the same reason - it realpaths by
-  // default - which is why package.json runs server.ts with
-  // --preserve-symlinks. Both the bundler and the runtime need telling.
+  // The pokedex client is a file: dependency (symlink); preserving it here
+  // lets Rollup resolve its transitive deps through the workspace root.
   resolve: {
     preserveSymlinks: true,
   },

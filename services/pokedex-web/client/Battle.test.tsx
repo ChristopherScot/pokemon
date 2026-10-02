@@ -10,10 +10,7 @@ type Battle = components['schemas']['Battle']
 type Mon = components['schemas']['BattlePokemon']
 type Move = components['schemas']['Move']
 
-// Real values from pokedex.json rather than invented ones: Move requires
-// description, effect, pp and damageClass, and a fixture that satisfies
-// the type with placeholder text would still be lying about the data the
-// components render.
+// Real values from pokedex.json so fixtures don't lie about what the components render.
 const move = (over: Partial<Move>): Move => ({
   name: 'tackle', type: 'normal', power: 40,
   description:
@@ -69,14 +66,6 @@ test('a disabled move is a disabled button', () => {
   expect(screen.getByRole('button', { name: /tackle/ })).toBeEnabled()
 })
 
-// Every mon is a button; a fainted one is DISABLED rather than a
-// different element.
-//
-// React reconciles by element type, so swapping button for div tore the
-// subtree down and gave the HP bar a brand new node with no previous
-// width - which is why the drain transition never ran. Measured in
-// Chromium: it jumped straight to the final width with
-// getAnimations().length === 0.
 test('a fainted pokemon cannot be chosen, and is still a button', () => {
   const b = battle({
     sides: [
@@ -90,8 +79,7 @@ test('a fainted pokemon cannot be chosen, and is still a button', () => {
   expect(alive).toBeTruthy()
   expect(alive).not.toBeDisabled()
 
-  // queryByRole skips disabled buttons only for some roles, so ask for
-  // it including hidden, then assert what actually matters.
+  // queryByRole skips disabled buttons for some roles; use hidden: true.
   const fainted = screen.getByRole('button', { name: /geodude/, hidden: true })
   expect(fainted).toBeDisabled()
 })
@@ -137,7 +125,6 @@ test('a super-effective hit is marked', () => {
   expect(screen.getByText('-30 !!')).toBeTruthy()
 })
 
-// A status move carries no damage field at all and has nothing to show.
 test('a status move floats nothing', () => {
   const { rerender } = render(<BattleBoard battle={battle()} me="ash" />)
   rerender(

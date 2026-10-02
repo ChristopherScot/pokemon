@@ -56,16 +56,6 @@ export function MonView({
     + (hard ? ' hit-hard' : hit ? ' hit' : '')
   const slot = `${side}-${index}`
 
-  // Always a <button>, disabled when it is not your turn - never a
-  // <div> instead.
-  //
-  // React reconciles by element TYPE: swapping div for button tears the
-  // whole subtree down and builds a new one, so the .hp bar the width
-  // transition is supposed to animate is a BRAND NEW node with no
-  // previous width. Measured in Chromium: the bar jumped straight to
-  // its final width with getAnimations().length === 0, and the node's
-  // identity changed across the swap. That is why the drain has been
-  // missing since the React port.
   return (
     <button
       type="button"

@@ -1,12 +1,6 @@
-# pokedex-web — the same commands locally and in CI.
+# pokedex-web
 #
-#   make          what you can do
-#   make test     what CI runs, so green here means green there
-#   make run      start it
-#
-# Include Makefile.local for anything specific to this service - a
-# database, a seed step, extra env - and it will not be overwritten when
-# this file is regenerated.
+# Include Makefile.local for service-specific setup; it survives regenerate.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -22,6 +16,7 @@ help:
 	@echo "  make build      the production bundle"
 	@echo "  make test       typecheck and tests (what CI runs)"
 	@echo "  make run        start it on :$(PORT)"
+	@echo "  make regen      regenerate code derived from the spec"
 	@echo "  make clean      remove build output"
 ifneq (,$(wildcard Makefile.local))
 	@$(MAKE) --no-print-directory help-local 2>/dev/null || true
@@ -37,25 +32,26 @@ node_modules: package.json
 build: deps
 	npm run build
 
-# Exactly the Typecheck and Test steps from .github/workflows.
 .PHONY: test
 test: deps
 	npm run typecheck --if-present
 	npm test
 
-# npm start, not `node server.ts`: the script carries flags the server
-# needs, and running the file directly fails in ways that look like a
-# code problem.
 .PHONY: run
 run: deps
 	npm start
 
-# What the image actually runs, from an empty directory - the image
-# copies dist/server.js and nothing else, so a file read at runtime
-# resolves here and 500s in production.
+# What the image runs, from an empty directory - the image copies only
+# dist/server.js, so a file read at runtime resolves here and 500s.
 .PHONY: run-dist
 run-dist: build
 	@tmp=$$(mktemp -d) && cp dist/server.js "$$tmp/" && cd "$$tmp" && PORT=$(PORT) node server.js
+
+.PHONY: regen
+regen:
+	@command -v homelabctl >/dev/null || { \
+		echo "homelabctl not found - https://github.com/ChristopherScot/homelabctl"; exit 1; }
+	@homelabctl regen
 
 .PHONY: clean
 clean:
