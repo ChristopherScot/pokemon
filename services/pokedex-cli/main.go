@@ -1,4 +1,3 @@
-// pokedex-cli
 package main
 
 import (

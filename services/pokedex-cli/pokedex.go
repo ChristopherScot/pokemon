@@ -31,7 +31,6 @@ func withTimeout() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 10*time.Second)
 }
 
-// pokemonCmd lists the Pokedex, optionally filtered by type.
 func pokemonCmd() *cobra.Command {
 	var typ string
 	var limit int
@@ -86,7 +85,6 @@ func pokemonCmd() *cobra.Command {
 	return cmd
 }
 
-// showCmd prints one Pokemon as a card.
 func showCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "show <name>",
@@ -119,7 +117,6 @@ func showCmd() *cobra.Command {
 	return cmd
 }
 
-// typesCmd lists every type with a count.
 func typesCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "types",
@@ -172,7 +169,6 @@ func printCard(p api.Pokemon) {
 	fmt.Println()
 }
 
-// pokemonNames backs tab-completion for `show`.
 func pokemonNames() ([]string, error) {
 	c, err := client()
 	if err != nil {
