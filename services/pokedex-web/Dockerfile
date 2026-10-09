@@ -32,6 +32,18 @@ ENV VERSION=$VERSION
 
 WORKDIR /app
 COPY --from=build --chown=65532:65532 /repo/services/pokedex-web/dist/server.js ./
+# The browser assets are a SECOND build (vite.client.config.ts, outDir
+# dist/assets, manifest: true) and need their own COPY. The server reads
+# that manifest at startup to map entry names to hashed filenames, and
+# exits immediately if it is absent:
+#   Error: no asset manifest - run `npm run build:client` before starting
+#
+# This line is the one thing a regen from the node-service template will
+# silently drop, because the template describes a plain node bundle with
+# a single output. Dropping it was how cd9a3d2 shipped an image that
+# crashlooped 1805 times while the previous ReplicaSet kept serving - the
+# site stayed up, so nothing paged.
+COPY --from=build --chown=65532:65532 /repo/services/pokedex-web/dist/assets ./assets
 
 USER 65532:65532
 EXPOSE 3000
