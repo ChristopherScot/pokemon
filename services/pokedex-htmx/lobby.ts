@@ -1,10 +1,9 @@
-import type { components } from '@christopherscot/pokedex-client'
+import type { WaitingBattle } from '@christopherscot/pokedex-client'
 
 import { HTMX, MORPH } from './assets.ts'
 import { LOBBY_CSS } from './css.ts'
 import { esc } from './types.ts'
 
-type WaitingBattle = components['schemas']['WaitingBattle']
 export type Trainer = { name: string; token: string }
 
 // Stable row id per battle so morph leaves an unchanged row alone and its

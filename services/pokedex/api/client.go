@@ -25,7 +25,7 @@ import (
 
 // ClientVersion tracks the spec's info.version and is sent on every
 // request so a server can see which client versions still call it.
-const ClientVersion = "0.8.0"
+const ClientVersion = "0.8.1"
 
 // No X- prefix: RFC 6648 deprecated it in 2012.
 const ClientVersionHeader = "Client-Version"

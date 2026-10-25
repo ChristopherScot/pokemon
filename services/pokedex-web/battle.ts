@@ -1,13 +1,23 @@
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import createClient, { exponentialRetry, noRetry } from '@christopherscot/pokedex-client'
+import {
+  createBattle,
+  createClient,
+  exponentialRetry,
+  getBattle,
+  joinBattle,
+  listWaitingTrainers,
+  noRetry,
+  registerTrainer,
+  takeTurn,
+} from '@christopherscot/pokedex-client'
 
-import type { components } from '@christopherscot/pokedex-client'
-
-type Battle = components['schemas']['Battle']
-type WaitingBattle = components['schemas']['WaitingBattle']
-type BattleEvent = components['schemas']['BattleEvent']
-type BattlePokemon = components['schemas']['BattlePokemon']
+import type {
+  Battle,
+  BattleEvent,
+  BattlePokemon,
+  WaitingBattle,
+} from '@christopherscot/pokedex-client'
 
 type Trainer = { name: string; token: string }
 
@@ -17,7 +27,7 @@ type NameBody = { name?: string }
 type TurnBody = { attacker: number; move: number; target: number }
 
 const baseUrl = process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local'
-const api = createClient({
+const client = createClient({
   baseUrl,
   policy: process.env.POKEDEX_NO_RETRY ? noRetry : exponentialRetry,
 })
@@ -185,7 +195,7 @@ export function registerBattle(app: FastifyInstance) {
     const me = readTrainer(request)
     let waiting
     try {
-      const { data, error } = await api.GET('/trainers/waiting')
+      const { data, error } = await listWaitingTrainers({ client })
       if (error) {
         request.log.error({ err: error }, 'lobby lookup failed')
         return reply.code(502).type('text/plain').send('pokedex API unavailable\n')
@@ -199,7 +209,7 @@ export function registerBattle(app: FastifyInstance) {
   })
 
   app.get('/battle/waiting', reachable(async (_request, reply) => {
-    const { data, error } = await api.GET('/trainers/waiting')
+    const { data, error } = await listWaitingTrainers({ client })
     if (error) return reply.code(502).send(error)
     return { waiting: data.waiting }
   }))
@@ -207,7 +217,7 @@ export function registerBattle(app: FastifyInstance) {
   app.post<{ Body: NameBody }>('/battle/register', reachable(async (request, reply) => {
     const name = String((request.body || {}).name || '').trim()
     if (!name) return reply.code(400).send({ message: 'name is required' })
-    const { data, error } = await api.POST('/trainers', { body: { name } })
+    const { data, error } = await registerTrainer({ client, body: { name } })
     if (error) return reply.code(409).send(error)
     reply.header('set-cookie',
       `trainer=${encodeURIComponent(JSON.stringify(data))}; Path=/; Max-Age=604800; SameSite=Lax`)
@@ -217,12 +227,13 @@ export function registerBattle(app: FastifyInstance) {
   app.post<{ Body: TeamBody }>('/battle/open', reachable(async (request, reply) => {
     const me = readTrainer(request)
     if (!me) return reply.code(401).send({ message: 'register first' })
-    const { data, error, response } = await api.POST('/battles', {
+    const { data, error, response } = await createBattle({
+      client,
       body: { team: (request.body || {}).team || [] },
-      params: { header: { 'X-Trainer-Token': me.token } },
+      headers: { 'X-Trainer-Token': me.token },
     })
     if (error) {
-      if (response.status === 401) return staleTrainer(reply)
+      if (response?.status === 401) return staleTrainer(reply)
       return reply.code(400).send(error)
     }
     return { id: data.id }
@@ -231,12 +242,14 @@ export function registerBattle(app: FastifyInstance) {
   app.post<{ Params: IdParam; Body: TeamBody }>('/battle/:id/join', reachable(async (request, reply) => {
     const me = readTrainer(request)
     if (!me) return reply.code(401).send({ message: 'register first' })
-    const { data, error, response } = await api.POST('/battles/{id}/join', {
-      params: { path: { id: request.params.id }, header: { 'X-Trainer-Token': me.token } },
+    const { data, error, response } = await joinBattle({
+      client,
+      path: { id: request.params.id },
+      headers: { 'X-Trainer-Token': me.token },
       body: { team: (request.body || {}).team || [] },
     })
     if (error) {
-      if (response.status === 401) return staleTrainer(reply)
+      if (response?.status === 401) return staleTrainer(reply)
       return reply.code(409).send(error)
     }
     return { id: data.id }
@@ -249,9 +262,7 @@ export function registerBattle(app: FastifyInstance) {
   })
 
   app.get<{ Params: IdParam }>('/battle/:id/state', reachable(async (request, reply) => {
-    const { data, error } = await api.GET('/battles/{id}', {
-      params: { path: { id: request.params.id } },
-    })
+    const { data, error } = await getBattle({ client, path: { id: request.params.id } })
     if (error) return reply.code(404).send(error)
     return data
   }))
@@ -260,12 +271,14 @@ export function registerBattle(app: FastifyInstance) {
     const me = readTrainer(request)
     if (!me) return reply.code(401).send({ message: 'register first' })
     const { attacker, move, target } = request.body || {}
-    const { data, error, response } = await api.POST('/battles/{id}/turn', {
-      params: { path: { id: request.params.id }, header: { 'X-Trainer-Token': me.token } },
+    const { data, error, response } = await takeTurn({
+      client,
+      path: { id: request.params.id },
+      headers: { 'X-Trainer-Token': me.token },
       body: { attacker, move, target },
     })
     if (error) {
-      if (response.status === 401) return staleTrainer(reply)
+      if (response?.status === 401) return staleTrainer(reply)
       return reply.code(409).send(error)
     }
     return data

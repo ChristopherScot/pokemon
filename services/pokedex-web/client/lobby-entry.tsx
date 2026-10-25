@@ -4,11 +4,11 @@ import { createRoot } from 'react-dom/client'
 
 import { Lobby, type Trainer } from './Lobby.tsx'
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { WaitingBattle } from '@christopherscot/pokedex-client'
 
 const boot = JSON.parse(
   document.getElementById('boot')?.textContent || '{}',
-) as { me: Trainer | null; waiting: components['schemas']['WaitingBattle'][] }
+) as { me: Trainer | null; waiting: WaitingBattle[] }
 
 const root = document.getElementById('root')
 if (root) {

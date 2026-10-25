@@ -1,13 +1,11 @@
 import { useState } from 'react'
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { Battle, Side } from '@christopherscot/pokedex-client'
 
 import { MonView } from './Mon.tsx'
 import { V, checkTurn, effectBand } from './shared.ts'
 import { useFloats } from './useFloats.ts'
 
-type Battle = components['schemas']['Battle']
-type Side = components['schemas']['Side']
 
 function sideFor(b: Battle, me: string): { mine: Side; theirs: Side } | null {
   const i = b.sides.findIndex((s) => s.trainer === me)

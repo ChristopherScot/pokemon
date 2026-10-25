@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { Battle } from '@christopherscot/pokedex-client'
 
 import { effectBand } from './shared.ts'
 
-type Battle = components['schemas']['Battle']
 
 export type Float = {
   id: number

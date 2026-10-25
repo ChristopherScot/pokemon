@@ -1,7 +1,18 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import type { components } from '@christopherscot/pokedex-client'
+import type { Pokemon } from '@christopherscot/pokedex-client'
 
-import { api } from './api.ts'
+import { client } from './api.ts'
+import {
+  createBattle,
+  getBattle,
+  getPokemon,
+  joinBattle,
+  listPokemon,
+  listTypes,
+  listWaitingTrainers,
+  registerTrainer,
+  takeTurn,
+} from '@christopherscot/pokedex-client'
 import { byURL } from './assets.ts'
 import { board, battlePage, goneBoard, sideFor, type Turn } from './battle.ts'
 import { downloadsFooter } from './downloads.ts'
@@ -9,7 +20,6 @@ import { lobbyPage, registerRow, waitingRows, type Trainer } from './lobby.ts'
 import { filters, grid, page, teamSlots, url, type Ctx } from './pokedex.ts'
 import { esc, TEAM_SIZE } from './types.ts'
 
-type Pokemon = components['schemas']['Pokemon']
 
 // Shape-check: JSON.parse returns truthy junk (5, "hi") that would sail past
 // `if (!me)` and send `X-Trainer-Token: undefined` to the API.
@@ -60,7 +70,7 @@ async function spritesFor(names: string[]): Promise<Record<string, string>> {
   if (names.length === 0) return {}
   const out: Record<string, string> = {}
   const found = await Promise.all(names.map((name) =>
-    api.GET('/pokemon/{name}', { params: { path: { name } } }).catch(() => null)))
+    getPokemon({ client, path: { name } }).catch(() => null)))
   for (const [i, hit] of found.entries()) {
     if (hit && !hit.error && hit.data) out[names[i]] = hit.data.sprite
   }
@@ -98,8 +108,8 @@ export function register(app: FastifyInstance) {
     let list, typeList
     try {
       ;[list, typeList] = await Promise.all([
-        api.GET('/pokemon', { params: { query: active ? { type: active } : {} } }),
-        api.GET('/types', {}),
+        listPokemon({ client, query: active ? { type: active } : {} }),
+        listTypes({ client }),
       ])
     } catch (err) {
       request.log.error({ err }, 'pokedex unreachable')
@@ -144,8 +154,8 @@ export function register(app: FastifyInstance) {
     let list, typeList
     try {
       ;[list, typeList] = await Promise.all([
-        api.GET('/pokemon', { params: { query: active ? { type: active } : {} } }),
-        api.GET('/types', {}),
+        listPokemon({ client, query: active ? { type: active } : {} }),
+        listTypes({ client }),
       ])
     } catch (err) {
       request.log.error({ err }, 'pokedex unreachable')
@@ -172,7 +182,7 @@ export function register(app: FastifyInstance) {
   app.get('/battle', async (request, reply) => {
     const me = readTrainer(request)
     try {
-      const { data, error } = await api.GET('/trainers/waiting')
+      const { data, error } = await listWaitingTrainers({ client })
       if (error) return reply.code(502).type('text/plain').send('pokedex API unavailable\n')
       return reply.type('text/html').send(lobbyPage({ me, waiting: data.waiting }))
     } catch (err) {
@@ -183,7 +193,7 @@ export function register(app: FastifyInstance) {
 
   app.get('/battle/waiting', async (request, reply) => {
     try {
-      const { data, error } = await api.GET('/trainers/waiting')
+      const { data, error } = await listWaitingTrainers({ client })
       if (error) return reply.code(502).send('')
       return reply.type('text/html').send(waitingRows(data.waiting))
     } catch {
@@ -213,7 +223,7 @@ export function register(app: FastifyInstance) {
 
     let created
     try {
-      created = await api.POST('/trainers', { body: { name } })
+      created = await registerTrainer({ client, body: { name } })
     } catch (err) {
       request.log.error({ err }, 'pokedex unreachable')
       return again('the pokedex is unreachable — try again in a moment')
@@ -239,18 +249,21 @@ export function register(app: FastifyInstance) {
   ) => {
     try {
       if (join) {
-        const { data, error, response } = await api.POST('/battles/{id}/join', {
-          params: { path: { id: join }, header: { 'X-Trainer-Token': me.token } },
+        const { data, error, response } = await joinBattle({
+          client,
+          path: { id: join },
+          headers: { 'X-Trainer-Token': me.token },
           body: { team },
         })
-        if (error) return rejected(reply, response.status, team, join, active)
+        if (error) return rejected(reply, response?.status ?? 502, team, join, active)
         return toBattle(reply, data.id)
       }
-      const { data, error, response } = await api.POST('/battles', {
+      const { data, error, response } = await createBattle({
+        client,
         body: { team },
-        params: { header: { 'X-Trainer-Token': me.token } },
+        headers: { 'X-Trainer-Token': me.token },
       })
-      if (error) return rejected(reply, response.status, team, join, active)
+      if (error) return rejected(reply, response?.status ?? 502, team, join, active)
       return toBattle(reply, data.id)
     } catch (err) {
       request.log.error({ err }, 'pokedex unreachable')
@@ -330,13 +343,15 @@ export function register(app: FastifyInstance) {
 
     let why = ''
     try {
-      const { error, response } = await api.POST('/battles/{id}/turn', {
-        params: { path: { id: request.params.id }, header: { 'X-Trainer-Token': me.token } },
+      const { error, response } = await takeTurn({
+        client,
+        path: { id: request.params.id },
+        headers: { 'X-Trainer-Token': me.token },
         body: sel,
       })
       if (error) {
         why = String((error as { message?: string }).message ?? 'that move was rejected')
-        if (response.status === 401) why = 'register first'
+        if (response?.status === 401) why = 'register first'
       }
     } catch (err) {
       request.log.error({ err }, 'pokedex unreachable')
@@ -350,7 +365,7 @@ export function register(app: FastifyInstance) {
     request: FastifyRequest, id: string, me: string, sel: Turn, rejected: string,
   ): Promise<string> {
     try {
-      const { data, error } = await api.GET('/battles/{id}', { params: { path: { id } } })
+      const { data, error } = await getBattle({ client, path: { id } })
       if (error || !data) {
         return goneBoard('this battle is over — the server restarted, or it expired')
       }

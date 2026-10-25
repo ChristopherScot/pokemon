@@ -1,11 +1,10 @@
 // Guards against the client re-deriving turn rules from the raw inputs instead of the server's verdict fields.
 import { expect, test } from 'vitest'
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { Battle } from '@christopherscot/pokedex-client'
 
 import { checkTurn } from './shared.ts'
 
-type Battle = components['schemas']['Battle']
 
 const mon = (name: string, over: Record<string, unknown> = {}) => ({
   name,

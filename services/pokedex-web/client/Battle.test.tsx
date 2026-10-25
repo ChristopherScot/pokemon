@@ -2,13 +2,11 @@
 import { act, render, screen } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { Battle, BattlePokemon, Move } from '@christopherscot/pokedex-client'
 
 import { BattleBoard } from './Battle.tsx'
 
-type Battle = components['schemas']['Battle']
-type Mon = components['schemas']['BattlePokemon']
-type Move = components['schemas']['Move']
+type Mon = BattlePokemon
 
 // Real values from pokedex.json so fixtures don't lie about what the components render.
 const move = (over: Partial<Move>): Move => ({

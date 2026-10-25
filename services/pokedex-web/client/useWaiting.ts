@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { WaitingBattle } from '@christopherscot/pokedex-client'
 
 import { V } from './shared.ts'
 
-type Waiting = components['schemas']['WaitingBattle']
+type Waiting = WaitingBattle
 
 const POLL_MS = 3000
 

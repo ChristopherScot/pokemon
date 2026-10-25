@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { Pokemon } from '@christopherscot/pokedex-client'
 
 import { colour } from '../types.ts'
 import { Card } from './Card.tsx'
@@ -11,7 +11,6 @@ import { useTopbarHeight } from './useTopbarHeight.ts'
 import { TEAM_SIZE } from './shared.ts'
 import { useTeam } from './useTeam.ts'
 
-type Pokemon = components['schemas']['Pokemon']
 
 export type TypeSummary = { name: string; count: number }
 
