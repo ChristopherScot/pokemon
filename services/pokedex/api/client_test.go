@@ -715,7 +715,59 @@ func TestAZeroValuedBreakerDisablesItself(t *testing.T) {
 			b.record(unwell)
 		}
 	}
+
+	// The probe gate compares against a real clock, and a zero
+	// Cooldown means it needs time.Since(openedAt) > 0 - so without a
+	// gap this asserts that the monotonic clock advanced a nanosecond
+	// between the last record() and here. It often has not: 60 of 200
+	// bare runs failed. -race slows execution enough to hide it,
+	// which is every sanctioned path - the Makefile runs -race - so
+	// it would have failed for a consumer and never for us.
+	time.Sleep(time.Millisecond)
+
 	if !b.allow() {
 		t.Error("a zero-valued Breaker started refusing traffic")
+	}
+}
+
+// An ignored outcome from a request holding NO probe must not touch
+// the clock. Do consults the breaker once, so requests already in
+// flight when it tripped land afterwards; a caller cancelling one of
+// those says nothing about the dependency and must not push its
+// recovery further away.
+func TestAnIgnoredNonProbeDoesNotDelayRecovery(t *testing.T) {
+	b := &Breaker{FailedRequests: 1, Cooldown: 50 * time.Millisecond}
+	b.record(unwell)
+	time.Sleep(30 * time.Millisecond)
+
+	// Lands late, cancelled by its caller, holding no probe.
+	b.record(ignore)
+
+	time.Sleep(30 * time.Millisecond) // 60ms since the trip
+	if !b.allow() {
+		t.Error("the cooldown was restarted by a request that learned nothing")
+	}
+}
+
+// The two ignore paths at FailedRequests zero, which is where a
+// sweep is weakest: `failures >= FailedRequests` is vacuously true
+// there, so it stops discriminating and the probe is the only thing
+// left that decides whether the clock moves.
+func TestIgnoreArmsTheClockOnlyForAProbe(t *testing.T) {
+	marker := time.Unix(1, 0)
+
+	held := &Breaker{FailedRequests: 0, Cooldown: time.Hour, probing: true, openedAt: marker}
+	held.record(ignore)
+	if held.probing {
+		t.Error("the probe was not handed back")
+	}
+	if held.openedAt.Equal(marker) {
+		t.Error("an ignored probe must spend its slot and arm the clock")
+	}
+
+	none := &Breaker{FailedRequests: 0, Cooldown: time.Hour, openedAt: marker}
+	none.record(ignore)
+	if !none.openedAt.Equal(marker) {
+		t.Error("an ignored non-probe armed the clock and delayed recovery")
 	}
 }

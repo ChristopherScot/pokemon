@@ -230,44 +230,55 @@ func (b *Breaker) allow() bool {
 	return false
 }
 
-// record is the other half of allow, and every path through it has
-// to leave two things true: the probe slot is back, and the clock is
-// in a state that bounds the next probe. Clearing the run does the
-// second implicitly; so does arming openedAt. An outcome that does
-// NEITHER - which is what ignore was when it was added - leaves an
-// open circuit with an elapsed cooldown, handing a fresh probe to
-// every caller that asks.
+// record is the other half of allow. It takes the probe slot back if
+// this request held it, updates the failure run, and re-arms the
+// cooldown when the circuit is open and this request did not prove
+// recovery.
 func (b *Breaker) record(o outcome) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	// Taken back before the ignore branch returns: a probe that is
-	// never returned wedges the breaker closed for good.
+
 	probe := b.probing
 	b.probing = false
 
-	if o == ignore {
-		// An inconclusive probe still spends the slot. We learned
-		// nothing, so the dependency is still presumed down - and
-		// without re-arming, the cooldown has already elapsed, so
-		// the next caller gets another probe, and the next. An open
-		// circuit would stop throttling exactly when the callers
-		// most likely to cancel are the ones waiting on it.
-		if probe {
-			b.openedAt = time.Now()
-		}
-		return
-	}
-	if o == healthy {
+	// Each outcome declares what it PROVED, and the clock below reads
+	// those rather than the outcome's name. An outcome added later
+	// has to say so to count as recovery or as a failure, and
+	// silence gets the conservative answer on both.
+	//
+	// Keyed on the name instead, a second success-like outcome would
+	// arm the clock on a breaker that had just recovered, and a
+	// failure-like one would extend the run without moving the
+	// cooldown - which is the early-expiry bug the >= below exists
+	// to prevent, arriving from the other side.
+	recovered, extended := false, false
+	switch o {
+	case healthy:
 		b.failures = 0
+		recovered = true
+	case unwell:
+		b.failures++
+		extended = true
+	case ignore:
+		// Tells us nothing, so the run stands: neither extended nor
+		// cleared.
+	}
+
+	// A probe that did not prove recovery spends its slot and costs a
+	// full cooldown. Without this an open circuit hands a fresh probe
+	// to every caller the moment the first one reports back.
+	if probe && !recovered {
+		b.openedAt = time.Now()
 		return
 	}
-	b.failures++
+
+	// A failure moves the clock so the cooldown is measured from the
+	// last one rather than the first.
+	//
 	// >= not ==: requests already in flight when the breaker tripped
-	// land afterwards, and with == their failures would not move the
-	// clock, so the cooldown would be measured from the first trip
-	// and expire early. A failed probe re-arms it for the same
-	// reason - the dependency is still down.
-	if b.failures >= b.FailedRequests || probe {
+	// land afterwards, and with == their failures would not move it,
+	// so the cooldown would expire early.
+	if extended && b.failures >= b.FailedRequests {
 		b.openedAt = time.Now()
 	}
 }
