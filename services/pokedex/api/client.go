@@ -100,18 +100,108 @@ func retryable(req *http.Request, resp *http.Response, err error) bool {
 	if err != nil {
 		return true
 	}
+	// Same carve-out the breaker makes: a permanently unimplemented
+	// route does not become implemented on the next attempt, so
+	// retrying it only spends the budget.
+	if permanentProtocolError(resp.StatusCode) {
+		return false
+	}
 	return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
+}
+
+// outcome is what one request says about the service's health.
+//
+// Three values, not two: "this tells us nothing" is different from
+// "this went fine". A breaker that treats them alike lets an ignored
+// outcome ERASE a run of real failures - a service answering 500 on
+// one route and 501 on another never trips, because each 501 zeroes
+// the count the 500s built up.
+//
+// sony/gobreaker draws the same three-way line: onSuccess clears
+// ConsecutiveFailures, onFailure increments it, and onExclusion
+// touches neither. Its exclusions are opt-in and keyed on errors
+// rather than status codes, because it wraps more than HTTP; this
+// client only speaks HTTP, and four consumers should not each have
+// to re-derive which statuses mean the service is unwell.
+type outcome int
+
+const (
+	// healthy: the service answered, and the answer was fine.
+	healthy outcome = iota
+	// unwell: evidence the SERVICE is in trouble.
+	unwell
+	// ignore: neither. The caller gave up, or the answer was a
+	// permanent statement about the request rather than the service.
+	ignore
+)
+
+// classify says what one request's outcome tells us about the
+// service, which is the only thing a breaker should count.
+//
+// Two things look like failures and are not:
+//
+// A cancelled or timed-out request says the caller changed its mind.
+// Counting those meant three impatient taps in a CLI or a phone app
+// opened the circuit against a server that was answering fine.
+//
+// 501 and 505 are permanent protocol answers. The route is not
+// implemented, or the version is not spoken; neither recovers after
+// a cooldown, so counting them leaves the breaker flapping open
+// forever against a service that is working exactly as built.
+func classify(req *http.Request, resp *http.Response, err error) outcome {
+	// Whose deadline expired? Our own per-attempt Timeout surfaces as
+	// context.DeadlineExceeded too, and a service too slow to answer
+	// within it IS unwell - that is a case the breaker exists for. So
+	// the question is not what the error says, it is whether the
+	// CALLER's context is still alive. If it is, the clock that ran
+	// out was ours.
+	if err != nil && req.Context().Err() != nil {
+		return ignore
+	}
+	if err != nil {
+		return unwell
+	}
+	if resp == nil {
+		// Unreachable: http.Client.Do returns one or the other.
+		// Stated rather than asserted, so a future path out of the
+		// loop gets this instead of a silent "healthy".
+		return ignore
+	}
+	if permanentProtocolError(resp.StatusCode) {
+		return ignore
+	}
+	if resp.StatusCode >= http.StatusInternalServerError {
+		return unwell
+	}
+	return healthy
+}
+
+// permanentProtocolError reports whether a 5xx is a permanent
+// statement about THIS REQUEST rather than evidence about the
+// service's health: the route is not implemented (501), or the HTTP
+// version is not spoken (505). Neither changes after a cooldown, so
+// neither is worth a retry and neither belongs in the breaker's
+// count.
+func permanentProtocolError(status int) bool {
+	return status == http.StatusNotImplemented || status == http.StatusHTTPVersionNotSupported
 }
 
 // ErrCircuitOpen fails a caller immediately rather than queueing it
 // behind a timeout it is going to hit anyway.
 var ErrCircuitOpen = errors.New("circuit open")
 
-// Breaker trips after Threshold consecutive failures and lets one
-// request through every Cooldown to probe recovery.
+// Breaker trips after FailedRequests consecutive failures and lets
+// one request through every Cooldown to probe recovery.
 type Breaker struct {
-	Threshold int
-	Cooldown  time.Duration
+	// FailedRequests is how many consecutive failed REQUESTS open the
+	// circuit. A request that exhausted its retries counts once.
+	//
+	// Zero lets everything through rather than opening immediately:
+	// a Breaker nobody configured should not refuse traffic. Leave
+	// Breaker nil on HTTPOptions to disable circuit breaking; this
+	// field is for choosing where the circuit trips.
+	FailedRequests int
+	Cooldown       time.Duration
 
 	mu       sync.Mutex
 	failures int
@@ -127,7 +217,7 @@ type Breaker struct {
 func (b *Breaker) allow() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.failures < b.Threshold {
+	if b.failures < b.FailedRequests {
 		return true
 	}
 	// Open. One caller past the cooldown gets through to find out
@@ -140,13 +230,34 @@ func (b *Breaker) allow() bool {
 	return false
 }
 
-func (b *Breaker) record(failed bool) {
+// record is the other half of allow, and every path through it has
+// to leave two things true: the probe slot is back, and the clock is
+// in a state that bounds the next probe. Clearing the run does the
+// second implicitly; so does arming openedAt. An outcome that does
+// NEITHER - which is what ignore was when it was added - leaves an
+// open circuit with an elapsed cooldown, handing a fresh probe to
+// every caller that asks.
+func (b *Breaker) record(o outcome) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	// Taken back before the ignore branch returns: a probe that is
+	// never returned wedges the breaker closed for good.
 	probe := b.probing
 	b.probing = false
 
-	if !failed {
+	if o == ignore {
+		// An inconclusive probe still spends the slot. We learned
+		// nothing, so the dependency is still presumed down - and
+		// without re-arming, the cooldown has already elapsed, so
+		// the next caller gets another probe, and the next. An open
+		// circuit would stop throttling exactly when the callers
+		// most likely to cancel are the ones waiting on it.
+		if probe {
+			b.openedAt = time.Now()
+		}
+		return
+	}
+	if o == healthy {
 		b.failures = 0
 		return
 	}
@@ -156,7 +267,7 @@ func (b *Breaker) record(failed bool) {
 	// clock, so the cooldown would be measured from the first trip
 	// and expire early. A failed probe re-arms it for the same
 	// reason - the dependency is still down.
-	if b.failures >= b.Threshold || probe {
+	if b.failures >= b.FailedRequests || probe {
 		b.openedAt = time.Now()
 	}
 }
@@ -291,9 +402,7 @@ func (c *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 	// closed is worse than the stampede it replaced, because it does
 	// not heal.
 	if c.breaker != nil {
-		defer func() {
-			c.breaker.record(err != nil || (resp != nil && resp.StatusCode >= http.StatusInternalServerError))
-		}()
+		defer func() { c.breaker.record(classify(req, resp, err)) }()
 	}
 
 	for attempt := 0; ; attempt++ {
