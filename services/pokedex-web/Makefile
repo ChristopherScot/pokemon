@@ -25,8 +25,24 @@ endif
 .PHONY: deps
 deps: node_modules
 node_modules: package.json
+	@$(MAKE) --no-print-directory client
 	npm install
 	@touch node_modules
+
+# A generated client ships TypeScript and compiles to dist/, which npm
+# resolves `main` into. A `file:` dependency's devDependencies are not
+# installed by the consumer, so its own prepare/prepack never runs -
+# nothing builds it and tsc reports the package as missing entirely.
+#
+# Both layouts: clients/ts beside the service in a single-service repo,
+# and a sibling service's in a monorepo. A service that consumes no
+# client matches neither and does nothing.
+.PHONY: client
+client:
+	@for c in ./clients/ts ../*/clients/ts; do \
+	  [ -f "$$c/package.json" ] || continue; \
+	  ( cd "$$c" && npm install --no-audit --no-fund && npm run build ); \
+	done
 
 .PHONY: build
 build: deps
