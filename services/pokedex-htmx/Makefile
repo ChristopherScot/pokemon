@@ -23,9 +23,8 @@ ifneq (,$(wildcard Makefile.local))
 endif
 
 .PHONY: deps
-deps: node_modules
+deps: client node_modules
 node_modules: package.json
-	@$(MAKE) --no-print-directory client
 	npm install
 	@touch node_modules
 
@@ -33,6 +32,10 @@ node_modules: package.json
 # resolves `main` into. A `file:` dependency's devDependencies are not
 # installed by the consumer, so its own prepare/prepack never runs -
 # nothing builds it and tsc reports the package as missing entirely.
+#
+# A prerequisite of deps rather than of node_modules, because CI runs
+# `npm ci` itself before `make test`. node_modules then already exists,
+# that target is satisfied, and anything hanging off it never runs.
 #
 # Both layouts: clients/ts beside the service in a single-service repo,
 # and a sibling service's in a monorepo. A service that consumes no
