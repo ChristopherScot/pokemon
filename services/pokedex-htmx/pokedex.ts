@@ -101,7 +101,7 @@ export function card(mon: Pokemon, ctx: Ctx): string {
 export function grid(ctx: Ctx, oob = false): string {
   // morph rather than default outerHTML: a plain oob swap replaces the
   // element and destroys queued clicks against the cards it removed.
-  return `<main class="grid" id="grid"${oob ? ' hx-swap-oob="morph:outerHTML"' : ''}>` +
+  return `<main class="grid" id="grid"${oob ? ' hx-swap-oob="morph"' : ''}>` +
     `${ctx.pokemon.map((p) => card(p, ctx)).join('')}` +
     `<p class="empty" id="no-match" hidden>nothing matches “<span id="no-match-q"></span>”.</p>` +
     `</main>`
@@ -114,7 +114,7 @@ export function filters(ctx: Ctx, oob = false): string {
 
   // Each filter is a shareable URL; the join id and team ride along so a
   // filter mid-pick does not drop them.
-  return `<nav class="filters" id="filters"${oob ? ' hx-swap-oob="morph:outerHTML"' : ''}>` +
+  return `<nav class="filters" id="filters"${oob ? ' hx-swap-oob="morph"' : ''}>` +
     link({}, 'all', !ctx.active) +
     ctx.types.map((t) =>
       link({ active: t.name }, `${esc(t.name)} <small>${t.count}</small>`,

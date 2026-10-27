@@ -237,9 +237,9 @@ test('a picked pokemon keeps its sprite after filtering it out of the grid', () 
 test('the filter links are re-rendered with the team after a pick', () => {
   const picked = ctx({ team: ['pikachu'], types: [{ name: 'water', count: 18 }] })
   const nav = filters(picked, true)
-  assert.match(nav, /hx-swap-oob="morph:outerHTML"/)
+  assert.match(nav, /hx-swap-oob="morph"/)
   assert.match(nav, /href="\/\?type=water&team=pikachu"/)
-  assert.match(grid(picked, true), /id="grid" hx-swap-oob="morph:outerHTML"/)
+  assert.match(grid(picked, true), /id="grid" hx-swap-oob="morph"/)
   assert.doesNotMatch(grid(picked), /hx-swap-oob/)
 })
 
@@ -304,8 +304,8 @@ test('picking cards in a hurry cannot lose a pick', () => {
 // the elements it removed; morph mutates in place instead.
 test('an out-of-band grid swap does not destroy the cards it swaps', () => {
   const html = grid(ctx({ team: ['pikachu'] }), true)
-  assert.match(html, /hx-swap-oob="morph:outerHTML"/)
+  assert.match(html, /hx-swap-oob="morph"/)
   assert.doesNotMatch(html, /hx-swap-oob="true"/,
     'a plain oob swap replaces the element and loses queued clicks')
-  assert.match(filters(ctx(), true), /hx-swap-oob="morph:outerHTML"/)
+  assert.match(filters(ctx(), true), /hx-swap-oob="morph"/)
 })

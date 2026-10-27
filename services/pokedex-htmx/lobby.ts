@@ -1,6 +1,6 @@
 import type { WaitingBattle } from '@christopherscot/pokedex-client'
 
-import { HTMX, MORPH } from './assets.ts'
+import { HTMX, MORPH, PAGE_JS } from './assets.ts'
 import { LOBBY_CSS } from './css.ts'
 import { esc } from './types.ts'
 
@@ -71,6 +71,7 @@ export function lobbyPage(
   ${waitingList(waiting)}
 <script src="${HTMX.url}"></script>
 <script src="${MORPH.url}"></script>
+<script src="${PAGE_JS.url}"></script>
 </body></html>`
 }
 

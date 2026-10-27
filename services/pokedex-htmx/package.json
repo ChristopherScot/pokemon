@@ -12,7 +12,7 @@
     "start:dist": "node dist/server.js",
     "dev": "concurrently -n vite,node -c cyan,green \"vite build --watch\" \"node --watch dist/server.js\"",
     "dev:fast": "node --watch --preserve-symlinks server.ts",
-    "test": "npm run typecheck && POKEDEX_NO_RETRY=1 node --preserve-symlinks --test",
+    "test": "npm run typecheck && node vendor/check.mjs && POKEDEX_NO_RETRY=1 node --preserve-symlinks --test",
     "typecheck": "tsc --noEmit",
     "vendor": "node vendor/build.mjs"
   },
