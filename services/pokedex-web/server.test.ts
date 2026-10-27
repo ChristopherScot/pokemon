@@ -179,6 +179,8 @@ test('a route renders from an injected client', async () => {
     baseUrl: 'http://pokedex.invalid',
     name: 'pokedex-web-test',
     policy: noRetry,
+    // No init: this fake answers at once, so it never reads the abort
+    // signal the client passes. One testing a timeout would have to.
     fetch: async (input: RequestInfo | URL) => {
       const url = new Request(input).url
       seen.push(url)
