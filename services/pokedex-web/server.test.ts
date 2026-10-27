@@ -2,7 +2,11 @@ import { afterAll, assert, expect, test } from 'vitest'
 
 import { readFile } from 'node:fs/promises'
 
+import Fastify from 'fastify'
+import { createClient, noRetry } from '@christopherscot/pokedex-client'
+
 import { app } from './server.ts'
+import { register as registerPokedex } from './pokedex.ts'
 
 afterAll(() => app.close())
 
@@ -163,4 +167,41 @@ test('the lobby boot island carries no auth token', async () => {
   const html = lobbyPage({ me: { name: 'ash', token: 'secret-token-value' }, waiting: [] })
   expect(html).not.toMatch(/secret-token-value/)
   assert.match(html, /"name":"ash"/, 'but the name is still there')
+})
+
+// What taking the client as an argument is FOR: this builds a second
+// app around a client that never reaches the network, so the route
+// renders from canned data with no pokedex running and no global
+// patched.
+test('a route renders from an injected client', async () => {
+  const seen: string[] = []
+  const client = createClient({
+    baseUrl: 'http://pokedex.invalid',
+    name: 'pokedex-web-test',
+    policy: noRetry,
+    // No init: this fake answers at once, so it never reads the abort
+    // signal the client passes. One testing a timeout would have to.
+    fetch: async (input: RequestInfo | URL) => {
+      const url = new Request(input).url
+      seen.push(url)
+      return Response.json(
+        url.includes('/types')
+          ? { types: [{ name: 'grass', count: 1 }] }
+          : { pokemon: [{ name: 'bulbasaur', sprite: 'x.png', types: ['grass'] }] },
+      )
+    },
+  })
+
+  const probe = Fastify()
+  try {
+    registerPokedex(probe, client)
+    const res = await probe.inject({ method: 'GET', url: '/' })
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toContain('bulbasaur')
+    assert.ok(seen.length > 0, 'the injected fetch was never called')
+    assert.ok(seen.every((u) => u.startsWith('http://pokedex.invalid')),
+      'something went somewhere other than the injected client')
+  } finally {
+    await probe.close()
+  }
 })
