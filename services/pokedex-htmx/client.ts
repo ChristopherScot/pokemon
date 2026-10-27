@@ -6,11 +6,14 @@ import {
 
 /** The pokedex client this service calls with.
  *
- *  A factory rather than a ready-made export: the client holds a
- *  connection pool and, when one is configured, a circuit breaker
- *  whose failure count only means anything if every caller shares the
- *  instance. Built once at the entry point and passed down, so a test
- *  can hand in its own rather than mocking this module's path. */
+ *  A factory rather than a ready-made export: when a breaker is
+ *  configured, its consecutive-failure count only means anything if
+ *  every caller shares one instance. Built at the entry point and
+ *  passed down, so a test can hand in its own.
+ *
+ *  Nothing passes a different one yet: ClientOptions has no fetch
+ *  field, so a fake cannot serve canned data (oapi-clientgen#11).
+ *  The seam is here for when it can. */
 export function pokedexClient() {
   return createClient({
     baseUrl: process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local',
