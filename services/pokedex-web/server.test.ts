@@ -172,8 +172,7 @@ test('the lobby boot island carries no auth token', async () => {
 // What taking the client as an argument is FOR: this builds a second
 // app around a client that never reaches the network, so the route
 // renders from canned data with no pokedex running and no global
-// patched. Before ClientOptions took a fetch, the only ways in were
-// stubbing globalThis or mocking this module's import path.
+// patched.
 test('a route renders from an injected client', async () => {
   const seen: string[] = []
   const client = createClient({

@@ -7,8 +7,7 @@ import {
 /** A factory, not a ready-made export: a module-level client reads
  *  process.env when the import graph evaluates, fixing the retry
  *  policy before anything setting POKEDEX_NO_RETRY afterwards can
- *  take effect. Also leaves a seam to pass a test's own client, once
- *  ClientOptions takes a fetch (oapi-clientgen#11). */
+ *  take effect. A test passes its own client the same way. */
 export function pokedexClient() {
   return createClient({
     baseUrl: process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local',
