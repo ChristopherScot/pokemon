@@ -6,8 +6,7 @@ import (
 )
 
 func TestSeedRoundTrip(t *testing.T) {
-	pool := testPool(t)
-	dropAll(t, pool)
+	pool := emptyPool(t)
 	ctx := context.Background()
 
 	if err := migrate(ctx, pool); err != nil {
@@ -82,8 +81,7 @@ func TestSeedRoundTrip(t *testing.T) {
 }
 
 func TestSeedIsIdempotent(t *testing.T) {
-	pool := testPool(t)
-	dropAll(t, pool)
+	pool := emptyPool(t)
 	ctx := context.Background()
 
 	if err := migrate(ctx, pool); err != nil {

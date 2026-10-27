@@ -12,8 +12,7 @@ import (
 // (baseStats, stages) never surface because every other battle test
 // keeps combatants in memory.
 func TestAWholeGameOverPostgres(t *testing.T) {
-	pool := testPool(t)
-	dropAll(t, pool)
+	pool := emptyPool(t)
 
 	ctx := context.Background()
 	if err := migrate(ctx, pool); err != nil {

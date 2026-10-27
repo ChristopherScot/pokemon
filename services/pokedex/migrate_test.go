@@ -92,19 +92,25 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func dropAll(t *testing.T, pool *pgxpool.Pool) {
+// emptyPool hands back a pool against a schema with none of the
+// service's tables in it. Acquiring and emptying are one step because
+// the tests share the run's schema: a test that acquired without
+// emptying would read whatever the previous one left, which is a
+// quiet wrong answer rather than a failure.
+func emptyPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	pool := testPool(t)
 	ctx := context.Background()
 	const stmt = `DROP TABLE IF EXISTS battle_sides, battles, trainers,
 		pokemon_moves, moves, pokemon, schema_migrations CASCADE`
 	if _, err := pool.Exec(ctx, stmt); err != nil {
-		t.Fatalf("dropping: %v", err)
+		t.Fatalf("emptying %s: %v", runSchema, err)
 	}
+	return pool
 }
 
 func TestMigrateCreatesSchema(t *testing.T) {
-	pool := testPool(t)
-	dropAll(t, pool)
+	pool := emptyPool(t)
 	ctx := context.Background()
 
 	if err := migrate(ctx, pool); err != nil {
@@ -131,8 +137,7 @@ func TestMigrateCreatesSchema(t *testing.T) {
 }
 
 func TestMigrateIsIdempotent(t *testing.T) {
-	pool := testPool(t)
-	dropAll(t, pool)
+	pool := emptyPool(t)
 	ctx := context.Background()
 
 	if err := migrate(ctx, pool); err != nil {
@@ -161,8 +166,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 }
 
 func TestMigrateConcurrentReplicas(t *testing.T) {
-	pool := testPool(t)
-	dropAll(t, pool)
+	pool := emptyPool(t)
 	ctx := context.Background()
 
 	const replicas = 4

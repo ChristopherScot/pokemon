@@ -15,8 +15,7 @@ import (
 
 func freshPG(t *testing.T) (*pgxpool.Pool, *pgStore, *pokedex) {
 	t.Helper()
-	pool := testPool(t)
-	dropAll(t, pool)
+	pool := emptyPool(t)
 	ctx := context.Background()
 	if err := migrate(ctx, pool); err != nil {
 		t.Fatalf("migrate: %v", err)
