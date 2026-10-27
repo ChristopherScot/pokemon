@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
@@ -99,11 +100,24 @@ func runUpdate(checkOnly bool) error {
 	return nil
 }
 
+// Two clients, because the two requests want different patience.
+//
+// Asking GitHub which release is newest is a small JSON call: if it
+// has not answered in 10s it is not going to. Downloading the binary
+// is minutes of transfer on a slow line, so it gets a bound that stops
+// a stalled mirror holding the process open rather than one that cuts
+// off a working download. http.Get would use http.DefaultClient,
+// which has no timeout at all.
+var (
+	apiClient      = &http.Client{Timeout: 10 * time.Second}
+	downloadClient = &http.Client{Timeout: 10 * time.Minute}
+)
+
 // latestRelease returns the newest release belonging to THIS tool.
 // Not /releases/latest, which in a monorepo would be whichever sibling
 // released most recently. Releases come back newest-first.
 func latestRelease() (*githubRelease, error) {
-	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", repoOwner, repoName))
+	resp, err := apiClient.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100", repoOwner, repoName))
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +200,7 @@ func isNewer(latest, current string) bool {
 // be renamed out of the way. The old binary is kept until the swap
 // succeeds so a failure is recoverable.
 func installFrom(url string) error {
-	resp, err := http.Get(url)
+	resp, err := downloadClient.Get(url)
 	if err != nil {
 		return err
 	}
