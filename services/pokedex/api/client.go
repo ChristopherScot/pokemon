@@ -25,7 +25,7 @@ import (
 // SYSTEM (one retry, not five: five can mean five times the traffic to
 // something already struggling).
 //
-//	c, err := api.New(url, api.HTTPOptions{})
+//	c, err := api.New(url, "webapp")
 
 // ClientVersion tracks the spec's info.version and is sent on every
 // request so a server can see which client versions still call it.
@@ -34,7 +34,7 @@ const ClientVersion = "0.9.0"
 // No X- prefix: RFC 6648 deprecated it in 2012.
 const ClientVersionHeader = "Client-Version"
 
-// ClientNameHeader carries HTTPOptions.Name - WHICH service is calling,
+// ClientNameHeader carries New's name argument - WHICH service is calling,
 // where Client-Version says which version of the spec it was built
 // against. Without both, a runaway client cannot be attributed.
 const ClientNameHeader = "Client-Name"
@@ -180,15 +180,8 @@ type Breaker struct {
 	// FailedRequests is how many consecutive failed REQUESTS open the
 	// circuit. A request that exhausted its retries counts once.
 	//
-	// Zero lets everything through rather than opening immediately:
-	// a Breaker nobody configured should not refuse traffic. Leave
-	// Breaker nil on HTTPOptions to disable circuit breaking; this
-	// field is for choosing where the circuit trips.
-	//
-	// The TypeScript client deliberately does the opposite - its
-	// `new Breaker()` takes constructor defaults and opens after 5 -
-	// because a constructor can carry a default and a zero value
-	// cannot. Both are tested. Do not "fix" either to match.
+	// Zero lets everything through. Use WithBreaker, which sets it
+	// explicitly.
 	FailedRequests int
 	Cooldown       time.Duration
 
@@ -272,24 +265,53 @@ func (b *Breaker) record(o outcome) {
 	}
 }
 
-// HTTPOptions configure the client. The zero value is the default set.
-type HTTPOptions struct {
-	// Timeout bounds one attempt; zero means 5s and a retry gets its own.
-	Timeout time.Duration
-	// Policy defaults to SingleRetry.
-	Policy RetryPolicy
-	// Breaker is optional; nil disables circuit breaking.
-	Breaker *Breaker
+// TransportOption configures the transport New hands to ogen's
+// WithClient. An option nobody passes leaves the default untouched,
+// so no zero value has to stand in for "unset".
+//
+// Not Option or ClientOption: ogen generates both into this package.
+type TransportOption func(*HTTPClient)
 
-	// MaxRetryAfter caps how long a server's Retry-After can park this
-	// client. Zero means 30s. A server may answer with an hour, and
-	// sleeping that long inside a request looks exactly like a hang.
-	MaxRetryAfter time.Duration
+// WithTimeout bounds ONE attempt; a retry gets its own. Default 5s.
+func WithTimeout(d time.Duration) TransportOption {
+	return func(c *HTTPClient) { c.http.Timeout = d }
+}
 
-	// Name is the CALLER's own service name, sent as Client-Name. Empty
-	// records the caller as unknown, which is honest; guessing from the
-	// user agent would put a confident wrong answer in the logs.
-	Name string
+// WithPolicy chooses how many retries and how long between them.
+// Default SingleRetry.
+func WithPolicy(p RetryPolicy) TransportOption {
+	return func(c *HTTPClient) { c.policy = p }
+}
+
+// WithBreaker turns on circuit breaking, which is otherwise off.
+// failedRequests counts whole REQUESTS: one that exhausted its
+// retries counts once. 5 and 30s are the usual pair, and what the
+// TypeScript client's new Breaker() uses when given nothing.
+func WithBreaker(failedRequests int, cooldown time.Duration) TransportOption {
+	return func(c *HTTPClient) {
+		c.breaker = &Breaker{FailedRequests: failedRequests, Cooldown: cooldown}
+	}
+}
+
+// withBreaker installs an already-built Breaker, for tests that then
+// assert on it. Unexported so callers cannot pass one whose zero
+// value disables the circuit.
+func withBreaker(b *Breaker) TransportOption {
+	return func(c *HTTPClient) { c.breaker = b }
+}
+
+// WithMaxRetryAfter caps how long a server's Retry-After can park this
+// client. Default 30s; past it the request fails rather than waiting,
+// since sleeping an hour inside a request looks like a hang.
+func WithMaxRetryAfter(d time.Duration) TransportOption {
+	return func(c *HTTPClient) { c.maxRetryAfter = d }
+}
+
+// WithTransport swaps the RoundTripper, which is where tracing goes:
+// otelhttp.NewTransport(http.DefaultTransport). Retries live above the
+// transport, so a retried request traces as one span per attempt.
+func WithTransport(rt http.RoundTripper) TransportOption {
+	return func(c *HTTPClient) { c.http.Transport = rt }
 }
 
 // HTTPClient satisfies ogen's ht.Client.
@@ -303,46 +325,61 @@ type HTTPClient struct {
 
 var _ ht.Client = (*HTTPClient)(nil)
 
-func NewHTTPClient(o HTTPOptions) *HTTPClient {
-	if o.Timeout == 0 {
-		o.Timeout = 5 * time.Second
+// NewHTTPClient builds the transport New installs. name is the
+// CALLER's own service name, sent as Client-Name. It is required
+// because the cost of omitting it falls on whoever operates the
+// service being called, not on the caller who left it out.
+func NewHTTPClient(name string, opts ...TransportOption) *HTTPClient {
+	c := &HTTPClient{
+		http:          &http.Client{Timeout: 5 * time.Second},
+		policy:        SingleRetry{},
+		maxRetryAfter: 30 * time.Second,
+		name:          name,
 	}
-	if o.Policy == nil {
-		o.Policy = SingleRetry{}
+	for _, o := range opts {
+		o(c)
 	}
-	if o.MaxRetryAfter == 0 {
-		o.MaxRetryAfter = 30 * time.Second
-	}
-	return &HTTPClient{
-		http:          &http.Client{Timeout: o.Timeout},
-		policy:        o.Policy,
-		breaker:       o.Breaker,
-		maxRetryAfter: o.MaxRetryAfter,
-		name:          o.Name,
-	}
+	return c
 }
 
 // New is the constructor a caller should reach for: it installs the
-// resilience above, so the zero HTTPOptions gives a 5s timeout, one
-// retry on idempotent methods, and Retry-After obeyed.
+// resilience above, so New with no options gives a 5s timeout, one
+// retry on idempotent methods, Retry-After obeyed to 30s, and no
+// circuit breaking.
 //
-//	c, err := api.New(url, api.HTTPOptions{})
-//	c, err := api.New(url, api.HTTPOptions{Policy: api.ExponentialRetry{}})
+// name is this service's own name, not the one being called.
+//
+//	c, err := api.New(url, "webapp")
+//	c, err := api.New(url, "webapp", api.WithPolicy(api.ExponentialRetry{}))
+//	c, err := api.New(url, "webapp", api.WithBreaker(5, 30*time.Second))
 //
 // NewClient, which ogen generates, installs none of it - its default
 // is http.DefaultClient, which has NO timeout. It stays reachable for
 // a caller that wants a different transport entirely, but it is not
 // the one to reach for.
-func New(serverURL string, o HTTPOptions) (*Client, error) {
-	return NewClient(serverURL, WithClient(NewHTTPClient(o)))
+func New(serverURL, name string, opts ...TransportOption) (*Client, error) {
+	return NewClient(serverURL, WithClient(NewHTTPClient(name, opts...)))
+}
+
+// isDigits reports whether every byte is an ASCII digit, with an
+// optional leading +, matching what Atoi accepts in range.
+func isDigits(s string) bool {
+	s = strings.TrimPrefix(s, "+")
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // retryAfter reads the server's own answer. RFC 9110 allows either a
 // delay in seconds or an HTTP-date, and servers send both in the wild.
-// Capped so an hour-long value cannot masquerade as a hang.
-// retryAfter reads the server's own answer. The third result says
-// the server asked for longer than max: the caller must give up
-// rather than substitute a shorter wait of its own.
+// The third result says the server asked for longer than max: the
+// caller must give up rather than substitute a shorter wait of its own.
 func retryAfter(resp *http.Response, max time.Duration) (wait time.Duration, ok bool, tooLong bool) {
 	if resp == nil {
 		return 0, false, false
@@ -353,13 +390,29 @@ func retryAfter(resp *http.Response, max time.Duration) (wait time.Duration, ok 
 	}
 
 	var d time.Duration
-	if secs, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
-		if secs < 0 {
+	t := strings.TrimSpace(v)
+	secs, err := strconv.Atoi(t)
+	// A digit string too big for int64 is longer than any cap, not
+	// unreadable. Atoi reports ErrRange for it, which is not the same
+	// answer as "this is not a number".
+	if errors.Is(err, strconv.ErrRange) && isDigits(t) {
+		return 0, false, true
+	}
+	if err == nil {
+		// Not secs < 0: Atoi reads "-0" as 0, so the sign has to be
+		// caught in the text. RFC 9110 has no negative delay-seconds.
+		if strings.HasPrefix(t, "-") {
 			return 0, false, false
 		}
+		// Duration is int64 nanoseconds: 9223372036854775 seconds
+		// multiplies out to -808ms, which reads as under max.
+		if int64(secs) > int64(max/time.Second) {
+			return 0, false, true
+		}
 		d = time.Duration(secs) * time.Second
-	} else if t, err := http.ParseTime(v); err == nil {
-		d = time.Until(t)
+	} else if when, err := http.ParseTime(t); err == nil {
+		// time.Until saturates rather than wrapping, so no bound here.
+		d = time.Until(when)
 		if d < 0 {
 			d = 0
 		}
@@ -367,12 +420,11 @@ func retryAfter(resp *http.Response, max time.Duration) (wait time.Duration, ok 
 		return 0, false, false
 	}
 
-	// Longer than we are willing to wait means STOP, not "ignore the
-	// header". Returning false here sent the caller back to the
-	// policy's own backoff, so a server asking for an hour was
-	// retried in a second - the opposite of what it asked for, at the
-	// moment it was most emphatic. maxRetryAfter is a bound on our
-	// patience, not a filter on the server's answer.
+	// max bounds our patience, not the server's answer. Stop rather
+	// than clamp to it, which is what urllib3 does: past our patience
+	// the work belongs in a queue that survives a deploy, not parked
+	// on a connection. The response still carries Retry-After for
+	// whoever schedules it.
 	if d > max {
 		return 0, false, true
 	}

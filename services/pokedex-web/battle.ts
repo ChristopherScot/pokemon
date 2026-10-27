@@ -29,6 +29,7 @@ type TurnBody = { attacker: number; move: number; target: number }
 const baseUrl = process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local'
 const client = createClient({
   baseUrl,
+  name: 'pokedex-web',
   policy: process.env.POKEDEX_NO_RETRY ? noRetry : exponentialRetry,
 })
 

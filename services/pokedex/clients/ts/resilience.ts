@@ -7,14 +7,11 @@
 // client in api/client.go - 5s timeout, one retry - because both
 // clients failing the same way is the point.
 //
-// They differ in one place, and it is a language difference rather
-// than a decision: `new Breaker()` here opens after 5 failures, while
-// Go's `&Breaker{}` lets everything through, because a zero value
-// cannot carry a default. Both are tested. Omit `breaker` (nil, in
-// Go) to disable breaking in either.
+// Breaking is off in both until asked for: `breaker: new Breaker(5,
+// 30_000)` here, `WithBreaker(5, 30*time.Second)` in Go.
 //
 //   import { createClient, listThings } from '@christopherscot/pokedex-client'
-//   const client = createClient({ baseUrl: 'https://pokedex' })
+//   const client = createClient({ baseUrl: 'https://pokedex', name: 'my-service' })
 //   const { data, error } = await listThings({ client })
 //
 // Everything below is generator-agnostic: it wraps `fetch` and knows
@@ -33,8 +30,8 @@ import pkg from './package.json' with { type: 'json' }
 export const ClientVersion: string = pkg.version
 export const ClientVersionHeader = 'Client-Version'
 
-// Set via createClient({ name: 'my-service' }); No X- prefix on either:
-// RFC 6648 deprecated it in 2012.
+// Required by createClient and createResilientFetch. No X- prefix on
+// either: RFC 6648 deprecated it in 2012.
 export const ClientNameHeader = 'Client-Name'
 
 export interface RetryPolicy {
@@ -44,9 +41,10 @@ export interface RetryPolicy {
 
 export interface ClientOptions {
   baseUrl: string
-  /** The CALLER's own service name, sent as Client-Name so a runaway
-   *  client can be attributed. */
-  name?: string
+  /** The CALLER's own service name, sent as Client-Name. Required
+   *  because the cost of omitting it falls on whoever operates the
+   *  service being called. */
+  name: string
   /** Bounds a single attempt. Default 5000; a retry gets its own. */
   timeoutMs?: number
   /** Default singleRetry. */
@@ -144,14 +142,26 @@ export const exponentialRetry: RetryPolicy = {
 
 export const noRetry: RetryPolicy = { backoffs: () => [], retry: () => false }
 
-// Reads the server's own answer to "when should I come back". RFC 9110
-// allows either a delay in seconds or an HTTP-date. Capped so an
-// hour-long value cannot masquerade as a hang.
 /** The server's own answer, and whether it asked for longer than we
- *  will wait. `tooLong` means STOP - returning undefined for it sent
- *  the caller back to its own backoff, so a server asking for an hour
- *  was retried in a second, which is the opposite of what it asked
- *  for at the moment it was most emphatic. */
+ *  will wait. `tooLong` means STOP: the caller must give up rather
+ *  than substitute a shorter wait of its own. */
+// The three date formats RFC 9110 requires a recipient to accept, and
+// exactly what Go's http.ParseTime takes. Day and month names are
+// spelled out because V8 ignores a bogus weekday: Date.parse reads
+// 'Xyz, 21 Oct 2025 07:28:00 GMT' happily, Go does not.
+const DAY = '(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)'
+const DAYLONG = '(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)'
+const MON = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
+const HMS = '(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]'
+
+const IMF_FIXDATE = new RegExp(`^${DAY}, [0-3][0-9] ${MON} [0-9]{4} ${HMS} GMT$`)
+const RFC850 = new RegExp(`^${DAYLONG}, [0-3][0-9]-${MON}-[0-9]{2} ${HMS} GMT$`)
+const ASCTIME = new RegExp(`^${DAY} ${MON} [ 0-3]?[0-9] ${HMS} [0-9]{4}$`)
+
+function isHTTPDate(t: string): boolean {
+  return IMF_FIXDATE.test(t) || RFC850.test(t) || ASCTIME.test(t)
+}
+
 export function retryAfterMs(
   res: Response | undefined,
   maxMs: number
@@ -159,16 +169,23 @@ export function retryAfterMs(
   const v = res?.headers?.get('retry-after')
   if (!v) return { tooLong: false }
 
+  // Matched on shape, because Number() and Date.parse are far looser
+  // than RFC 9110: Date.parse reads '1.5', '-5' and ' 5 .5' as dates
+  // in 2001, and Number() takes '0x10' and '1e3'. Anything unmatched
+  // falls back to the policy's own backoff.
   let ms
-  const secs = Number(v.trim())
-  if (Number.isInteger(secs)) {
-    if (secs < 0) return { tooLong: false }
-    ms = secs * 1000
-  } else {
-    const when = Date.parse(v)
+  const t = v.trim()
+  if (/^\+?[0-9]+$/.test(t)) {
+    ms = Number(t) * 1000
+  } else if (isHTTPDate(t)) {
+    const when = Date.parse(t)
     if (Number.isNaN(when)) return { tooLong: false }
     ms = Math.max(0, when - Date.now())
+  } else {
+    return { tooLong: false }
   }
+  // Over the cap means STOP, not "wait maxMs instead"; the Go client's
+  // retryAfter carries the reasoning.
   return ms > maxMs ? { tooLong: true } : { ms, tooLong: false }
 }
 
@@ -272,13 +289,23 @@ export function createResilientFetch({
   policy = singleRetry,
   breaker,
   maxRetryAfterMs = 30_000,
-}: Omit<ClientOptions, 'baseUrl'> = {}) {
+}: Omit<ClientOptions, 'baseUrl'>) {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const req = new Request(input, init)
-    // Read off init rather than req.signal: Request always has one,
-    // so req.signal cannot tell "the caller passed a signal" from
-    // "the caller did not".
-    const caller = init?.signal ?? undefined
+    // Whichever signals the caller actually gave us, combined.
+    //
+    // Not req.signal: Request always synthesises one, so it cannot
+    // tell "the caller passed a signal" from "the caller did not".
+    // Not init.signal alone either - fetch(request) with no init is
+    // the shape the generated adapter uses, and that dropped the
+    // caller's cancellation on the likeliest path. Both can be
+    // present, and choosing one silently ignores the other.
+    const given = [
+      init?.signal,
+      input instanceof Request ? input.signal : undefined,
+    ].filter((s): s is AbortSignal => s != null)
+    const caller =
+      given.length === 0 ? undefined : given.length === 1 ? given[0] : AbortSignal.any(given)
     req.headers.set(ClientVersionHeader, ClientVersion)
     if (name) req.headers.set(ClientNameHeader, name)
 

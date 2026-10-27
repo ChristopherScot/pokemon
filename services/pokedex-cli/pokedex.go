@@ -26,7 +26,7 @@ func baseURL() string {
 func client() (*api.Client, error) {
 	// api.New, not api.NewClient: ogen's own constructor installs no
 	// timeout and no retries.
-	return api.New(baseURL(), api.HTTPOptions{Name: "pokedex-cli"})
+	return api.New(baseURL(), "pokedex-cli")
 }
 
 func withTimeout() (context.Context, context.CancelFunc) {
