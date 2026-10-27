@@ -165,3 +165,62 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # The browser journey, as a gate rather than a nightly.
+  #
+  # Its own job: it needs a Go toolchain and a browser, and neither
+  # belongs in the build job. It runs in parallel with it, so it adds
+  # its own time rather than the build's.
+  #
+  # Playwright is installed here, not in package.json, because nothing
+  # else needs it - putting it in the service's dependencies downloads a
+  # browser in every npm ci, including the Docker build.
+  journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/pokedex/go.mod
+          cache-dependency-path: services/pokedex/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: services/pokedex-htmx/package-lock.json
+
+      - name: Build the generated client
+        working-directory: services/pokedex-htmx
+        run: make client
+
+      - name: Install
+        working-directory: services/pokedex-htmx
+        run: npm ci
+
+      - name: Install a browser
+        working-directory: services/pokedex-htmx
+        run: npm install --no-save playwright && npx playwright install --with-deps chromium
+
+      # No DATABASE_URL: the API keeps its state in memory without one,
+      # so the journey needs no database. It exercises the browser, not
+      # persistence - the store has its own tests against real postgres.
+      - name: Start the stack
+        run: |
+          (cd services/pokedex && PORT=3000 go run . &)
+          (cd services/pokedex-htmx && POKEDEX_URL=http://127.0.0.1:3000 PORT=3001 INSECURE_COOKIES=1 npm start &)
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3000/healthz >/dev/null 2>&1 \
+              && curl -sf http://127.0.0.1:3001/healthz >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "the stack did not come up"
+          exit 1
+
+      - name: Play a game
+        working-directory: services/pokedex-htmx
+        run: B=http://127.0.0.1:3001 node e2e/journey.js
