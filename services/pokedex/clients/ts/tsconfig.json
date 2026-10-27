@@ -1,0 +1,25 @@
+{
+  "// why": [
+    "The package is published, so it ships compiled JS and declarations:",
+    "Node refuses to strip types from anything under node_modules, so a",
+    "consumer of a TypeScript-source package fails at run time with",
+    "ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING. Only dist/ is published.",
+    "",
+    "allowImportingTsExtensions with rewriteRelativeImportExtensions:",
+    "the generator writes .ts on its relative imports, and tsc rewrites",
+    "them to .js on the way out so the emitted JS resolves."
+  ],
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "declaration": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "outDir": "dist",
+    "skipLibCheck": true
+  },
+  "include": ["index.ts", "resilience.ts", "generated/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

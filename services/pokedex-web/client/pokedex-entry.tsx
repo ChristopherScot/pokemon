@@ -2,14 +2,14 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { Pokemon } from '@christopherscot/pokedex-client'
 
 import { Pokedex } from './Pokedex.tsx'
 
 const boot = JSON.parse(
   document.getElementById('boot')?.textContent || '{}',
 ) as {
-  pokemon: components['schemas']['Pokemon'][]
+  pokemon: Pokemon[]
   types: { name: string; count: number }[]
   active: string
   join: string

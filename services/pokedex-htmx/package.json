@@ -26,7 +26,6 @@
     "@christopherscot/pokedex-client": "file:../pokedex/clients/ts",
     "@fastify/formbody": "^9.0.0",
     "fastify": "^5.12.5",
-    "openapi-fetch": "^0.17.0",
     "prom-client": "^15.1.3"
   }
 }

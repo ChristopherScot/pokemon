@@ -1,9 +1,8 @@
-import type { components } from '@christopherscot/pokedex-client'
+import type { Pokemon } from '@christopherscot/pokedex-client'
 
 import { colour } from '../types.ts'
 import type { Pick } from './useTeam.ts'
 
-type Pokemon = components['schemas']['Pokemon']
 
 export function Card({
   mon, picked, full, onToggle,

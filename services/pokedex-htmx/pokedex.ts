@@ -1,13 +1,10 @@
 import type { FastifyInstance } from 'fastify'
-import type { components } from '@christopherscot/pokedex-client'
+import type { Pokemon, TypeSummary } from '@christopherscot/pokedex-client'
 
-import { api } from './api.ts'
 import { HTMX, MORPH, PAGE_JS } from './assets.ts'
 import { POKEDEX_CSS } from './css.ts'
 import { colour, esc, TEAM_SIZE } from './types.ts'
 
-type Pokemon = components['schemas']['Pokemon']
-type TypeSummary = components['schemas']['TypeSummary']
 
 export type Ctx = {
   pokemon: Pokemon[]

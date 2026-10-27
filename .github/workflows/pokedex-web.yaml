@@ -7,9 +7,14 @@ name: build pokedex-web
 on:
   push:
     branches: [main]
-    paths: ['services/pokedex-web/**', '.github/workflows/pokedex-web.yaml']
+    # Also the generated client this service compiles against: a spec
+    # change regenerates it, and a type break there is this service's
+    # problem, not pokedex's.
+    paths: ['services/pokedex-web/**', 'services/pokedex/clients/ts/**',
+            'services/pokedex/openapi.yml', '.github/workflows/pokedex-web.yaml']
   pull_request:
-    paths: ['services/pokedex-web/**']
+    paths: ['services/pokedex-web/**', 'services/pokedex/clients/ts/**',
+            'services/pokedex/openapi.yml']
   workflow_dispatch:
 
 # Two pushes in quick succession otherwise race to publish :latest, and
@@ -156,7 +161,36 @@ jobs:
           build-args: |
             VERSION=${{ github.sha }}
           push: ${{ github.event_name != 'pull_request' }}
+          # Also into the runner's docker, so the next step can run it.
+          # On a pull request nothing is pushed, and without this there
+          # would be no image to start.
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The IMAGE, not the working tree.
+      #
+      # The bundle smoke test above runs `npm run start:dist` in the repo,
+      # where dist/assets exists because the build step just made it. The
+      # image only has what its Dockerfile COPYs, and a missing COPY is
+      # invisible to a test that never starts a container: that is how
+      # cd9a3d2 shipped an image which crashlooped 1805 times, and how a
+      # hand-applied template block dropped the same line a second time.
+      - name: Smoke-test the image
+        run: |
+          ref=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          id=$(docker run -d -p 8098:3000 -e PORT=3000 "$ref")
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8098/healthz >/dev/null 2>&1; then
+              echo "the image serves /healthz"
+              docker rm -f "$id" >/dev/null
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the image did not answer /healthz within 20s"
+          docker logs "$id" 2>&1 | tail -20
+          docker rm -f "$id" >/dev/null
+          exit 1

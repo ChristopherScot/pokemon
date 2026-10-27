@@ -2,3 +2,11 @@ node_modules/
 
 # Tools make fetches on demand (homelabctl).
 .bin/
+
+# Build outputs. Three producers, which is why this is one rule at the
+# root rather than three beside them: pokedex-web and pokedex-htmx both
+# `vite build` here, and pokedex/clients/ts compiles here with tsc
+# before it is packed for npm. The scaffolded service .gitignore also
+# names clients/ts/dist, for a single-service repo where that IS the
+# root - harmless to have both.
+dist/

@@ -15,6 +15,18 @@ COPY . .
 
 WORKDIR /repo/services/pokedex-web
 
+# A generated client ships TypeScript sources and compiles to dist/, so
+# it is built before this service installs it: npm resolves the `file:`
+# main into dist/ and finds nothing otherwise.
+#
+# Both layouts: clients/ts beside the service in a single-service repo,
+# and a sibling service's in a monorepo. Neither glob matching is a
+# service that consumes no client.
+RUN for c in ./clients/ts ../*/clients/ts; do \
+      [ -f "$c/package.json" ] || continue; \
+      ( cd "$c" && npm ci --no-audit --no-fund && npm run build ); \
+    done
+
 # Dev deps included: the bundler and TypeScript are devDependencies and
 # neither ends up in the image.
 RUN npm ci
@@ -32,6 +44,7 @@ ENV VERSION=$VERSION
 
 WORKDIR /app
 COPY --from=build --chown=65532:65532 /repo/services/pokedex-web/dist/server.js ./
+
 # The browser assets are a SECOND build (vite.client.config.ts, outDir
 # dist/assets, manifest: true) and need their own COPY. The server reads
 # that manifest at startup to map entry names to hashed filenames, and
@@ -42,7 +55,8 @@ COPY --from=build --chown=65532:65532 /repo/services/pokedex-web/dist/server.js 
 # silently drop, because the template describes a plain node bundle with
 # a single output. Dropping it was how cd9a3d2 shipped an image that
 # crashlooped 1805 times while the previous ReplicaSet kept serving - the
-# site stayed up, so nothing paged.
+# site stayed up, so nothing paged. It was dropped a second time by a
+# hand-applied template block, which is what this comment is for.
 COPY --from=build --chown=65532:65532 /repo/services/pokedex-web/dist/assets ./assets
 
 USER 65532:65532

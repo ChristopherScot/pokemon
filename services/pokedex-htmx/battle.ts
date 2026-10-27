@@ -1,12 +1,9 @@
-import type { components } from '@christopherscot/pokedex-client'
+import type { Battle, BattlePokemon, Side } from '@christopherscot/pokedex-client'
 
 import { HTMX, MORPH } from './assets.ts'
 import { BATTLE_CSS } from './css.ts'
 import { colour, esc } from './types.ts'
 
-type Battle = components['schemas']['Battle']
-type Side = components['schemas']['Side']
-type BattlePokemon = components['schemas']['BattlePokemon']
 
 // Must match `animation:floatUp 2.4s` in the CSS: morph preserves a float
 // with a stable id, so the animation runs uninterrupted across polls.

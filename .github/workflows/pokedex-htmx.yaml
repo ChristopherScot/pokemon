@@ -7,9 +7,14 @@ name: build pokedex-htmx
 on:
   push:
     branches: [main]
-    paths: ['services/pokedex-htmx/**', '.github/workflows/pokedex-htmx.yaml']
+    # Also the generated client this service compiles against: a spec
+    # change regenerates it, and a type break there is this service's
+    # problem, not pokedex's.
+    paths: ['services/pokedex-htmx/**', 'services/pokedex/clients/ts/**',
+            'services/pokedex/openapi.yml', '.github/workflows/pokedex-htmx.yaml']
   pull_request:
-    paths: ['services/pokedex-htmx/**']
+    paths: ['services/pokedex-htmx/**', 'services/pokedex/clients/ts/**',
+            'services/pokedex/openapi.yml']
   workflow_dispatch:
 
 # Two pushes in quick succession otherwise race to publish :latest, and

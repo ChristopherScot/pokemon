@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { Battle } from '@christopherscot/pokedex-client'
 
 import { V, TERMINAL } from './shared.ts'
 
-type Battle = components['schemas']['Battle']
 
 export type BattleState =
   | { kind: 'loading' }

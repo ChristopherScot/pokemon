@@ -1,8 +1,8 @@
-import type { components } from '@christopherscot/pokedex-client'
+import type { BattlePokemon } from '@christopherscot/pokedex-client'
 
 import { colour } from '../types.ts'
 
-type Mon = components['schemas']['BattlePokemon']
+type Mon = BattlePokemon
 
 function hpColour(hp: number, max: number): string {
   const f = max > 0 ? hp / max : 0

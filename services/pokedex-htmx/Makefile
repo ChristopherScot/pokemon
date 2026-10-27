@@ -23,10 +23,41 @@ ifneq (,$(wildcard Makefile.local))
 endif
 
 .PHONY: deps
-deps: node_modules
-node_modules: package.json
+deps: client node_modules
+# Order-only: under `make -j` an unordered prerequisite list lets the
+# service install while the client is mid-build, resolving `main` into
+# a half-written dist/.
+node_modules: package.json | client
 	npm install
 	@touch node_modules
+
+# A generated client ships TypeScript and compiles to dist/, which npm
+# resolves `main` into. A `file:` dependency's devDependencies are not
+# installed by the consumer, so its own prepare/prepack never runs -
+# nothing builds it and tsc reports the package as missing entirely.
+#
+# A prerequisite of deps rather than of node_modules, because CI runs
+# `npm ci` itself before `make test`. node_modules then already exists,
+# that target is satisfied, and anything hanging off it never runs.
+#
+# Both layouts: clients/ts beside the service in a single-service repo,
+# and a sibling service's in a monorepo. A service that consumes no
+# client matches neither and does nothing. The glob stays literal and
+# the -f guard rejects it, which holds because SHELL is bash above.
+#
+# `|| exit 1` because a for loop exits with the LAST iteration's
+# status: without it a client that fails to build in a monorepo with
+# two of them is silently skipped, and surfaces later as the same
+# confusing tsc error this target exists to prevent.
+#
+# npm ci, matching the Dockerfile: the client ships a committed
+# package-lock.json, and npm install is free to rewrite it.
+.PHONY: client
+client:
+	@for c in ./clients/ts ../*/clients/ts; do \
+	  [ -f "$$c/package.json" ] || continue; \
+	  ( cd "$$c" && npm ci --no-audit --no-fund && npm run build ) || exit 1; \
+	done
 
 .PHONY: build
 build: deps

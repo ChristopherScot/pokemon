@@ -1,10 +1,21 @@
 {
   "name": "@christopherscot/pokedex-client",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Typed client for the pokedex API, generated from its OpenAPI spec.",
   "type": "module",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ChristopherScot/pokemon.git"
@@ -13,7 +24,8 @@
     "access": "public",
     "registry": "https://registry.npmjs.org"
   },
-  "dependencies": {
-    "openapi-fetch": "^0.17.0"
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
+    "typescript": "^5"
   }
 }

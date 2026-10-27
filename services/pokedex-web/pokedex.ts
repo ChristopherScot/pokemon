@@ -2,17 +2,19 @@
 import type { FastifyInstance } from 'fastify'
 import { colour, island } from './types.ts'
 import { assetURL, preloadURLs } from './assets.ts'
-import createClient, { exponentialRetry, noRetry } from '@christopherscot/pokedex-client'
+import {
+  createClient,
+  exponentialRetry,
+  listPokemon,
+  listTypes,
+  noRetry,
+} from '@christopherscot/pokedex-client'
 
-import type { components } from '@christopherscot/pokedex-client'
-
-type Pokemon = components['schemas']['Pokemon']
-type TypeSummary = components['schemas']['TypeSummary']
-type Move = components['schemas']['Move']
+import type { Move, Pokemon, TypeSummary } from '@christopherscot/pokedex-client'
 
 const baseUrl = process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local'
 
-const api = createClient({
+const client = createClient({
   baseUrl,
   policy: process.env.POKEDEX_NO_RETRY ? noRetry : exponentialRetry,
 })
@@ -181,8 +183,8 @@ export function register(app: FastifyInstance) {
     let list, typeList
     try {
       ;[list, typeList] = await Promise.all([
-        api.GET('/pokemon', { params: { query: active ? { type: active } : {} } }),
-        api.GET('/types', {}),
+        listPokemon({ client, query: active ? { type: active } : {} }),
+        listTypes({ client }),
       ])
     } catch (err) {
       request.log.error({ err }, 'pokedex unreachable')

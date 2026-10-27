@@ -1,9 +1,8 @@
 
-import type { components } from '@christopherscot/pokedex-client'
+import type { Battle } from '@christopherscot/pokedex-client'
 
 import { UI_VERSION } from '../version.ts'
 
-type Battle = components['schemas']['Battle']
 export type Turn = { attacker: number; move: number; target: number }
 
 export const TEAM_SIZE = 3
