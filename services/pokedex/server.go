@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/ogen-go/ogen/middleware"
@@ -167,6 +168,38 @@ func routeOf(r *http.Request) string {
 	return "/" + strings.Join(parts, "/")
 }
 
+// maxCallerLen bounds a caller-chosen header before it reaches a log.
+const maxCallerLen = 64
+
+// callerField returns a value from the caller's self-identifying
+// headers that is always safe to log: control characters removed and
+// the length bounded, since the caller chooses it. "unknown" rather
+// than "" so a caller that sent no name reads differently from a
+// server that never looked.
+//
+// Logged, never a metric label: an unbounded label value multiplies
+// time series, which is what routeOf above exists to prevent.
+func callerField(r *http.Request, header string) string {
+	v := strings.Map(func(c rune) rune {
+		// IsControl, not c < ' ': it also covers the C1 block, where
+		// U+009B is the escape-sequence introducer. Those are
+		// invisible but still spend the budget below.
+		if unicode.IsControl(c) {
+			return -1
+		}
+		return c
+	}, r.Header.Get(header))
+	// Counted in runes, not bytes: cutting a multi-byte character in
+	// half puts invalid UTF-8 in the log.
+	if rs := []rune(v); len(rs) > maxCallerLen {
+		v = string(rs[:maxCallerLen])
+	}
+	if v == "" {
+		return "unknown"
+	}
+	return v
+}
+
 func observe(req middleware.Request, next middleware.Next) (middleware.Response, error) {
 	if req.OperationID == "getHealthz" {
 		return next(req)
@@ -181,6 +214,8 @@ func observe(req middleware.Request, next middleware.Next) (middleware.Response,
 	slog.Info("request",
 		"method", req.Raw.Method,
 		"operation", req.OperationID,
+		"client_name", callerField(req.Raw, api.ClientNameHeader),
+		"client_version", callerField(req.Raw, api.ClientVersionHeader),
 		"duration_ms", float64(elapsed.Nanoseconds())/1e6)
 	return resp, err
 }
