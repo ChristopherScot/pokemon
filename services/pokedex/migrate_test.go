@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,21 +14,43 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TestMain drops the run's schema on the way out, so a run leaves the
-// database as it found it. Tests that never touched postgres create
-// nothing, and there is nothing to drop.
+// TestMain owns the run's schema: created before any test, dropped
+// after the last one, so a run leaves the database as it found it.
+//
+// Here rather than in testPool because a failure to set up is not a
+// test failure - there is no test to fail yet, and t.Fatalf inside a
+// sync.Once marks it done, so every later test would run against a
+// schema that was never created and report something unrelated.
 func TestMain(m *testing.M) {
-	code := m.Run()
-	if dsn := os.Getenv("POKEDEX_TEST_DSN"); dsn != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if pool, err := pgxpool.New(ctx, dsn); err == nil {
-			// Best effort: the run's result is what matters, and a
-			// stray schema is visible and harmless.
-			_, _ = pool.Exec(ctx, "DROP SCHEMA IF EXISTS "+runSchema+" CASCADE")
-			pool.Close()
-		}
+	dsn := os.Getenv("POKEDEX_TEST_DSN")
+	if dsn == "" {
+		// No database, so the database tests skip and create nothing.
+		os.Exit(m.Run())
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	admin, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "connecting to POKEDEX_TEST_DSN: %v\n", err)
+		cancel()
+		os.Exit(1)
+	}
+	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+runSchema); err != nil {
+		fmt.Fprintf(os.Stderr, "creating %s: %v\n", runSchema, err)
+		admin.Close()
+		cancel()
+		os.Exit(1)
+	}
+	cancel()
+
+	code := m.Run()
+
+	// Best effort: the run's result is what matters, and a schema left
+	// behind is visible and harmless.
+	dropCtx, dropCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	_, _ = admin.Exec(dropCtx, "DROP SCHEMA IF EXISTS "+runSchema+" CASCADE")
+	dropCancel()
+	admin.Close()
 	os.Exit(code)
 }
 
@@ -37,8 +62,6 @@ func TestMain(m *testing.M) {
 // Named per process and created once: the tests share it within a run,
 // which is what they expect, and nothing else can reach it.
 var runSchema = fmt.Sprintf("test_%d_%d", os.Getpid(), time.Now().UnixNano()%1e6)
-
-var schemaOnce sync.Once
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -57,17 +80,6 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	// search_path at our own schema is enough to redirect every query
 	// in it without the tests or the migrations knowing.
 	cfg.ConnConfig.RuntimeParams["search_path"] = runSchema
-
-	schemaOnce.Do(func() {
-		admin, err := pgxpool.New(ctx, dsn)
-		if err != nil {
-			t.Fatalf("connecting: %v", err)
-		}
-		defer admin.Close()
-		if _, err := admin.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+runSchema); err != nil {
-			t.Fatalf("creating %s: %v", runSchema, err)
-		}
-	})
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
@@ -179,5 +191,33 @@ func TestMigrateConcurrentReplicas(t *testing.T) {
 	}
 	if count != len(files) {
 		t.Errorf("schema_migrations has %d rows, want %d", count, len(files))
+	}
+}
+
+// Per-run isolation works by pointing search_path at the run's own
+// schema, which only redirects a query that names no schema itself. A
+// migration saying "public.battles" would write to the developer's own
+// data instead, and the suite would go back to destroying it - quietly,
+// because every test would still pass.
+func TestMigrationsNameNoSchema(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("migrations", "*.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("no migrations found; this test is looking in the wrong place")
+	}
+	qualified := regexp.MustCompile(`(?i)\b(public|pg_catalog|information_schema)\s*\.`)
+	for _, f := range files {
+		body, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range strings.Split(string(body), "\n") {
+			if qualified.MatchString(line) {
+				t.Errorf("%s:%d names a schema, which search_path cannot redirect: %s",
+					f, i+1, strings.TrimSpace(line))
+			}
+		}
 	}
 }
