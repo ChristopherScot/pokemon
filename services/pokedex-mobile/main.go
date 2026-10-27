@@ -146,7 +146,7 @@ func (a *ui) start() {
 	} else {
 		a.screen = screenRegister
 	}
-	c, err := api.NewClient(apiBase())
+	c, err := api.New(apiBase(), api.HTTPOptions{Name: "pokedex-mobile"})
 	if err != nil {
 		a.status = statusFor(err)
 		return

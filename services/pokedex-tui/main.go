@@ -44,7 +44,7 @@ func rootCmd() *cobra.Command {
 }
 
 func run(apiURL string) error {
-	c, err := api.NewClient(apiURL)
+	c, err := api.New(apiURL, api.HTTPOptions{Name: "pokedex-tui"})
 	if err != nil {
 		return fmt.Errorf("pokedex api at %s: %w", apiURL, err)
 	}
