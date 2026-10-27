@@ -4,16 +4,11 @@ import {
   noRetry,
 } from '@christopherscot/pokedex-client'
 
-/** The pokedex client this service calls with.
- *
- *  A factory rather than a ready-made export: when a breaker is
- *  configured, its consecutive-failure count only means anything if
- *  every caller shares one instance. Built at the entry point and
- *  passed down, so a test can hand in its own.
- *
- *  Nothing passes a different one yet: ClientOptions has no fetch
- *  field, so a fake cannot serve canned data (oapi-clientgen#11).
- *  The seam is here for when it can. */
+/** A factory, not a ready-made export: a module-level client reads
+ *  process.env when the import graph evaluates, fixing the retry
+ *  policy before anything setting POKEDEX_NO_RETRY afterwards can
+ *  take effect. Also leaves a seam to pass a test's own client, once
+ *  ClientOptions takes a fetch (oapi-clientgen#11). */
 export function pokedexClient() {
   return createClient({
     baseUrl: process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local',

@@ -131,7 +131,9 @@ app.get('/metrics', async (_request, reply) =>
 // fields into an array, which is what makes the team a form value.
 app.register(formbody, { parser: (str) => qs(str) })
 
-registerRoutes(app, pokedexClient())
+const client = pokedexClient()
+
+registerRoutes(app, client)
 
 // Drain in-flight requests within Kubernetes' terminationGracePeriod so a
 // rollout is invisible to callers.
