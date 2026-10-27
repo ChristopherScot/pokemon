@@ -92,9 +92,13 @@ type Client struct {
 	Name  string
 }
 
-// caller is the name of the service calling, not the trainer's -
-// three binaries share this package, so it cannot name itself.
-func New(id Identity, caller string) (*Client, error) {
+// A Caller is the name of the binary making the request, sent as
+// Client-Name. Its own type because three binaries share this package
+// and the trainer's name sits beside it in these signatures.
+type Caller string
+
+// New builds a client for id, calling as caller.
+func New(id Identity, caller Caller) (*Client, error) {
 	base := id.API
 	if base == "" {
 		base = DefaultAPI
@@ -102,18 +106,20 @@ func New(id Identity, caller string) (*Client, error) {
 	// api.New, not api.NewClient: ogen's own constructor installs no
 	// timeout, so a stalled pokedex held the caller until the user
 	// gave up. 5s bounds each attempt, not the whole call.
-	c, err := api.New(base, caller)
+	c, err := api.New(base, string(caller))
 	if err != nil {
 		return nil, fmt.Errorf("pokedex api at %s: %w", base, err)
 	}
 	return &Client{API: c, Token: id.Token, Name: id.Name}, nil
 }
 
-func Register(ctx context.Context, apiURL, name, caller string) (Identity, error) {
+// Register claims name as a trainer and returns the identity it was
+// given. name is the trainer's; caller is this binary's.
+func Register(ctx context.Context, apiURL, name string, caller Caller) (Identity, error) {
 	if apiURL == "" {
 		apiURL = DefaultAPI
 	}
-	c, err := api.New(apiURL, caller)
+	c, err := api.New(apiURL, string(caller))
 	if err != nil {
 		return Identity{}, err
 	}
