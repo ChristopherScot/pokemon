@@ -93,11 +93,12 @@ type Client struct {
 }
 
 // A Caller is the name of the binary making the request, sent as
-// Client-Name. Its own type because three binaries share this package
-// and the trainer's name sits beside it in these signatures.
+// Client-Name. Its own type so it cannot be passed where a trainer's
+// name belongs.
 type Caller string
 
-// New builds a client for id, calling as caller.
+// New builds a client for id, calling as caller. An empty id.API
+// means DefaultAPI.
 func New(id Identity, caller Caller) (*Client, error) {
 	base := id.API
 	if base == "" {
@@ -113,8 +114,13 @@ func New(id Identity, caller Caller) (*Client, error) {
 	return &Client{API: c, Token: id.Token, Name: id.Name}, nil
 }
 
-// Register claims name as a trainer and returns the identity it was
-// given. name is the trainer's; caller is this binary's.
+// Register claims name as a trainer, saves the identity it was given
+// under the user's config dir, and returns it. name is the trainer's;
+// caller is this binary's.
+//
+// A non-nil error can accompany a usable Identity: the claim is made
+// before the save, so a save that fails leaves the name taken. Report
+// the error, but keep the Identity.
 func Register(ctx context.Context, apiURL, name string, caller Caller) (Identity, error) {
 	if apiURL == "" {
 		apiURL = DefaultAPI
