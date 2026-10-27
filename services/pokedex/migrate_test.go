@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -9,6 +10,35 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// TestMain drops the run's schema on the way out, so a run leaves the
+// database as it found it. Tests that never touched postgres create
+// nothing, and there is nothing to drop.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if dsn := os.Getenv("POKEDEX_TEST_DSN"); dsn != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if pool, err := pgxpool.New(ctx, dsn); err == nil {
+			// Best effort: the run's result is what matters, and a
+			// stray schema is visible and harmless.
+			_, _ = pool.Exec(ctx, "DROP SCHEMA IF EXISTS "+runSchema+" CASCADE")
+			pool.Close()
+		}
+	}
+	os.Exit(code)
+}
+
+// runSchema is this process's own schema, so a run neither sees nor
+// disturbs anything outside itself. Every database test drops and
+// recreates the tables it needs; against one shared schema, two runs
+// tear down each other's tables halfway through.
+//
+// Named per process and created once: the tests share it within a run,
+// which is what they expect, and nothing else can reach it.
+var runSchema = fmt.Sprintf("test_%d_%d", os.Getpid(), time.Now().UnixNano()%1e6)
+
+var schemaOnce sync.Once
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -18,7 +48,28 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	pool, err := pgxpool.New(ctx, dsn)
+
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("parsing POKEDEX_TEST_DSN: %v", err)
+	}
+	// Nothing in the service qualifies a table name, so pointing the
+	// search_path at our own schema is enough to redirect every query
+	// in it without the tests or the migrations knowing.
+	cfg.ConnConfig.RuntimeParams["search_path"] = runSchema
+
+	schemaOnce.Do(func() {
+		admin, err := pgxpool.New(ctx, dsn)
+		if err != nil {
+			t.Fatalf("connecting: %v", err)
+		}
+		defer admin.Close()
+		if _, err := admin.Exec(ctx, "CREATE SCHEMA IF NOT EXISTS "+runSchema); err != nil {
+			t.Fatalf("creating %s: %v", runSchema, err)
+		}
+	})
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("connecting: %v", err)
 	}
