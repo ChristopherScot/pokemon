@@ -80,12 +80,12 @@ which is how the image lays it out.
 make test         # typecheck, then node --test
 ```
 
-### The browser journey — run this by hand
+### The browser journey
 
-**`make test` does not run this, and neither does CI.** It needs a
-browser and a running stack, and Playwright is deliberately not a
-dependency of this service. Nothing will tell you if it breaks; run it
-yourself when you change how the page behaves.
+The `journey` CI job runs this on every push, against a stack it starts
+itself. `make test` does not: it needs a browser, and Playwright is
+installed in that job rather than in this service's dependencies, so a
+browser is not downloaded on every `npm ci`.
 
 `e2e/journey.js` drives two players through a whole game in a real
 browser: pick a team, register, open, join from the lobby, take a turn,

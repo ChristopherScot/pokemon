@@ -1,5 +1,5 @@
-// Not run by `make test` or CI: needs a browser and running stack, run manually.
-// See the README for stack-up commands.
+// The journey CI job runs this against a stack it starts itself. To run it
+// by hand, see the README for the stack-up commands, then:
 //   B=http://127.0.0.1:3001 node e2e/journey.js
 import { chromium } from 'playwright'
 const B = process.env.B || 'http://127.0.0.1:3001'
@@ -26,7 +26,13 @@ const hn='h'+Math.floor(Math.random()*99999), gn='g'+Math.floor(Math.random()*99
 
 console.log('1. host: pick a team as a new visitor, then register when asked')
 await h.goto(B+'/',{waitUntil:'networkidle'})
+// settled() reads an attribute page.js sets. If that script fails to load
+// the predicate is true from the first poll and every wait below becomes a
+// no-op, so prove the signal exists before relying on it.
+const sawBusy=h.waitForFunction(()=>document.body.hasAttribute('data-busy'),
+  null,{timeout:5000}).then(()=>true,()=>false)
 for(const n of ['pikachu','onix','gengar']) await h.click('#card-'+n)
+ok(await sawBusy, 'the page reports when htmx is busy')
 await settled(h)
 ok(await h.locator('.slot.filled').count()===3, 'three slots filled after rapid clicks')
 // The grid arrives as an out-of-band swap, and a broken one fails silently:
@@ -58,7 +64,7 @@ console.log('3. both boards are live')
 // The banner is polled every 1s, so settled() says nothing about it - there
 // is no request in flight between polls. Wait for the text itself.
 await h.waitForFunction(
-  ()=>!/waiting for an opponent/.test(document.querySelector('#banner').textContent),
+  ()=>/your turn|waiting on/.test(document.querySelector('#banner').textContent),
   // Swallowed: the assertion below reports the failure.
   null,{timeout:15000}).catch(()=>{})
 const hb=(await h.locator('#banner').textContent()).trim()
