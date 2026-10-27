@@ -201,9 +201,13 @@ jobs:
         working-directory: services/pokedex-htmx
         run: npm ci
 
+      # chromium-headless-shell, not chromium: the journey never opens a
+      # window, and it is a fraction of the download. No --with-deps - the
+      # runner image already carries the system libraries, and apt-get took
+      # seven minutes of an eight-minute job to prove it.
       - name: Install a browser
         working-directory: services/pokedex-htmx
-        run: npm install --no-save playwright && npx playwright install --with-deps chromium
+        run: npm install --no-save playwright && npx playwright install chromium-headless-shell
 
       # No DATABASE_URL: the API keeps its state in memory without one,
       # so the journey needs no database. It exercises the browser, not
