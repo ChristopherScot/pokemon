@@ -14,6 +14,14 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
+// One ID for the whole service: every replica migrating the same
+// schema has to take its turn, which is the point.
+//
+// pg_advisory_lock is database-wide, not schema-scoped, so test runs
+// in their own schemas queue behind each other here too. Measured at
+// about two seconds across three concurrent runs - the lock is held
+// only around migration - so it stays one ID rather than growing a
+// per-schema one for the tests' sake.
 const migrationLockID int64 = 0x706f6b65 // "poke"
 
 type migration struct {

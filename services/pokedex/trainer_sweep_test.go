@@ -104,8 +104,7 @@ func TestUsingATokenKeepsTheName(t *testing.T) {
 // Same rules against Postgres, since the NOT IN guard is SQL and the
 // mem-store guard is Go.
 func TestSweepOverPostgres(t *testing.T) {
-	pool := testPool(t)
-	dropAll(t, pool)
+	pool := emptyPool(t)
 	ctx := context.Background()
 	if err := migrate(ctx, pool); err != nil {
 		t.Fatal(err)
