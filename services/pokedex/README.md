@@ -126,11 +126,13 @@ touch the spec publishes nothing.
 `file:` symlinks the client into `node_modules`, and that has two
 consequences worth knowing before you touch either file:
 
-- **`openapi-fetch` is declared in pokedex-web too.** npm does not install
-  a symlinked package's own dependencies, so the client's import of it
-  resolves against pokedex-web's `node_modules`. Removing it there breaks
-  the build with "Cannot find package 'openapi-fetch'", pointing at a file
-  in a directory that looks unrelated.
+- **The consumer builds the client.** It ships TypeScript and compiles
+  to `dist/`, which npm resolves `main` into - but npm does not run a
+  `file:` dependency's own lifecycle scripts, so nothing builds it
+  unless the consumer does. That is the `client` target in each
+  Makefile and the matching step in each Dockerfile. Without it `tsc`
+  reports the package as missing entirely, which sends you looking in
+  the wrong place.
 - **`resolve.preserveSymlinks: true` in both vite configs, and
   `--preserve-symlinks` on the `node` scripts.** Resolution follows the
   symlink to its REAL path, walks up from `services/pokedex/clients/ts/`
@@ -139,6 +141,23 @@ consequences worth knowing before you touch either file:
   exactly what the flag turns off. Miss the vite side and the container
   build fails; miss the node side and `npm start` and `dev:fast` fail
   while the tests still pass, because vitest resolves through vite.
+
+### Where the transport tests live
+
+`api/` and `clients/ts/` report no test files, and that is deliberate.
+
+The retries, the breaker and the `Retry-After` handling are generated
+from one template per language in oapi-clientgen, and its own CI
+renders a client and runs the suite against it - 29 Go tests and 32
+TypeScript ones, covering the same edges in both. They used to ship
+here as `api/client_test.go`, which meant every consumer ran a
+byte-identical copy of tests for somebody else's template, and a
+failure landed in a file that correctly says "do not edit" in front of
+someone who could do nothing about it.
+
+What protects this repo is the regen drift check in CI: it runs
+`homelabctl regen` and fails on any diff, so the committed client
+cannot drift from the generator that is tested.
 
 ### Restart `npm run dev` after regen
 
@@ -149,28 +168,15 @@ triggers a rebuild normally.
 
 ### If the client gains a dependency
 
-The client declares `openapi-fetch` today, and pokedex-web declares it
-too so the symlink can resolve it. Add a SECOND dependency to the client
-and that one needs the same treatment - declare it in every consumer as
-well.
+It has none. The generated client is self-contained: its transport is
+`fetch`, and the resilience around it is plain TypeScript.
 
-The failure is loud and names the package, so this cannot ship broken:
-
-```
-[vite]: Rollup failed to resolve import "ulid" from
-  ".../node_modules/@christopherscot/pokedex-client/index.js"
-```
-
-Fix by adding it to the consumer's `package.json`. This is rare - the
-generated client has had one dependency for its whole life - so the cost
-is a build failure with an obvious fix rather than anything structural.
-
-A MISSING dependency fails loudly like that. A SKEWED one does not:
-pokedex-web declares `openapi-fetch: ^0.17.0` independently of the
-client's own range, and nothing keeps the two in step. Move the client
-to `^0.18.0` and npm still resolves pokedex-web's `^0.17.0`, so the
-client runs against a major version it did not ask for, with no error.
-When you change that range in one place, change it in both.
+That is worth keeping. npm does not install a symlinked package's own
+dependencies, so any runtime dependency the client gained would have to
+be declared in every consumer as well - and a MISSING one fails loudly
+while a SKEWED one does not. Two independent version ranges with
+nothing holding them in step is a silent wrong-version bug, which is
+why having zero is better than having one well-documented one.
 
 ### The consumer's CI has to watch this directory
 
