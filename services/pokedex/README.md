@@ -43,14 +43,35 @@ a spec change cannot merge without the code that matches it.
 ### Calling this service
 
 ```go
-c, err := api.NewClient(url, api.WithClient(api.NewHTTPClient(api.HTTPOptions{})))
+c, err := api.New(url, "your-service-name")
 ```
 
-The zero value is the intended default: a 5s timeout, one retry, no
-breaker. One retry rather than five, because five can mean five times the
-traffic to a dependency that is already struggling. Pass
-`api.ExponentialRetry{}` or `api.NoRetry{}`, and a `Breaker`, when a
-specific call wants something else.
+The second argument is YOUR service's name, not the one being called: it
+goes out as `Client-Name`, so whoever operates this service can tell who
+is calling.
+
+With no options that gives a 5s timeout, one retry, `Retry-After` obeyed
+up to 30s, and no breaker. One retry rather than five, because five can
+mean five times the traffic to a dependency that is already struggling.
+
+```go
+c, err := api.New(url, "your-service-name",
+    api.WithPolicy(api.ExponentialRetry{}),
+    api.WithBreaker(5, 30*time.Second),
+)
+```
+
+### Tracing
+
+`WithTransport` takes any `http.RoundTripper`, which is the seam
+OpenTelemetry's instrumentation plugs into:
+
+```go
+api.WithTransport(otelhttp.NewTransport(http.DefaultTransport))
+```
+
+Retries live above the transport, so a retried request produces one
+span per attempt rather than one span with a retry count.
 
 ## Build
 
