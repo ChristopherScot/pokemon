@@ -92,23 +92,28 @@ type Client struct {
 	Name  string
 }
 
-func New(id Identity) (*Client, error) {
+// caller is the name of the service calling, not the trainer's -
+// three binaries share this package, so it cannot name itself.
+func New(id Identity, caller string) (*Client, error) {
 	base := id.API
 	if base == "" {
 		base = DefaultAPI
 	}
-	c, err := api.NewClient(base)
+	// api.New, not api.NewClient: ogen's own constructor installs no
+	// timeout, so a stalled pokedex held the caller until the user
+	// gave up. 5s bounds each attempt, not the whole call.
+	c, err := api.New(base, caller)
 	if err != nil {
 		return nil, fmt.Errorf("pokedex api at %s: %w", base, err)
 	}
 	return &Client{API: c, Token: id.Token, Name: id.Name}, nil
 }
 
-func Register(ctx context.Context, apiURL, name string) (Identity, error) {
+func Register(ctx context.Context, apiURL, name, caller string) (Identity, error) {
 	if apiURL == "" {
 		apiURL = DefaultAPI
 	}
-	c, err := api.NewClient(apiURL)
+	c, err := api.New(apiURL, caller)
 	if err != nil {
 		return Identity{}, err
 	}

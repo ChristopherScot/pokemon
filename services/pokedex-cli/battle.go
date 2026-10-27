@@ -18,7 +18,7 @@ func battleClient() (*battleclient.Client, error) {
 		return nil, err
 	}
 	id.API = baseURL()
-	return battleclient.New(id)
+	return battleclient.New(id, "pokedex-cli")
 }
 
 func registerCmd() *cobra.Command {
@@ -30,7 +30,7 @@ func registerCmd() *cobra.Command {
 			ctx, cancel := withTimeout()
 			defer cancel()
 
-			id, err := battleclient.Register(ctx, baseURL(), args[0])
+			id, err := battleclient.Register(ctx, baseURL(), args[0], "pokedex-cli")
 			if err != nil {
 				return err
 			}

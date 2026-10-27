@@ -72,7 +72,7 @@ func TestEmptyTeamIsSentAsAbsent(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, err := New(Identity{Name: "ash", Token: "t", API: srv.URL})
+	c, err := New(Identity{Name: "ash", Token: "t", API: srv.URL}, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestUnauthorizedIsAStaleIdentity(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, err := New(Identity{Name: "t", Token: "dead", API: srv.URL})
+	c, err := New(Identity{Name: "t", Token: "dead", API: srv.URL}, "test")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

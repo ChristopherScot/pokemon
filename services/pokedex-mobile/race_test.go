@@ -13,7 +13,7 @@ func TestBackgroundCallsTouchNothingTheUIOwns(t *testing.T) {
 	a := newUI(nil)
 	a.bc, _ = battleclient.New(battleclient.Identity{
 		Name: "ash", Token: "t", API: "https://example.invalid/api",
-	})
+	}, "pokedex-mobile")
 
 	// Simulate registration reassigning the client mid-flight, interleaved as tightly as possible.
 	var wg sync.WaitGroup
