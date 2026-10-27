@@ -168,9 +168,8 @@ jobs:
 
   # The browser journey, as a gate rather than a nightly.
   #
-  # Its own job: it needs a Go toolchain and a browser, and neither
-  # belongs in the build job. It runs in parallel with it, so it adds
-  # its own time rather than the build's.
+  # Its own job, so it runs in parallel with the build and adds its own
+  # time rather than the build's.
   #
   # Playwright is installed here, not in package.json, because nothing
   # else needs it - putting it in the service's dependencies downloads a

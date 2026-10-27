@@ -1,9 +1,13 @@
-// Fails when vendor/sources.ts is older than what it embeds.
+// Fails when vendor/sources.ts no longer matches client/page.js.
 //
 // sources.ts is generated, and nothing at runtime reads client/page.js -
 // the server serves the embedded copy. So an edit to page.js changes
 // nothing until `npm run vendor` runs, and the symptom is a browser that
-// quietly behaves like the old code. That cost an afternoon once.
+// quietly behaves like the old code.
+//
+// page.js only: the vendored libraries beside it change on a deliberate
+// version bump, where regenerating is the point rather than a step to
+// forget.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'

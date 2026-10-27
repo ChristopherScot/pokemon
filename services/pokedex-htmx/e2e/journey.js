@@ -59,6 +59,7 @@ console.log('3. both boards are live')
 // is no request in flight between polls. Wait for the text itself.
 await h.waitForFunction(
   ()=>!/waiting for an opponent/.test(document.querySelector('#banner').textContent),
+  // Swallowed: the assertion below reports the failure.
   null,{timeout:15000}).catch(()=>{})
 const hb=(await h.locator('#banner').textContent()).trim()
 ok(!/waiting for an opponent/.test(hb), 'host sees the join: '+JSON.stringify(hb))
