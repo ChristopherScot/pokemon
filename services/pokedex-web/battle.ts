@@ -2,15 +2,14 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import {
   createBattle,
-  createClient,
-  exponentialRetry,
   getBattle,
   joinBattle,
   listWaitingTrainers,
-  noRetry,
   registerTrainer,
   takeTurn,
 } from '@christopherscot/pokedex-client'
+
+import type { PokedexClient } from './client.ts'
 
 import type {
   Battle,
@@ -25,13 +24,6 @@ type IdParam = { id: string }
 type TeamBody = { team?: string[] }
 type NameBody = { name?: string }
 type TurnBody = { attacker: number; move: number; target: number }
-
-const baseUrl = process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local'
-const client = createClient({
-  baseUrl,
-  name: 'pokedex-web',
-  policy: process.env.POKEDEX_NO_RETRY ? noRetry : exponentialRetry,
-})
 
 const esc = (s: unknown): string =>
   String(s).replace(/[&<>"']/g, (c) =>
@@ -164,7 +156,7 @@ ${preloadURLs('battle').map((u) => `<link rel="modulepreload" href="${u}">`).joi
 </body></html>`
 }
 
-export function registerBattle(app: FastifyInstance) {
+export function registerBattle(app: FastifyInstance, client: PokedexClient) {
   const reachable =
     <Req extends FastifyRequest>(handler: (request: Req, reply: FastifyReply) => Promise<unknown>) =>
     async (request: Req, reply: FastifyReply) => {

@@ -3,6 +3,7 @@ import Fastify, { LogController } from 'fastify'
 import { collectDefaultMetrics, Counter, Histogram, register } from 'prom-client'
 
 import { register as registerRoutes } from './routes.ts'
+import { pokedexClient } from './client.ts'
 
 // Repeated fields become arrays: `team=a&team=b` is the team.
 const qs = (body: string): Record<string, string | string[]> => {
@@ -130,7 +131,7 @@ app.get('/metrics', async (_request, reply) =>
 // fields into an array, which is what makes the team a form value.
 app.register(formbody, { parser: (str) => qs(str) })
 
-registerRoutes(app)
+registerRoutes(app, pokedexClient())
 
 // Drain in-flight requests within Kubernetes' terminationGracePeriod so a
 // rollout is invisible to callers.
