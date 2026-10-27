@@ -115,9 +115,12 @@ func TestMigrateCreatesSchema(t *testing.T) {
 		"pokemon", "moves", "pokemon_moves", "trainers", "battles", "battle_sides",
 	} {
 		var exists bool
+		// to_regclass, not information_schema: that catalog spans every
+		// schema the connection can see, so it answers yes for a table
+		// in someone else's. This resolves through search_path, which
+		// is what points at the run's own schema.
 		err := pool.QueryRow(ctx,
-			`SELECT EXISTS (SELECT 1 FROM information_schema.tables
-			 WHERE table_name = $1)`, table).Scan(&exists)
+			`SELECT to_regclass($1) IS NOT NULL`, table).Scan(&exists)
 		if err != nil {
 			t.Fatalf("checking %s: %v", table, err)
 		}
@@ -214,7 +217,9 @@ func TestMigrationsNameNoSchema(t *testing.T) {
 			t.Fatal(err)
 		}
 		for i, line := range strings.Split(string(body), "\n") {
-			if qualified.MatchString(line) {
+			// A -- comment can name a schema while talking about one;
+			// only SQL can send a write to it.
+			if sql, _, _ := strings.Cut(line, "--"); qualified.MatchString(sql) {
 				t.Errorf("%s:%d names a schema, which search_path cannot redirect: %s",
 					f, i+1, strings.TrimSpace(line))
 			}

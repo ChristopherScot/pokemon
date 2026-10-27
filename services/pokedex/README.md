@@ -253,6 +253,14 @@ POKEDEX_TEST_DSN=postgres://postgres:test@127.0.0.1:15432/pokedex?sslmode=disabl
   go test ./...
 ```
 
+Each run gets its own schema, named for its process, and drops it on
+the way out - so runs can overlap, and none of them touches the data
+you have been developing against. It works by pointing `search_path`
+at that schema, which only redirects a query that names no schema
+itself: write `public.battles` in a migration and the suite goes back
+to dropping whatever the DSN points at. `TestMigrationsNameNoSchema`
+is what stops that happening quietly.
+
 That includes `TestAWholeGameOverPostgres`, which plays a battle from
 registration to a winner. CI runs the same image with the same settings
 and fails if that test skips.

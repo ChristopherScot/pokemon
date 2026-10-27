@@ -1,5 +1,11 @@
 -- The pokedex schema, in two halves that behave differently.
 --
+-- Never qualify a table name here. The tests give each run its own
+-- schema and reach it with search_path, which redirects an unqualified
+-- name and cannot redirect "public.battles" - so a qualified name sends
+-- the suite back to dropping whatever the DSN points at, usually a
+-- developer's own data, with every test still green.
+--
 -- Reference data (pokemon, moves, pokemon_moves) is read-only at
 -- runtime and seeded from pokedex.json. Game state (trainers, battles)
 -- is written on every request and is what multiple replicas must agree
