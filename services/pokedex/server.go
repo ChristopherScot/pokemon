@@ -167,6 +167,34 @@ func routeOf(r *http.Request) string {
 	return "/" + strings.Join(parts, "/")
 }
 
+// callerField reads one of the client's self-identifying headers for
+// the log. The value is whatever the caller chose to send, so it is
+// bounded and stripped of anything that would make a log line hard to
+// read; "unknown" rather than "" so an unnamed caller is distinct from
+// a field nobody filled in.
+func callerField(r *http.Request, header string) string {
+	v := r.Header.Get(header)
+	if v == "" {
+		return "unknown"
+	}
+	v = strings.Map(func(c rune) rune {
+		if c < ' ' || c == 0x7f {
+			return -1
+		}
+		return c
+	}, v)
+	// Counted in runes, not bytes: the value is whatever was sent, and
+	// cutting a multi-byte character in half puts invalid UTF-8 in the
+	// log.
+	if r := []rune(v); len(r) > 64 {
+		v = string(r[:64])
+	}
+	if v == "" {
+		return "unknown"
+	}
+	return v
+}
+
 func observe(req middleware.Request, next middleware.Next) (middleware.Response, error) {
 	if req.OperationID == "getHealthz" {
 		return next(req)
@@ -181,6 +209,8 @@ func observe(req middleware.Request, next middleware.Next) (middleware.Response,
 	slog.Info("request",
 		"method", req.Raw.Method,
 		"operation", req.OperationID,
+		"client_name", callerField(req.Raw, api.ClientNameHeader),
+		"client_version", callerField(req.Raw, api.ClientVersionHeader),
 		"duration_ms", float64(elapsed.Nanoseconds())/1e6)
 	return resp, err
 }
