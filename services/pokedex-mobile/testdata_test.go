@@ -11,7 +11,7 @@ func testClient(t *testing.T) *battleclient.Client {
 	t.Helper()
 	c, err := battleclient.New(battleclient.Identity{
 		Name: "ash", Token: "test-token", API: "https://example.invalid/api",
-	})
+	}, "pokedex-mobile")
 	if err != nil {
 		t.Fatalf("battleclient.New: %v", err)
 	}

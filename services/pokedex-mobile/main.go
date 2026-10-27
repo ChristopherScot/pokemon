@@ -157,7 +157,7 @@ func (a *ui) start() {
 
 func (a *ui) useIdentity(id battleclient.Identity) {
 	a.id = id
-	bc, err := battleclient.New(id)
+	bc, err := battleclient.New(id, "pokedex-mobile")
 	if err != nil {
 		// bc must not stay nil — the lobby would say "register a trainer first" to someone who just did.
 		a.status = statusFor(err)

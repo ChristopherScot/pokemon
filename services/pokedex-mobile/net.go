@@ -88,7 +88,7 @@ func (u *ui) loadDex() {
 func (u *ui) register(name string) {
 	u.busy = true
 	u.go1(requestTimeout, func(ctx context.Context) result {
-		id, err := battleclient.Register(ctx, apiBase(), name)
+		id, err := battleclient.Register(ctx, apiBase(), name, "pokedex-mobile")
 		return result{kind: resRegistered, ident: id, err: err}
 	})
 }

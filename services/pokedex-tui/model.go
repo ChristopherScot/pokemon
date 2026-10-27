@@ -91,7 +91,7 @@ func newModel(c *api.Client, apiBase string) model {
 	m := model{list: l, client: c, loading: true}
 	if id, err := battleclient.LoadIdentity(); err == nil {
 		id.API = apiBase
-		if bc, err := battleclient.New(id); err == nil {
+		if bc, err := battleclient.New(id, "pokedex-tui"); err == nil {
 			m.bc = bc
 			m.trainer = id.Name
 		}
