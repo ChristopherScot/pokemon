@@ -1,6 +1,6 @@
 import type { Battle, BattlePokemon, Side } from '@christopherscot/pokedex-client'
 
-import { HTMX, MORPH } from './assets.ts'
+import { HTMX, MORPH, PAGE_JS } from './assets.ts'
 import { BATTLE_CSS } from './css.ts'
 import { colour, esc } from './types.ts'
 
@@ -283,6 +283,7 @@ export function battlePage(
   ${first}
 <script src="${HTMX.url}"></script>
 <script src="${MORPH.url}"></script>
+<script src="${PAGE_JS.url}"></script>
 </body></html>`
 }
 

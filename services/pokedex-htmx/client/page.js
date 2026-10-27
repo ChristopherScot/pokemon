@@ -1,6 +1,25 @@
 (function () {
   'use strict'
 
+  // data-busy on <body> while any htmx request is outstanding, because
+  // htmx exposes no document-level idle state to read. Counted, not a
+  // boolean: hx-sync queues the team requests, so a second can start
+  // before the first has finished settling.
+  var pending = 0
+  var mark = function (n) {
+    pending = Math.max(0, pending + n)
+    if (pending === 0) document.body.removeAttribute('data-busy')
+    else document.body.setAttribute('data-busy', String(pending))
+  }
+  document.body.addEventListener('htmx:beforeRequest', function () { mark(1) })
+  // afterRequest, not afterSettle. afterSettle is dispatched on the SWAPPED
+  // element, and with queued requests the previous #team is already detached
+  // by the time its 20ms settle timer fires - a detached node does not bubble
+  // to body, so those decrements never arrive and the counter sticks forever.
+  // afterRequest fires on the TRIGGERING element (the card), which stays in
+  // the document, and it fires on every outcome including 4xx and send errors.
+  document.body.addEventListener('htmx:afterRequest', function () { mark(-1) })
+
   // Search is a pure view filter: the whole pokedex is already in the document.
   var search = document.getElementById('search')
   var count = document.getElementById('count')
