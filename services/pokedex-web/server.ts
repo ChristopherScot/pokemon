@@ -6,6 +6,7 @@ import Fastify, { LogController } from 'fastify'
 import { ASSET_DIR } from './assets.ts'
 import { register as registerPokedex } from './pokedex.ts'
 import { registerBattle } from './battle.ts'
+import { pokedexClient } from './client.ts'
 import { collectDefaultMetrics, Counter, Histogram, register } from 'prom-client'
 
 const port: number = Number(process.env.PORT || '3000')
@@ -87,10 +88,12 @@ app.get('/healthz', async (_request, reply) => reply.type('text/plain').send('ok
 app.get('/metrics', async (_request, reply) =>
   reply.type(register.contentType).send(await register.metrics()))
 
-// The card UI lives in pokedex.ts; this file stays the template's.
-registerPokedex(app)
+const client = pokedexClient()
 
-registerBattle(app)
+// The card UI lives in pokedex.ts; this file stays the template's.
+registerPokedex(app, client)
+
+registerBattle(app, client)
 
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, async () => {

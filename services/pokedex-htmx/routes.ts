@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { Pokemon } from '@christopherscot/pokedex-client'
 
-import { client } from './api.ts'
+import type { PokedexClient } from './client.ts'
 import {
   createBattle,
   getBattle,
@@ -66,7 +66,7 @@ const COOKIE_FLAGS = 'Path=/; HttpOnly; SameSite=Lax'
 
 // Unfiltered lookup: a pick made before filtering has no entry in ctx.pokemon
 // to read a sprite from.
-async function spritesFor(names: string[]): Promise<Record<string, string>> {
+async function spritesFor(client: PokedexClient, names: string[]): Promise<Record<string, string>> {
   if (names.length === 0) return {}
   const out: Record<string, string> = {}
   const found = await Promise.all(names.map((name) =>
@@ -77,7 +77,7 @@ async function spritesFor(names: string[]): Promise<Record<string, string>> {
   return out
 }
 
-export function register(app: FastifyInstance) {
+export function register(app: FastifyInstance, client: PokedexClient) {
   // Asset URLs one per line, so CI can fetch each and prove browser scripts
   // are bundled in rather than read from a disk the image does not have.
   app.get('/assets', async (_request, reply) =>
@@ -124,7 +124,7 @@ export function register(app: FastifyInstance) {
       ...ctx,
       pokemon: list.data.pokemon,
       types: typeList.data.types,
-      sprites: await spritesFor(team),
+      sprites: await spritesFor(client, team),
     }, one(q.error)))
   })
 
@@ -165,7 +165,7 @@ export function register(app: FastifyInstance) {
 
     const ctx: Ctx = {
       pokemon: list.data.pokemon, types: typeList.data.types, active, join, team: next,
-      sprites: await spritesFor(next),
+      sprites: await spritesFor(client, next),
       resume: readResume(request),
     }
 

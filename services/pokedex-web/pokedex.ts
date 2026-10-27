@@ -3,22 +3,13 @@ import type { FastifyInstance } from 'fastify'
 import { colour, island } from './types.ts'
 import { assetURL, preloadURLs } from './assets.ts'
 import {
-  createClient,
-  exponentialRetry,
   listPokemon,
   listTypes,
-  noRetry,
 } from '@christopherscot/pokedex-client'
 
+import type { PokedexClient } from './client.ts'
+
 import type { Move, Pokemon, TypeSummary } from '@christopherscot/pokedex-client'
-
-const baseUrl = process.env.POKEDEX_URL || 'http://pokedex.pokedex.svc.cluster.local'
-
-const client = createClient({
-  baseUrl,
-  name: 'pokedex-web',
-  policy: process.env.POKEDEX_NO_RETRY ? noRetry : exponentialRetry,
-})
 
 const escape = (s: unknown): string =>
   String(s).replace(/[&<>"']/g, (c) =>
@@ -176,7 +167,7 @@ ${preloadURLs('pokedex').map((u) => `<link rel="modulepreload" href="${u}">`).jo
 </body></html>`
 }
 
-export function register(app: FastifyInstance) {
+export function register(app: FastifyInstance, client: PokedexClient) {
   app.get<{ Querystring: { type?: string; join?: string } }>('/', async (request, reply) => {
     const active = typeof request.query.type === 'string' ? request.query.type : ''
     const join = typeof request.query.join === 'string' ? request.query.join : ''
