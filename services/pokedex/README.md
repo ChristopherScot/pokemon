@@ -65,12 +65,12 @@ c, err := api.New(url, "your-service-name",
 window fail, once there have been twenty of them, and lets one through
 every thirty seconds to see whether the dependency is back. A rate
 rather than a run of failures, so a dependency failing two requests in
-three trips it. Change a figure with `WithBreakerPolicy`:
+every three trips it. Change a figure with `WithBreakerPolicy`:
 
 ```go
 p := api.DefaultBreakerPolicy()
 p.FailPercent = 80
-api.WithBreakerPolicy(p) // in place of api.WithBreaker()
+c, err := api.New(url, "your-service-name", api.WithBreakerPolicy(p))
 ```
 
 ### Tracing
@@ -119,9 +119,11 @@ reverse proxy, say - replaces that one file with a hand-written
 `handler()`, and everything else stays as generated. Its header lists what
 a replacement has to keep.
 
-`api/client.go` and `api/paging.go` are hand-written and live in `api/` on
-purpose: a consumer imports that package, and getting the protocol client
-without the defaults would be worse than useless.
+`api/client.go` and `api/paging.go` come from oapi-clientgen rather than
+ogen, and live in `api/` on purpose: a consumer imports that package, and
+getting the protocol client without the defaults would be worse than
+useless. Change them in oapi-clientgen's templates — `make regen`
+rewrites them here.
 
 ### Changing the API and its consumers in one commit
 
