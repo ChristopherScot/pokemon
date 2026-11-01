@@ -57,8 +57,20 @@ mean five times the traffic to a dependency that is already struggling.
 ```go
 c, err := api.New(url, "your-service-name",
     api.WithPolicy(api.ExponentialRetry{}),
-    api.WithBreaker(5, 30*time.Second),
+    api.WithBreaker(),
 )
+```
+
+`WithBreaker` opens the circuit when half the requests in a ten-second
+window fail, once there have been twenty of them, and lets one through
+every thirty seconds to see whether the dependency is back. A rate
+rather than a run of failures, so a dependency failing two requests in
+three trips it. Change a figure with `WithBreakerPolicy`:
+
+```go
+p := api.DefaultBreakerPolicy()
+p.FailPercent = 80
+api.WithBreakerPolicy(p) // in place of api.WithBreaker()
 ```
 
 ### Tracing
