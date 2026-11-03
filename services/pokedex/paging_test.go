@@ -140,6 +140,26 @@ func TestWalkingReachesEveryoneOnce(t *testing.T) {
 	}
 }
 
+// The look ahead has to apply the filter too. 33 water in pages of 11
+// makes the third page full and final, with two normals trailing the
+// last water one - so a look ahead asking "is there anything after
+// this" rather than "anything MATCHING after this" hands back a cursor
+// for a page that comes back empty.
+func TestAFullFinalFilteredPageSaysNothingFollows(t *testing.T) {
+	p := dexOf(t, 101)
+
+	_, next := p.list("water", "", 11)
+	_, next = p.list("water", next, 11)
+	page, next := p.list("water", next, 11)
+
+	if len(page) != 11 {
+		t.Fatalf("len(page) = %d, want 11: the third water page should be full", len(page))
+	}
+	if next != "" {
+		t.Errorf("cursor %q after the last water page: 99 is the last water one, 100 and 101 are not", next)
+	}
+}
+
 // A cursor is a position in the filtered sequence, so the filter has to
 // still apply on the other side of it.
 func TestAFilteredWalkStaysFiltered(t *testing.T) {
