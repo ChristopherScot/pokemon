@@ -51,6 +51,10 @@ paths:
     get:
       operationId: listPokemon
       summary: List Pokemon, optionally filtered by type.
+      description: >
+        One page. Check nextCursor to find out whether more follow: a
+        response is not the whole list just because you did not set a
+        limit.
       parameters:
         - name: type
           in: query
@@ -61,12 +65,23 @@ paths:
         - name: limit
           in: query
           required: false
-          description: Maximum number to return.
+          description: >
+            How many to return, at most 100. Asking for more is rejected
+            rather than clamped.
           schema:
             type: integer
             minimum: 1
             maximum: 100
             default: 100
+        - name: after
+          in: query
+          required: false
+          description: >
+            A nextCursor from a previous response. Omit it for the first
+            page. Opaque: pass it back unchanged rather than parsing or
+            constructing one.
+          schema:
+            type: string
       responses:
         '200':
           description: The matching Pokemon, in Pokedex order.
@@ -876,10 +891,17 @@ components:
       properties:
         count:
           type: integer
+          description: How many are in THIS response, not how many match.
         pokemon:
           type: array
           items:
             $ref: '#/components/schemas/Pokemon'
+        nextCursor:
+          type: string
+          description: >
+            Pass back as `after` for the next page. Absent on the last
+            page. A client that ignores it reads the first page and
+            stops, which is not an error and shows up nowhere else.
 
     TypeSummary:
       type: object

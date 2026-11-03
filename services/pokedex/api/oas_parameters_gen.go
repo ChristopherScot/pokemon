@@ -382,8 +382,11 @@ func decodeJoinBattleParams(args [1]string, argsEscaped bool, r *http.Request) (
 type ListPokemonParams struct {
 	// Filter to Pokemon having this type, e.g. "fire".
 	Type OptString `json:",omitempty,omitzero"`
-	// Maximum number to return.
+	// How many to return, at most 100. Asking for more is rejected rather than clamped.
 	Limit OptInt `json:",omitempty,omitzero"`
+	// A nextCursor from a previous response. Omit it for the first page. Opaque: pass it back unchanged
+	// rather than parsing or constructing one.
+	After OptString `json:",omitempty,omitzero"`
 }
 
 func unpackListPokemonParams(packed middleware.Parameters) (params ListPokemonParams) {
@@ -403,6 +406,15 @@ func unpackListPokemonParams(packed middleware.Parameters) (params ListPokemonPa
 		}
 		if v, ok := packed[key]; ok {
 			params.Limit = v.(OptInt)
+		}
+	}
+	{
+		key := middleware.ParameterKey{
+			Name: "after",
+			In:   "query",
+		}
+		if v, ok := packed[key]; ok {
+			params.After = v.(OptString)
 		}
 	}
 	return params
@@ -518,6 +530,47 @@ func decodeListPokemonParams(args [0]string, argsEscaped bool, r *http.Request) 
 	}(); err != nil {
 		return params, &ogenerrors.DecodeParamError{
 			Name: "limit",
+			In:   "query",
+			Err:  err,
+		}
+	}
+	// Decode query: after.
+	if err := func() error {
+		cfg := uri.QueryParameterDecodingConfig{
+			Name:    "after",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.HasParam(cfg); err == nil {
+			if err := q.DecodeParam(cfg, func(d uri.Decoder) error {
+				var paramsDotAfterVal string
+				if err := func() error {
+					val, err := d.DecodeValue()
+					if err != nil {
+						return err
+					}
+
+					c, err := conv.ToString(val)
+					if err != nil {
+						return err
+					}
+
+					paramsDotAfterVal = c
+					return nil
+				}(); err != nil {
+					return err
+				}
+				params.After.SetTo(paramsDotAfterVal)
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}(); err != nil {
+		return params, &ogenerrors.DecodeParamError{
+			Name: "after",
 			In:   "query",
 			Err:  err,
 		}

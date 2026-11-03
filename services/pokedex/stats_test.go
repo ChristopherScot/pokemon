@@ -137,7 +137,7 @@ func TestAttackStatChangesDamage(t *testing.T) {
 func TestEveryStatusMoveInTheDatasetIsImplemented(t *testing.T) {
 	s := testService(t)
 	seen := map[string]bool{}
-	for _, mon := range s.dex.list("", 0) {
+	for _, mon := range mustListAll(s.dex) {
 		for _, m := range mon.Moves {
 			if m.Power == 0 {
 				seen[m.Name] = true

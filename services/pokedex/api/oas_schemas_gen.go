@@ -1118,8 +1118,12 @@ func (*Pokemon) getPokemonRes() {}
 
 // Ref: #/components/schemas/PokemonList
 type PokemonList struct {
+	// How many are in THIS response, not how many match.
 	Count   int       `json:"count"`
 	Pokemon []Pokemon `json:"pokemon"`
+	// Pass back as `after` for the next page. Absent on the last page. A client that ignores it reads the
+	// first page and stops, which is not an error and shows up nowhere else.
+	NextCursor OptString `json:"nextCursor"`
 }
 
 // GetCount returns the value of Count.
@@ -1132,6 +1136,11 @@ func (s *PokemonList) GetPokemon() []Pokemon {
 	return s.Pokemon
 }
 
+// GetNextCursor returns the value of NextCursor.
+func (s *PokemonList) GetNextCursor() OptString {
+	return s.NextCursor
+}
+
 // SetCount sets the value of Count.
 func (s *PokemonList) SetCount(val int) {
 	s.Count = val
@@ -1140,6 +1149,11 @@ func (s *PokemonList) SetCount(val int) {
 // SetPokemon sets the value of Pokemon.
 func (s *PokemonList) SetPokemon(val []Pokemon) {
 	s.Pokemon = val
+}
+
+// SetNextCursor sets the value of NextCursor.
+func (s *PokemonList) SetNextCursor(val OptString) {
+	s.NextCursor = val
 }
 
 // Ref: #/components/schemas/RegisterTrainer

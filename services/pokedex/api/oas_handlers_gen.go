@@ -845,7 +845,8 @@ func (s *Server) handleListMovesRequest(args [0]string, argsEscaped bool, w http
 
 // handleListPokemonRequest handles listPokemon operation.
 //
-// List Pokemon, optionally filtered by type.
+// One page. Check nextCursor to find out whether more follow: a response is not the whole list just
+// because you did not set a limit.
 //
 // GET /pokemon
 func (s *Server) handleListPokemonRequest(args [0]string, argsEscaped bool, w http.ResponseWriter, r *http.Request) {
@@ -891,6 +892,10 @@ func (s *Server) handleListPokemonRequest(args [0]string, argsEscaped bool, w ht
 					Name: "limit",
 					In:   "query",
 				}: params.Limit,
+				{
+					Name: "after",
+					In:   "query",
+				}: params.After,
 			},
 			Raw: r,
 		}

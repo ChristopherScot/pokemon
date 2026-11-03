@@ -155,7 +155,7 @@ func fillTeam(dex *pokedex, chosen []string, rng roller) []string {
 	}
 
 	out := append([]string(nil), chosen...)
-	all := dex.list("", 0)
+	all, _ := dex.list("", "", 0)
 	// Shuffle rather than reject-sample: rejection could spin forever
 	// for a roller that keeps returning the same index.
 	for _, i := range shuffledIndexes(len(all), rng) {
@@ -190,7 +190,7 @@ func shuffledIndexes(n int, rng roller) []int {
 }
 
 func randomTeam(dex *pokedex, rng roller) []string {
-	all := dex.list("", 0)
+	all, _ := dex.list("", "", 0)
 	if len(all) < teamSize {
 		names := make([]string, 0, len(all))
 		for _, m := range all {
