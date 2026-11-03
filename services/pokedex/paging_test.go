@@ -54,7 +54,7 @@ func walk(t *testing.T, p *pokedex, typ string, limit int) (names []string, page
 		}
 		after = next
 		if pages > 100 {
-			t.Fatal("more than 100 pages for a dex this size; the cursor is not advancing")
+			t.Fatal("more than 100 pages for a dex this size; the cursor is advancing by less than a page")
 		}
 	}
 }
@@ -161,6 +161,21 @@ func TestAFilteredWalkStaysFiltered(t *testing.T) {
 	}
 	if len(names) != 33 { // 3,6..99
 		t.Errorf("walked %d water pokemon, want 33", len(names))
+	}
+}
+
+// One at a time is a legal page size, and the narrowest: every page is
+// full, so the look ahead runs on every one of them.
+func TestOneAtATime(t *testing.T) {
+	p := dexOf(t, 4)
+
+	names, pages := walk(t, p, "", 1)
+
+	if pages != 4 {
+		t.Errorf("%d pages for 4 pokemon one at a time, want 4", pages)
+	}
+	if len(names) != 4 {
+		t.Errorf("walked %d, want 4", len(names))
 	}
 }
 

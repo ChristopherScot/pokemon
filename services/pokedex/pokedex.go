@@ -200,23 +200,21 @@ func (p *pokedex) learnableFor(name string) ([]api.Move, bool) {
 // empty next means this page reached the end.
 //
 // after is a position, not a filter: it means "the first one ordered
-// after this", so a name that is not in the dex, or one from a request
+// after this", so a cursor the dex never issued, or one from a request
 // with a different type, is not an error - it selects the overlap,
 // which may be nothing. Nothing to validate and nothing to reject.
-//
-// The cursor is the ID because the ID is what p.ordered is sorted by.
-// A position would break the moment anything is inserted, and against
-// the type filter it would mean an offset into a view the server does
-// not keep.
 func (p *pokedex) list(typ, after string, limit int) (page []api.Pokemon, next string) {
 	out := make([]api.Pokemon, 0, len(p.ordered))
-	typ = strings.ToLower(strings.TrimSpace(typ))
+	typ = strings.TrimSpace(typ)
 
+	// The cursor is the ID: it is the key p.ordered is sorted by, so
+	// sort.Search finds the position directly. A position would break
+	// the moment anything is inserted, and under the type filter it
+	// would mean an offset into a view nothing keeps. An ID the dex
+	// does not have still lands somewhere sensible - the first one
+	// after it - and an unreadable cursor leaves start at zero.
 	start := 0
 	if id, err := strconv.Atoi(strings.TrimSpace(after)); err == nil {
-		// sort.Search over the same key p.ordered is sorted by. A
-		// cursor naming an ID the dex does not have still lands
-		// somewhere sensible: the first one after it.
 		start = sort.Search(len(p.ordered), func(i int) bool {
 			return p.ordered[i].ID > id
 		})
