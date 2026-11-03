@@ -214,7 +214,7 @@ func (p *pokedex) list(typ, after string, limit int) (page []api.Pokemon, next s
 	// does not have still lands somewhere sensible - the first one
 	// after it - and an unreadable cursor leaves start at zero.
 	start := 0
-	if id, err := strconv.Atoi(strings.TrimSpace(after)); err == nil {
+	if id, err := strconv.Atoi(after); err == nil {
 		start = sort.Search(len(p.ordered), func(i int) bool {
 			return p.ordered[i].ID > id
 		})

@@ -199,6 +199,21 @@ func TestOneAtATime(t *testing.T) {
 	}
 }
 
+// type comes from a query string, where a human can put a space in it.
+// hasType compares with EqualFold, which does not ignore one.
+func TestAPaddedTypeStillFilters(t *testing.T) {
+	p := dexOf(t, 101)
+
+	page, _ := p.list("  water  ", "", 5)
+
+	if len(page) != 5 {
+		t.Fatalf("len(page) = %d for a padded type, want 5", len(page))
+	}
+	if page[0].Name != "mon003" {
+		t.Errorf("first = %s, want mon003: the padding defeated the filter", page[0].Name)
+	}
+}
+
 // Nothing to validate: a cursor the dex has never issued selects the
 // overlap rather than failing.
 func TestAnUnknownCursorIsNotAnError(t *testing.T) {
