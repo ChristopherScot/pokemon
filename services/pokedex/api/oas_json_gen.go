@@ -2435,11 +2435,18 @@ func (s *PokemonList) encodeFields(e *jx.Encoder) {
 		}
 		e.ArrEnd()
 	}
+	{
+		if s.NextCursor.Set {
+			e.FieldStart("nextCursor")
+			s.NextCursor.Encode(e)
+		}
+	}
 }
 
-var jsonFieldsNameOfPokemonList = [2]string{
+var jsonFieldsNameOfPokemonList = [3]string{
 	0: "count",
 	1: "pokemon",
+	2: "nextCursor",
 }
 
 // Decode decodes PokemonList from json.
@@ -2480,6 +2487,16 @@ func (s *PokemonList) Decode(d *jx.Decoder) error {
 				return nil
 			}(); err != nil {
 				return errors.Wrap(err, "decode field \"pokemon\"")
+			}
+		case "nextCursor":
+			if err := func() error {
+				s.NextCursor.Reset()
+				if err := s.NextCursor.Decode(d); err != nil {
+					return err
+				}
+				return nil
+			}(); err != nil {
+				return errors.Wrap(err, "decode field \"nextCursor\"")
 			}
 		default:
 			return d.Skip()

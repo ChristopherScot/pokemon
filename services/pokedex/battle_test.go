@@ -131,7 +131,7 @@ func TestBulkFollowsBaseStatsNotWeight(t *testing.T) {
 
 func TestEveryPokemonHasABaseStat(t *testing.T) {
 	s := testService(t)
-	for _, mon := range s.dex.list("", 0) {
+	for _, mon := range mustListAll(s.dex) {
 		if s.dex.stats[mon.ID].hp <= 0 {
 			t.Errorf("#%d %s has no base HP", mon.ID, mon.Name)
 		}

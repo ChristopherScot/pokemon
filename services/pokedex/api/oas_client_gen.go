@@ -79,7 +79,8 @@ type Invoker interface {
 	ListMoves(ctx context.Context) (*MoveList, error)
 	// ListPokemon invokes listPokemon operation.
 	//
-	// List Pokemon, optionally filtered by type.
+	// One page. Check nextCursor to find out whether more follow: a response is not the whole list just
+	// because you did not set a limit.
 	//
 	// GET /pokemon
 	ListPokemon(ctx context.Context, params ListPokemonParams) (*PokemonList, error)
@@ -657,7 +658,8 @@ func (c *Client) sendListMoves(ctx context.Context) (res *MoveList, err error) {
 
 // ListPokemon invokes listPokemon operation.
 //
-// List Pokemon, optionally filtered by type.
+// One page. Check nextCursor to find out whether more follow: a response is not the whole list just
+// because you did not set a limit.
 //
 // GET /pokemon
 func (c *Client) ListPokemon(ctx context.Context, params ListPokemonParams) (*PokemonList, error) {
@@ -701,6 +703,23 @@ func (c *Client) sendListPokemon(ctx context.Context, params ListPokemonParams) 
 		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
 			if val, ok := params.Limit.Get(); ok {
 				return e.EncodeValue(conv.IntToString(val))
+			}
+			return nil
+		}); err != nil {
+			return res, errors.Wrap(err, "encode query")
+		}
+	}
+	{
+		// Encode "after" parameter.
+		cfg := uri.QueryParameterEncodingConfig{
+			Name:    "after",
+			Style:   uri.QueryStyleForm,
+			Explode: true,
+		}
+
+		if err := q.EncodeParam(cfg, func(e uri.Encoder) error {
+			if val, ok := params.After.Get(); ok {
+				return e.EncodeValue(conv.StringToString(val))
 			}
 			return nil
 		}); err != nil {

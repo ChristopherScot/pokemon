@@ -30,6 +30,9 @@ export const getRoot = <ThrowOnError extends boolean = false>(options?: Options<
 
 /**
  * List Pokemon, optionally filtered by type.
+ *
+ * One page. Check nextCursor to find out whether more follow: a response is not the whole list just because you did not set a limit.
+ *
  */
 export const listPokemon = <ThrowOnError extends boolean = false>(options?: Options<ListPokemonData, ThrowOnError>): RequestResult<ListPokemonResponses, ListPokemonErrors, ThrowOnError> => (options?.client ?? client).get<ListPokemonResponses, ListPokemonErrors, ThrowOnError>({ url: '/pokemon', ...options });
 

@@ -261,8 +261,16 @@ export type MoveList = {
 };
 
 export type PokemonList = {
+    /**
+     * How many are in THIS response, not how many match.
+     */
     count: number;
     pokemon: Array<Pokemon>;
+    /**
+     * Pass back as `after` for the next page. Absent on the last page. A client that ignores it reads the first page and stops, which is not an error and shows up nowhere else.
+     *
+     */
+    nextCursor?: string;
 };
 
 export type TypeSummary = {
@@ -356,9 +364,15 @@ export type ListPokemonData = {
          */
         type?: string;
         /**
-         * Maximum number to return.
+         * How many to return, at most 100. Asking for more is rejected rather than clamped.
+         *
          */
         limit?: number;
+        /**
+         * A nextCursor from a previous response. Omit it for the first page. Opaque: pass it back unchanged rather than parsing or constructing one.
+         *
+         */
+        after?: string;
     };
     url: '/pokemon';
 };

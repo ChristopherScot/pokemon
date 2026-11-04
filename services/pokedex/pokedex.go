@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
@@ -195,19 +196,49 @@ func (p *pokedex) learnableFor(name string) ([]api.Move, bool) {
 	return out, true
 }
 
-func (p *pokedex) list(typ string, limit int) []api.Pokemon {
+// list returns one page, and the cursor to ask for the next one. An
+// empty next means this page reached the end.
+//
+// after is a position, not a filter: it means "the first one ordered
+// after this", so a cursor the dex never issued, or one from a request
+// with a different type, is not an error - it selects the overlap,
+// which may be nothing. Nothing to validate and nothing to reject.
+func (p *pokedex) list(typ, after string, limit int) (page []api.Pokemon, next string) {
 	out := make([]api.Pokemon, 0, len(p.ordered))
-	typ = strings.ToLower(strings.TrimSpace(typ))
-	for _, mon := range p.ordered {
+	typ = strings.TrimSpace(typ)
+
+	// The cursor is the ID: it is the key p.ordered is sorted by, so
+	// sort.Search finds the position directly. A position would break
+	// the moment anything is inserted, and under the type filter it
+	// would mean an offset into a view nothing keeps. An ID the dex
+	// does not have still lands somewhere sensible - the first one
+	// after it - and an unreadable cursor leaves start at zero.
+	start := 0
+	if id, err := strconv.Atoi(after); err == nil {
+		start = sort.Search(len(p.ordered), func(i int) bool {
+			return p.ordered[i].ID > id
+		})
+	}
+
+	for i := start; i < len(p.ordered); i++ {
+		mon := p.ordered[i]
 		if typ != "" && !hasType(mon, typ) {
 			continue
 		}
 		out = append(out, mon)
 		if limit > 0 && len(out) == limit {
+			// Only a cursor if something is actually left after this
+			// one - otherwise a caller fetches an empty final page to
+			// learn it was already done.
+			for j := i + 1; j < len(p.ordered); j++ {
+				if typ == "" || hasType(p.ordered[j], typ) {
+					return out, strconv.Itoa(mon.ID)
+				}
+			}
 			break
 		}
 	}
-	return out
+	return out, ""
 }
 
 func hasType(mon api.Pokemon, typ string) bool {

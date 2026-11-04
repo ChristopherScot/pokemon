@@ -77,8 +77,12 @@ func (s service) ListPokemon(_ context.Context, params api.ListPokemonParams) (*
 	if params.Limit.Set {
 		limit = params.Limit.Value
 	}
-	found := s.dex.list(params.Type.Or(""), limit)
-	return &api.PokemonList{Count: len(found), Pokemon: found}, nil
+	found, next := s.dex.list(params.Type.Or(""), params.After.Or(""), limit)
+	out := &api.PokemonList{Count: len(found), Pokemon: found}
+	if next != "" {
+		out.NextCursor = api.NewOptString(next)
+	}
+	return out, nil
 }
 
 func (s service) GetPokemon(_ context.Context, params api.GetPokemonParams) (api.GetPokemonRes, error) {

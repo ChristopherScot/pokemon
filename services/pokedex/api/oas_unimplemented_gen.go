@@ -98,7 +98,8 @@ func (UnimplementedHandler) ListMoves(ctx context.Context) (r *MoveList, _ error
 
 // ListPokemon implements listPokemon operation.
 //
-// List Pokemon, optionally filtered by type.
+// One page. Check nextCursor to find out whether more follow: a response is not the whole list just
+// because you did not set a limit.
 //
 // GET /pokemon
 func (UnimplementedHandler) ListPokemon(ctx context.Context, params ListPokemonParams) (r *PokemonList, _ error) {
