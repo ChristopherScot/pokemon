@@ -94,7 +94,7 @@ jobs:
       - name: Check generated code is current
         run: |
           ./homelabctl regen
-          (cd services/pokedex && go generate ./...)
+          go generate ./...
           git diff --exit-code \
             || { echo "::error::generated code is stale - run 'homelabctl regen' and 'go generate ./...' in the service, then commit"; exit 1; }
 
