@@ -368,7 +368,7 @@ export type ListPokemonData = {
          */
         type?: string;
         /**
-         * How many to return, at most 100. Asking for more is rejected rather than clamped.
+         * How many to return, at most 50. Asking for more is rejected rather than clamped.
          *
          */
         limit?: number;

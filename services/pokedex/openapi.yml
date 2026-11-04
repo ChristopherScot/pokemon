@@ -7,7 +7,7 @@ info:
   title: pokedex
   # Bump this when the API changes. The generated client reports it in
   # Client-Version, so one version covers the API and its clients.
-  version: 0.9.0
+  version: 0.10.0
   description: pokedex, owned by me-myself-and-i.
 
 paths:
@@ -66,13 +66,13 @@ paths:
           in: query
           required: false
           description: >
-            How many to return, at most 100. Asking for more is rejected
+            How many to return, at most 50. Asking for more is rejected
             rather than clamped.
           schema:
             type: integer
             minimum: 1
-            maximum: 100
-            default: 100
+            maximum: 50
+            default: 50
         - name: after
           in: query
           required: false
