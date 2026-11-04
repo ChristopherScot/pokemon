@@ -66,21 +66,37 @@ jobs:
       - name: Install homelabctl
         run: curl -fsSL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
 
+      # Everything the spec implies comes from here now: the server
+      # interface, both clients, and the resilience layer around them.
+      # Onto PATH because the go:generate directive names the command
+      # rather than a version - one pin in this tool instead of one per
+      # service.
+      - name: Install oapi-clientgen
+        run: |
+          curl -fsSL https://github.com/ChristopherScot/oapi-clientgen/releases/latest/download/oapi-clientgen_linux_amd64.tar.gz | tar -xz
+          sudo mv oapi-clientgen /usr/local/bin/
+
       # openapi.yml is the source of truth, so everything derived from it
       # - the server interface, both clients, the versions they report -
       # must match what is committed. Otherwise a spec change merges with
       # stale code and the API quietly diverges from its documentation.
       #
-      # `regen` runs the same commands `init` does, so CI cannot check a
-      # different thing than a developer regenerates.
-      # regen is deterministic - it generates from the spec and does not
-      # touch dependencies - so the whole tree can be diffed. Anything it
-      # changes here is something a spec edit should have regenerated.
+      # Two commands because two things own parts of this service:
+      # homelabctl owns the scaffolding and the deploy manifests, and
+      # `go generate` owns everything derived from openapi.yml. Each
+      # runs what a developer runs, so CI cannot check a different thing
+      # than they regenerate.
+      #
+      # Both are deterministic - they generate from committed inputs and
+      # do not touch dependencies - so the whole tree can be diffed.
+      # Anything they change here is something an edit should have
+      # regenerated.
       - name: Check generated code is current
         run: |
           ./homelabctl regen
+          (cd services/pokedex && go generate ./...)
           git diff --exit-code \
-            || { echo "::error::generated code is stale - run 'homelabctl regen' and commit"; exit 1; }
+            || { echo "::error::generated code is stale - run 'homelabctl regen' and 'go generate ./...' in the service, then commit"; exit 1; }
 
       - name: Check deploy manifests
         run: ./homelabctl check deploy

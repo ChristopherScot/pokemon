@@ -22,7 +22,7 @@ import (
 //
 // ogen ships no retries, timeout or breaker. Its only extension point is
 // WithClient, so those live here - defaults chosen for effect on the
-// SYSTEM (one retry, not five: five can mean five times the traffic to
+// SYSTEM (one retry, not several: each one multiplies the traffic to
 // something already struggling).
 //
 //	c, err := api.New(url, "webapp")
@@ -46,17 +46,19 @@ type RetryPolicy interface {
 	Retry(req *http.Request, resp *http.Response, err error) bool
 }
 
-// SingleRetry retries once, a second later. The default.
+// SingleRetry retries once, after a short pause. The default.
 type SingleRetry struct{}
 
-func (SingleRetry) Backoffs() []time.Duration { return []time.Duration{time.Second} }
+func (SingleRetry) Backoffs() []time.Duration {
+	return []time.Duration{1000 * time.Millisecond}
+}
 func (SingleRetry) Retry(req *http.Request, resp *http.Response, err error) bool {
 	return retryable(req, resp, err)
 }
 
 // ExponentialRetry backs off with jitter for a slow-but-not-broken
-// dependency. Reach for it deliberately: five attempts can still mean
-// five times the load.
+// dependency. Reach for it deliberately: each attempt is more load on
+// something already struggling.
 type ExponentialRetry struct{}
 
 func (ExponentialRetry) Backoffs() []time.Duration {
@@ -65,7 +67,7 @@ func (ExponentialRetry) Backoffs() []time.Duration {
 	for i := range out {
 		// Jitter, so a fleet of callers does not retry in lockstep and
 		// arrive as one synchronised wave.
-		out[i] = next + time.Duration((rand.Float64()*2-1)*0.25*float64(next))
+		out[i] = next + time.Duration((rand.Float64()*2-1)*25/100.0*float64(next))
 		next *= 2
 	}
 	return out
@@ -205,10 +207,10 @@ type BreakerPolicy struct {
 // dependency failing half of what it is asked is unwell.
 func DefaultBreakerPolicy() BreakerPolicy {
 	return BreakerPolicy{
-		Window:      10 * time.Second,
+		Window:      10000 * time.Millisecond,
 		MinRequests: 20,
 		FailPercent: 50,
-		Cooldown:    30 * time.Second,
+		Cooldown:    30000 * time.Millisecond,
 	}
 }
 
@@ -373,7 +375,9 @@ func (b *Breaker) record(o outcome) {
 // Not Option or ClientOption: ogen generates both into this package.
 type TransportOption func(*HTTPClient)
 
-// WithTimeout bounds ONE attempt; a retry gets its own. Default 5s.
+// WithTimeout bounds ONE attempt; a retry gets its own, so a retried
+// call can run for longer than d. A deadline on the request's context
+// bounds the whole call, retries and backoffs included.
 func WithTimeout(d time.Duration) TransportOption {
 	return func(c *HTTPClient) { c.http.Timeout = d }
 }
@@ -412,8 +416,9 @@ func withBreaker(b *Breaker) TransportOption {
 }
 
 // WithMaxRetryAfter caps how long a server's Retry-After can park this
-// client. Default 30s; past it the request fails rather than waiting,
-// since sleeping an hour inside a request looks like a hang.
+// client. Past the cap the request
+// fails rather than waiting, since sleeping an hour inside a request
+// looks like a hang.
 func WithMaxRetryAfter(d time.Duration) TransportOption {
 	return func(c *HTTPClient) { c.maxRetryAfter = d }
 }
@@ -442,9 +447,9 @@ var _ ht.Client = (*HTTPClient)(nil)
 // service being called, not on the caller who left it out.
 func NewHTTPClient(name string, opts ...TransportOption) *HTTPClient {
 	c := &HTTPClient{
-		http:          &http.Client{Timeout: 5 * time.Second},
+		http:          &http.Client{Timeout: 5000 * time.Millisecond},
 		policy:        SingleRetry{},
-		maxRetryAfter: 30 * time.Second,
+		maxRetryAfter: 30000 * time.Millisecond,
 		name:          name,
 	}
 	for _, o := range opts {
@@ -454,8 +459,9 @@ func NewHTTPClient(name string, opts ...TransportOption) *HTTPClient {
 }
 
 // New is the constructor a caller should reach for: it installs the
-// resilience above, so New with no options gives a 5s timeout, one
-// retry on idempotent methods, Retry-After obeyed to 30s, and no
+// resilience above, so New with no options gives a short per-attempt
+// timeout, one retry on idempotent methods, Retry-After obeyed up to
+// a cap, and no
 // circuit breaking.
 //
 // name is this service's own name, not the one being called.

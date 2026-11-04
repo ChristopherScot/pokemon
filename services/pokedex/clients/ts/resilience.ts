@@ -4,7 +4,7 @@
 // silently. Change the template in oapi-clientgen instead.
 // Resilience for the pokedex client: timeout, retry, circuit
 // breaker and the identifying headers. The defaults match the Go
-// client in api/client.go - 5s timeout, one retry - because both
+// client in api/client.go, because both
 // clients failing the same way is the point.
 //
 // Breaking is off in both until asked for: `breaker: new Breaker()`
@@ -45,13 +45,15 @@ export interface ClientOptions {
    *  because the cost of omitting it falls on whoever operates the
    *  service being called. */
   name: string
-  /** Bounds a single attempt. Default 5000; a retry gets its own. */
+  /** Bounds a single attempt; a retry gets its own, so a retried call
+   *  can run for longer than this. Pass your own `signal` to bound the
+   *  whole call, retries and backoffs included. */
   timeoutMs?: number
   /** Default singleRetry. */
   policy?: RetryPolicy
   /** Omit to disable circuit breaking. */
   breaker?: Breaker
-  /** Bounds Retry-After. Default 30000. */
+  /** Bounds how long a server can park this client. */
   maxRetryAfterMs?: number
   /** What actually goes to the network. Defaults to global fetch.
    *
@@ -124,20 +126,20 @@ function retryable(req: Request, res: Response | undefined, err: unknown): boole
   return res.status === 429 || res.status >= 500
 }
 
-// One retry, a second later. The default.
+// One retry, after a short pause. The default.
 export const singleRetry: RetryPolicy = {
   backoffs: () => [1000],
   retry: retryable,
 }
 
-// Five jittered attempts, for a slow-but-not-broken dependency. Jitter
+// Several jittered attempts, for a slow-but-not-broken dependency. Jitter
 // so a fleet of callers does not retry in lockstep.
 export const exponentialRetry: RetryPolicy = {
   backoffs: () => {
     const out: number[] = []
     let next = 100
     for (let i = 0; i < 5; i++) {
-      out.push(next + (Math.random() * 2 - 1) * 0.25 * next)
+      out.push(next + ((Math.random() * 2 - 1) * 25) / 100 * next)
       next *= 2
     }
     return out
@@ -230,10 +232,10 @@ export interface BreakerPolicy {
  *  still serving hundreds. At the request rates these clients see, a
  *  dependency failing half of what it is asked is unwell. */
 export const defaultBreakerPolicy: BreakerPolicy = {
-  windowMs: 10_000,
+  windowMs: 10000,
   minRequests: 20,
   failPercent: 50,
-  cooldownMs: 30_000,
+  cooldownMs: 30000,
 }
 
 /** One request's contribution to the window. */
@@ -376,7 +378,7 @@ export function createResilientFetch({
   timeoutMs = 5000,
   policy = singleRetry,
   breaker,
-  maxRetryAfterMs = 30_000,
+  maxRetryAfterMs = 30000,
   fetch: send,
 }: Omit<ClientOptions, 'baseUrl'>) {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
