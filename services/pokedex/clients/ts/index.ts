@@ -31,3 +31,10 @@ export {
   singleRetry,
 } from './resilience.ts'
 export type { ClientOptions, RetryPolicy } from './resilience.ts'
+export { paged } from './paging.ts'
+export type { Fetch, Page } from './paging.ts'
+// Re-exported from the same surface as the operations they wrap, so
+// a caller importing listThings finds listThingsIter without a second
+// import path.
+export { listPokemonIter } from './paging_ops.ts'
+
