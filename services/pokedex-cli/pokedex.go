@@ -54,16 +54,23 @@ func pokemonCmd() *cobra.Command {
 				params.Type = api.NewOptString(typ)
 			}
 
-			// --limit caps what is PRINTED, not what a page holds: the
-			// flag has always said "0 = all", and one page is not all
-			// once the dex outgrows a page.
+			// --limit is a total, not a page size, and is not sent to
+			// the server: the spec rejects a limit above its maximum
+			// rather than clamping, so --limit 60 would 400 where it
+			// should print 60 across two pages.
+			//
+			// Sending it when it IS under that maximum would spare
+			// serializing a full page to print five rows, but the
+			// maximum is not reachable from the generated client
+			// (oapi-clientgen#38) and a copy of it here would 400 every
+			// request the day the spec moved.
 			var shown []api.Pokemon
 			for mon, err := range c.ListPokemonIter(ctx, params) {
 				if err != nil {
 					return fmt.Errorf("listing pokemon: %w", err)
 				}
 				shown = append(shown, mon)
-				if limit > 0 && len(shown) == limit {
+				if limit > 0 && len(shown) >= limit {
 					break
 				}
 			}
@@ -83,7 +90,7 @@ func pokemonCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&typ, "type", "", "only pokemon of this type, e.g. fire")
-	cmd.Flags().IntVar(&limit, "limit", 0, "stop after this many (0 = all)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "print at most this many (0 = all)")
 	_ = cmd.RegisterFlagCompletionFunc("type", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		names, err := typeNames()
 		if err != nil {
