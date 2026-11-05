@@ -107,11 +107,14 @@ func (m model) fetch() tea.Msg {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	res, err := m.client.ListPokemon(ctx, api.ListPokemonParams{})
-	if err != nil {
-		return errMsg{err}
+	var dex []api.Pokemon
+	for mon, err := range m.client.ListPokemonIter(ctx, api.ListPokemonParams{}) {
+		if err != nil {
+			return errMsg{err}
+		}
+		dex = append(dex, mon)
 	}
-	return loadedMsg(res.Pokemon)
+	return loadedMsg(dex)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

@@ -27,9 +27,6 @@ const requestTimeout = 15 * time.Second
 // watchTimeout bounds a long poll that deliberately waits for the opponent.
 const watchTimeout = 2 * time.Minute
 
-// dexPageSize is the spec's maximum for ListPokemon; asking for more is a 400.
-const dexPageSize = 100
-
 type result struct {
 	kind   resultKind
 	dex    []api.Pokemon
@@ -75,13 +72,14 @@ func (u *ui) loadDex() {
 	}
 	u.busy = true
 	u.go1(requestTimeout, func(ctx context.Context) result {
-		res, err := client.ListPokemon(ctx, api.ListPokemonParams{
-			Limit: api.NewOptInt(dexPageSize),
-		})
-		if err != nil {
-			return result{kind: resDex, err: err}
+		var dex []api.Pokemon
+		for mon, err := range client.ListPokemonIter(ctx, api.ListPokemonParams{}) {
+			if err != nil {
+				return result{kind: resDex, err: err}
+			}
+			dex = append(dex, mon)
 		}
-		return result{kind: resDex, dex: res.Pokemon}
+		return result{kind: resDex, dex: dex}
 	})
 }
 

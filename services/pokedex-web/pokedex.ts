@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { colour, island } from './types.ts'
 import { assetURL, preloadURLs } from './assets.ts'
 import {
-  listPokemon,
+  listPokemonIter,
   listTypes,
 } from '@christopherscot/pokedex-client'
 
@@ -172,24 +172,31 @@ export function register(app: FastifyInstance, client: PokedexClient) {
     const active = typeof request.query.type === 'string' ? request.query.type : ''
     const join = typeof request.query.join === 'string' ? request.query.join : ''
 
-    let list, typeList
+    // Every page, not the first: the dex outgrew one page, and a
+    // single listPokemon would silently show part of it.
+    const collect = async () => {
+      const out: Pokemon[] = []
+      for await (const mon of listPokemonIter({ client, query: active ? { type: active } : {} })) {
+        out.push(mon)
+      }
+      return out
+    }
+
+    let pokemon, typeList
     try {
-      ;[list, typeList] = await Promise.all([
-        listPokemon({ client, query: active ? { type: active } : {} }),
-        listTypes({ client }),
-      ])
+      ;[pokemon, typeList] = await Promise.all([collect(), listTypes({ client })])
     } catch (err) {
       request.log.error({ err }, 'pokedex unreachable')
       return reply.code(502).type('text/plain').send('pokedex API unavailable\n')
     }
 
-    if (list.error || typeList.error) {
-      request.log.error({ err: list.error || typeList.error }, 'pokedex lookup failed')
+    if (typeList.error) {
+      request.log.error({ err: typeList.error }, 'pokedex lookup failed')
       return reply.code(502).type('text/plain').send('pokedex API unavailable\n')
     }
 
     return reply.type('text/html').send(page({
-      pokemon: list.data.pokemon,
+      pokemon,
       types: typeList.data.types,
       active,
       join,
