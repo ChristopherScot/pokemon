@@ -186,7 +186,10 @@ export function register(app: FastifyInstance, client: PokedexClient) {
     try {
       ;[pokemon, typeList] = await Promise.all([collect(), listTypes({ client })])
     } catch (err) {
-      request.log.error({ err }, 'pokedex unreachable')
+      // Not only unreachable: collect() throws for a server that
+      // answered an error too, where the single call used to report
+      // that through list.error.
+      request.log.error({ err }, 'pokedex request failed')
       return reply.code(502).type('text/plain').send('pokedex API unavailable\n')
     }
 

@@ -122,7 +122,10 @@ export function register(app: FastifyInstance, client: PokedexClient) {
         listTypes({ client }),
       ])
     } catch (err) {
-      request.log.error({ err }, 'pokedex unreachable')
+      // Not only unreachable: allPokemon throws for a server that
+      // answered an error too, where the single call used to report
+      // that through list.error.
+      request.log.error({ err }, 'pokedex request failed')
       return reply.code(502).type('text/plain').send('pokedex API unavailable\n')
     }
     if (typeList.error) {
@@ -168,7 +171,10 @@ export function register(app: FastifyInstance, client: PokedexClient) {
         listTypes({ client }),
       ])
     } catch (err) {
-      request.log.error({ err }, 'pokedex unreachable')
+      // Not only unreachable: allPokemon throws for a server that
+      // answered an error too, where the single call used to report
+      // that through list.error.
+      request.log.error({ err }, 'pokedex request failed')
       return reply.code(502).send('pokedex API unavailable')
     }
     if (typeList.error) return reply.code(502).send('pokedex API unavailable')
