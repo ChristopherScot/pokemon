@@ -53,30 +53,44 @@ func pokemonCmd() *cobra.Command {
 			if typ != "" {
 				params.Type = api.NewOptString(typ)
 			}
-			if limit > 0 {
-				params.Limit = api.NewOptInt(limit)
+
+			// --limit is a total, not a page size, and is not sent to
+			// the server: the spec rejects a limit above its maximum
+			// rather than clamping, so --limit 60 would 400 where it
+			// should print 60 across two pages.
+			//
+			// Sending it when it IS under that maximum would spare
+			// serializing a full page to print five rows, but the
+			// maximum is not reachable from the generated client
+			// (oapi-clientgen#38) and a copy of it here would 400 every
+			// request the day the spec moved.
+			var shown []api.Pokemon
+			for mon, err := range c.ListPokemonIter(ctx, params) {
+				if err != nil {
+					return fmt.Errorf("listing pokemon: %w", err)
+				}
+				shown = append(shown, mon)
+				if limit > 0 && len(shown) >= limit {
+					break
+				}
 			}
-			list, err := c.ListPokemon(ctx, params)
-			if err != nil {
-				return fmt.Errorf("listing pokemon: %w", err)
-			}
-			if list.Count == 0 {
+			if len(shown) == 0 {
 				fmt.Printf("no pokemon match type %q\n", typ)
 				return nil
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "#\tNAME\tTYPES")
-			for _, p := range list.Pokemon {
+			for _, p := range shown {
 				fmt.Fprintf(w, "%d\t%s\t%s\n", p.ID, p.Name, strings.Join(p.Types, ", "))
 			}
 			w.Flush()
-			fmt.Printf("\n%d pokemon\n", list.Count)
+			fmt.Printf("\n%d pokemon\n", len(shown))
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&typ, "type", "", "only pokemon of this type, e.g. fire")
-	cmd.Flags().IntVar(&limit, "limit", 0, "stop after this many (0 = all)")
+	cmd.Flags().IntVar(&limit, "limit", 0, "print at most this many (0 = all)")
 	_ = cmd.RegisterFlagCompletionFunc("type", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		names, err := typeNames()
 		if err != nil {
@@ -179,13 +193,12 @@ func pokemonNames() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	list, err := c.ListPokemon(ctx, api.ListPokemonParams{})
-	if err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(list.Pokemon))
-	for _, p := range list.Pokemon {
-		names = append(names, p.Name)
+	var names []string
+	for mon, err := range c.ListPokemonIter(ctx, api.ListPokemonParams{}) {
+		if err != nil {
+			return nil, err
+		}
+		names = append(names, mon.Name)
 	}
 	sort.Strings(names)
 	return names, nil

@@ -382,7 +382,7 @@ func decodeJoinBattleParams(args [1]string, argsEscaped bool, r *http.Request) (
 type ListPokemonParams struct {
 	// Filter to Pokemon having this type, e.g. "fire".
 	Type OptString `json:",omitempty,omitzero"`
-	// How many to return, at most 100. Asking for more is rejected rather than clamped.
+	// How many to return, at most 50. Asking for more is rejected rather than clamped.
 	Limit OptInt `json:",omitempty,omitzero"`
 	// A nextCursor from a previous response. Omit it for the first page. Opaque: pass it back unchanged
 	// rather than parsing or constructing one.
@@ -465,7 +465,7 @@ func decodeListPokemonParams(args [0]string, argsEscaped bool, r *http.Request) 
 	}
 	// Set default value for query: limit.
 	{
-		val := int(100)
+		val := int(50)
 		params.Limit.SetTo(val)
 	}
 	// Decode query: limit.
@@ -507,7 +507,7 @@ func decodeListPokemonParams(args [0]string, argsEscaped bool, r *http.Request) 
 							MinSet:        true,
 							Min:           1,
 							MaxSet:        true,
-							Max:           100,
+							Max:           50,
 							MinExclusive:  false,
 							MaxExclusive:  false,
 							MultipleOfSet: false,

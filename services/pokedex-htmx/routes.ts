@@ -7,7 +7,7 @@ import {
   getBattle,
   getPokemon,
   joinBattle,
-  listPokemon,
+  listPokemonIter,
   listTypes,
   listWaitingTrainers,
   registerTrainer,
@@ -55,6 +55,16 @@ const readResume = (request: FastifyRequest): string => {
 export const readTeam = (v: unknown): string[] => {
   const all = v === undefined ? [] : Array.isArray(v) ? v : [v]
   return [...new Set(all.map(String).filter(Boolean))].slice(0, TEAM_SIZE)
+}
+
+// Every page, not the first: the dex outgrew one page, and a single
+// listPokemon would silently render part of it.
+const allPokemon = async (client: PokedexClient, type: string): Promise<Pokemon[]> => {
+  const out: Pokemon[] = []
+  for await (const mon of listPokemonIter({ client, query: type ? { type } : {} })) {
+    out.push(mon)
+  }
+  return out
 }
 
 const one = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -105,24 +115,27 @@ export function register(app: FastifyInstance, client: PokedexClient) {
       resume: readResume(request),
     }
 
-    let list, typeList
+    let pokemon, typeList
     try {
-      ;[list, typeList] = await Promise.all([
-        listPokemon({ client, query: active ? { type: active } : {} }),
+      ;[pokemon, typeList] = await Promise.all([
+        allPokemon(client, active),
         listTypes({ client }),
       ])
     } catch (err) {
-      request.log.error({ err }, 'pokedex unreachable')
+      // Not only unreachable: allPokemon throws for a server that
+      // answered an error too, where the single call used to report
+      // that through list.error.
+      request.log.error({ err }, 'pokedex request failed')
       return reply.code(502).type('text/plain').send('pokedex API unavailable\n')
     }
-    if (list.error || typeList.error) {
-      request.log.error({ err: list.error || typeList.error }, 'pokedex lookup failed')
+    if (typeList.error) {
+      request.log.error({ err: typeList.error }, 'pokedex lookup failed')
       return reply.code(502).type('text/plain').send('pokedex API unavailable\n')
     }
 
     return reply.type('text/html').send(page({
       ...ctx,
-      pokemon: list.data.pokemon,
+      pokemon,
       types: typeList.data.types,
       sprites: await spritesFor(client, team),
     }, one(q.error)))
@@ -151,20 +164,23 @@ export function register(app: FastifyInstance, client: PokedexClient) {
 
     // Types are fetched too because the filter nav is re-rendered, and its
     // links carry the team.
-    let list, typeList
+    let pokemon, typeList
     try {
-      ;[list, typeList] = await Promise.all([
-        listPokemon({ client, query: active ? { type: active } : {} }),
+      ;[pokemon, typeList] = await Promise.all([
+        allPokemon(client, active),
         listTypes({ client }),
       ])
     } catch (err) {
-      request.log.error({ err }, 'pokedex unreachable')
+      // Not only unreachable: allPokemon throws for a server that
+      // answered an error too, where the single call used to report
+      // that through list.error.
+      request.log.error({ err }, 'pokedex request failed')
       return reply.code(502).send('pokedex API unavailable')
     }
-    if (list.error || typeList.error) return reply.code(502).send('pokedex API unavailable')
+    if (typeList.error) return reply.code(502).send('pokedex API unavailable')
 
     const ctx: Ctx = {
-      pokemon: list.data.pokemon, types: typeList.data.types, active, join, team: next,
+      pokemon, types: typeList.data.types, active, join, team: next,
       sprites: await spritesFor(client, next),
       resume: readResume(request),
     }
