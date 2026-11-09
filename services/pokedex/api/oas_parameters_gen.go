@@ -383,6 +383,8 @@ type ListPokemonParams struct {
 	// Filter to Pokemon having this type, e.g. "fire".
 	Type OptString `json:",omitempty,omitzero"`
 	// How many to return, at most 50. Asking for more is rejected rather than clamped.
+	//
+	// minimum: 1, maximum: 50.
 	Limit OptInt `json:",omitempty,omitzero"`
 	// A nextCursor from a previous response. Omit it for the first page. Opaque: pass it back unchanged
 	// rather than parsing or constructing one.

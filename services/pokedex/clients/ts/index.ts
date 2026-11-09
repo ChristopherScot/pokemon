@@ -37,4 +37,3 @@ export type { Fetch, Page } from './paging.ts'
 // a caller importing listThings finds listThingsIter without a second
 // import path.
 export { listPokemonIter } from './paging_ops.ts'
-

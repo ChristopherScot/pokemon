@@ -1159,6 +1159,8 @@ func (s *PokemonList) SetNextCursor(val OptString) {
 // Ref: #/components/schemas/RegisterTrainer
 type RegisterTrainer struct {
 	// Displayed to other trainers in the lobby.
+	//
+	// minLength: 1, maxLength: 32.
 	Name string `json:"name"`
 }
 

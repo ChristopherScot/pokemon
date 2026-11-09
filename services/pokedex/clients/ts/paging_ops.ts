@@ -23,7 +23,7 @@ import { listPokemon } from './generated/sdk.gen.ts'
  * each language expects. Breaking out stops fetching.
  */
 export function listPokemonIter(
-  options?: Parameters<typeof listPokemon<false>>[0],
+  options?: Parameters<typeof listPokemon<false>>[0]
 ) {
   return paged(async (cursor) => {
     // throwOnError stays false, which is what fixes the shape of what
@@ -42,4 +42,3 @@ export function listPokemonIter(
     }
   })
 }
-

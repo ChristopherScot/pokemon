@@ -50,7 +50,7 @@ type RetryPolicy interface {
 type SingleRetry struct{}
 
 func (SingleRetry) Backoffs() []time.Duration {
-	return []time.Duration{1000 * time.Millisecond}
+	return []time.Duration{1 * time.Second}
 }
 func (SingleRetry) Retry(req *http.Request, resp *http.Response, err error) bool {
 	return retryable(req, resp, err)
@@ -207,10 +207,10 @@ type BreakerPolicy struct {
 // dependency failing half of what it is asked is unwell.
 func DefaultBreakerPolicy() BreakerPolicy {
 	return BreakerPolicy{
-		Window:      10000 * time.Millisecond,
+		Window:      10 * time.Second,
 		MinRequests: 20,
 		FailPercent: 50,
-		Cooldown:    30000 * time.Millisecond,
+		Cooldown:    30 * time.Second,
 	}
 }
 
@@ -447,9 +447,9 @@ var _ ht.Client = (*HTTPClient)(nil)
 // service being called, not on the caller who left it out.
 func NewHTTPClient(name string, opts ...TransportOption) *HTTPClient {
 	c := &HTTPClient{
-		http:          &http.Client{Timeout: 5000 * time.Millisecond},
+		http:          &http.Client{Timeout: 5 * time.Second},
 		policy:        SingleRetry{},
-		maxRetryAfter: 30000 * time.Millisecond,
+		maxRetryAfter: 30 * time.Second,
 		name:          name,
 	}
 	for _, o := range opts {
