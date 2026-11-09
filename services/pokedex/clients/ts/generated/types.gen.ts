@@ -11,6 +11,8 @@ export type ClientOptions = {
 export type RegisterTrainer = {
     /**
      * Displayed to other trainers in the lobby.
+     *
+     * minLength: 1, maxLength: 32
      */
     name: string;
 };
@@ -370,6 +372,7 @@ export type ListPokemonData = {
         /**
          * How many to return, at most 50. Asking for more is rejected rather than clamped.
          *
+         * minimum: 1, maximum: 50
          */
         limit?: number;
         /**
