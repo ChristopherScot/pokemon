@@ -18,6 +18,9 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: pokedex-htmx
+                # KEDA HTTP interceptor (scale-to-zero), not the app's
+                # own Service — see scale-to-zero.yaml. 8080 is the
+                # interceptor's port; the app still serves 80 behind it.
+                name: keda-http-interceptor
                 port:
-                  number: 80
+                  number: 8080
