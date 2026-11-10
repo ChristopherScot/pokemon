@@ -20,6 +20,9 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
+        # The nginx admit is retained as the rollback path: repointing
+        # the Ingress back at the app's own Service must not also require
+        # remembering this policy.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: ingress-nginx

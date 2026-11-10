@@ -3,7 +3,7 @@
 # The Ingresses route to the interceptor alias below; the InterceptorRoute
 # wakes the Deployment on the first request, serving the waking page
 # (503 + Refresh) until it's ready, and the ScaledObject scales it back
-# to 0 after 15 idle minutes.
+# to 0 after the idle cooldown (value on the ScaledObject below).
 #
 # The pokedex API deliberately does NOT sleep: both frontends call
 # http://pokedex.pokedex.svc.cluster.local from code (hardcoded, see
