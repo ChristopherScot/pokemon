@@ -20,9 +20,20 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
+        # The nginx admit is retained as the rollback path: repointing
+        # the Ingress back at the app's own Service must not also require
+        # remembering this policy.
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: ingress-nginx
+        # The KEDA HTTP interceptor: with the Ingress pointing at it
+        # (scale-to-zero.yaml), the traffic that reaches this pod comes
+        # from the keda namespace, not from nginx. Missing from this
+        # list it fails exactly like the incident the pokedex policy
+        # records: ECONNREFUSED that reads as the app being down.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda
       ports:
         - protocol: TCP
           port: 3000

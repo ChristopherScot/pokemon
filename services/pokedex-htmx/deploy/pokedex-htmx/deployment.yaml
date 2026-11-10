@@ -7,7 +7,9 @@ metadata:
     app: pokedex-htmx
     team: me-myself-and-i
 spec:
-  replicas: 1
+  # No replicas: field — KEDA scales this between 0 and 1 (see
+  # scale-to-zero.yaml), and a value here would make Argo selfHeal
+  # fight it back on every sync.
   # At one replica the default rolling update takes the only pod down
   # first; surging instead keeps the service up across a deploy.
   strategy:
