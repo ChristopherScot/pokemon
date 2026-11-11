@@ -61,20 +61,12 @@ jobs:
             -ldflags "-X main.version=$GITHUB_SHA" \
             -o bin/app .
 
-      # One binary for both checks below. Downloaded rather than built so
-      # CI does not depend on this repo being able to compile it.
+      # One binary for every step below that shells out to it - the
+      # regen, deploy and manifest checks, and the image ref. Downloaded
+      # rather than built so CI does not depend on this repo being able
+      # to compile it.
       - name: Install homelabctl
         run: curl -fsSL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
-
-      # Everything the spec implies comes from here now: the server
-      # interface, both clients, and the resilience layer around them.
-      # Onto PATH because the go:generate directive names the command
-      # rather than a version - one pin in this tool instead of one per
-      # service.
-      - name: Install oapi-clientgen
-        run: |
-          curl -fsSL https://github.com/ChristopherScot/oapi-clientgen/releases/latest/download/oapi-clientgen_linux_amd64.tar.gz | tar -xz
-          sudo mv oapi-clientgen /usr/local/bin/
 
       # openapi.yml is the source of truth, so everything derived from it
       # - the server interface, both clients, the versions they report -
