@@ -50,6 +50,11 @@ paths:
   /pokemon:
     get:
       operationId: listPokemon
+      # Says this operation pages. Empty because the spec already
+      # uses the generator's default names - `after` to ask and
+      # `nextCursor` to answer - and the response holds one array,
+      # so there is nothing to disambiguate.
+      x-oapi-clientgen-pagination: {}
       summary: List Pokemon, optionally filtered by type.
       description: >
         One page. Check nextCursor to find out whether more follow: a
