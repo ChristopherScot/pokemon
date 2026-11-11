@@ -61,8 +61,10 @@ jobs:
             -ldflags "-X main.version=$GITHUB_SHA" \
             -o bin/app .
 
-      # One binary for both checks below. Downloaded rather than built so
-      # CI does not depend on this repo being able to compile it.
+      # One binary for every step below that shells out to it - the
+      # regen, deploy and manifest checks, and the image ref. Downloaded
+      # rather than built so CI does not depend on this repo being able
+      # to compile it.
       - name: Install homelabctl
         run: curl -fsSL https://github.com/ChristopherScot/homelabctl/releases/latest/download/homelabctl_linux_amd64.tar.gz | tar -xz
 
