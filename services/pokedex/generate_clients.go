@@ -12,4 +12,4 @@ package main
 // and two machines produce the same bytes - which is what makes the CI
 // diff mean anything.
 //
-//go:generate go run github.com/ChristopherScot/oapi-clientgen@v0.0.10 generate self ./openapi.yml --out api --ts-out clients/ts --npm-package @christopherscot/pokedex-client
+//go:generate go run github.com/ChristopherScot/oapi-gen@v0.1.0 generate self ./openapi.yml --out api --ts-out clients/ts --npm-package @christopherscot/pokedex-client
