@@ -365,7 +365,7 @@ func IdentityAdvice(err error) string {
 	case errors.Is(err, ErrNoIdentity):
 		return "no trainer registered yet — register to start battling"
 	case errors.Is(err, ErrStaleIdentity):
-		return "the server no longer knows this trainer (it restarted) — register again"
+		return "the server does not recognise this trainer — register again"
 	}
 	return ""
 }

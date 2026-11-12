@@ -12,15 +12,21 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/christopherscot/pokemon/services/pokedex/api"
+	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 )
 
-const defaultBaseURL = "https://pokemon.home.chrisscotmartin.com/api"
-
+// battleclient.DefaultAPI, not a fourth copy of the hostname.
+//
+// The literal lived here, in battleclient, in the TUI and in the
+// mobile app - four files across three modules, and moving the
+// deployment meant finding all four with nothing failing if you
+// missed one. The CLI already imports battleclient, so it can simply
+// ask.
 func baseURL() string {
 	if u := strings.TrimSpace(os.Getenv("POKEDEX_URL")); u != "" {
 		return u
 	}
-	return defaultBaseURL
+	return battleclient.DefaultAPI
 }
 
 func client() (*api.Client, error) {
