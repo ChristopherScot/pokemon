@@ -14,7 +14,7 @@ func clientAs(t *testing.T, name string) *battleclient.Client {
 	t.Helper()
 	c, err := battleclient.New(battleclient.Identity{
 		Name: name, Token: "tok-" + name, API: "http://127.0.0.1:1",
-	})
+	}, "pokedex-cli")
 	if err != nil {
 		t.Fatalf("building a client: %v", err)
 	}

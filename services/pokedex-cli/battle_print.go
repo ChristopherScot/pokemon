@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -198,16 +199,24 @@ func teamLine(s api.Side) string {
 // No return value: it only ever handed back its own argument, and
 // main.go printed the error separately anyway.
 func identityHint(err error) {
+	identityHintTo(os.Stderr, err)
+}
+
+// identityHintTo is the half that does not need to be stderr, so a
+// test can read what a player would see.
+func identityHintTo(w io.Writer, err error) {
 	advice := battleclient.IdentityAdvice(err)
 	if advice == "" {
 		return
 	}
-	fmt.Fprintln(os.Stderr, advice)
+	fmt.Fprintln(w, advice)
 
 	if errors.Is(err, battleclient.ErrStaleIdentity) {
 		if clearErr := battleclient.ClearIdentity(); clearErr != nil {
-			fmt.Fprintf(os.Stderr, "  (could not remove the stored token: %v)\n", clearErr)
+			fmt.Fprintf(w, "  (could not remove the stored token: %v)\n", clearErr)
 		}
 	}
-	fmt.Fprintln(os.Stderr, "  pokedex-cli register <your-name>")
+	// Printed for every advice this returns, which is sound only while
+	// registering is the answer to all of them.
+	fmt.Fprintln(w, "  pokedex-cli register <your-name>")
 }
