@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/christopherscot/pokemon/services/pokedex/api"
 	"github.com/christopherscot/pokemon/services/pokedex/battleclient"
 	"github.com/christopherscot/pokemon/services/pokedex/battletext"
@@ -129,5 +131,37 @@ func TestResistedIsClassifiedOnceForEveryPartOfTheRow(t *testing.T) {
 		if got := battletext.Classify(ev); got != battletext.EventResisted {
 			t.Errorf("Classify(%v) = %v, want EventResisted", e, got)
 		}
+	}
+}
+
+// Pressing the key, not calling the helper.
+//
+// The tests above pass the predicate in themselves, so they prove
+// nextPick works given the right one - not that the right one is
+// wired to the target cursor. Swapping CanBeTargeted back to CanAct
+// in battleKey leaves every one of them green, which is the bug this
+// PR exists to fix.
+func TestPressingDownMovesTheTargetCursorOffTheFirstOpponent(t *testing.T) {
+	mine := []api.BattlePokemon{
+		serverMon("pikachu", 100, false, true),
+		serverMon("eevee", 100, false, true),
+	}
+	theirs := []api.BattlePokemon{
+		serverMon("onix", 95, false, false),
+		serverMon("gengar", 120, false, false),
+	}
+
+	bs := testBattleState(t)
+	bs.applyBattle(twoSided(1, mine, theirs))
+	bs.focus = focusTarget
+	bs.pickTarget = 0
+
+	// battleKey asks the client which side is ours, so the model needs
+	// the same one the state has.
+	m := model{screen: screenBattle, battle: bs, bc: bs.client}
+	if _, _ = m.battleKey(tea.KeyPressMsg{Code: 'j', Text: "j"}); bs.pickTarget == 0 {
+		t.Error("the target cursor did not move off slot 0; gated on CanAct it " +
+			"finds nothing selectable, because the server publishes CanAct " +
+			"false for the whole opposing side")
 	}
 }

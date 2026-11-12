@@ -138,11 +138,15 @@ func TestStatusForTellsTheTwoIdentityFailuresApart(t *testing.T) {
 	if never == stale {
 		t.Fatalf("both identity failures say the same thing: %q", never)
 	}
-	if strings.Contains(never, "no longer") {
-		t.Errorf("a player who never registered was told %q", never)
+	// What separates them is whether a trainer was ever registered,
+	// not any particular phrasing - pinning the wording here made this
+	// fail when the stale message stopped blaming a server restart,
+	// which trainers in Postgres survive.
+	if !strings.Contains(never, "no trainer") {
+		t.Errorf("a player who never registered was not told so: %q", never)
 	}
-	if !strings.Contains(stale, "no longer") {
-		t.Errorf("a stale token should say the server forgot them, got %q", stale)
+	if strings.Contains(stale, "no trainer") {
+		t.Errorf("a player whose token went stale was told they never registered: %q", stale)
 	}
 	// Both must still say what to do about it.
 	for _, s := range []string{never, stale} {
