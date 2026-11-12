@@ -59,7 +59,7 @@ paths:
       # uses the generator's default names - `after` to ask and
       # `nextCursor` to answer - and the response object holds one
       # array, so there is nothing to disambiguate.
-      x-oapi-clientgen-pagination: {}
+      x-oapi-gen-pagination: {}
       parameters:
         - name: type
           in: query
