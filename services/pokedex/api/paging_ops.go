@@ -40,4 +40,3 @@ func (c *Client) ListPokemonIter(ctx context.Context, params ListPokemonParams) 
 		}, nil
 	})
 }
-
