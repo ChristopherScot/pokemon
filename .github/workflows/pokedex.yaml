@@ -9,7 +9,7 @@ on:
     branches: [main]
     paths: ['services/pokedex/**', '.github/workflows/pokedex.yaml']
   pull_request:
-    paths: ['services/pokedex/**']
+    paths: ['services/pokedex/**', '.github/workflows/pokedex.yaml']
   workflow_dispatch:
 
 # Two pushes in quick succession otherwise race to publish :latest, and
